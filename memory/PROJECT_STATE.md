@@ -1,4 +1,4 @@
-# PROJECT_STATE.md - Estado atual (ZB2 Menu)
+﻿# PROJECT_STATE.md - Estado atual (ZB2 Menu)
 
 ## Auditoria runtime #1 (2026-09-12, partida ao vivo) - CONCLUIDA
 - Assembly-CSharp catalogado (1358 classes), offsets validados: Player HP/stamina,
@@ -10,7 +10,7 @@
 - [x] 1b. Injetor C++ automatico - TESTADO (HMODULE remoto OK)
 - [x] 2. Sistema de log - VALIDADO (debug_log.txt escreve)
 - [x] 3. Hotkeys com modal - BUILD OK (a70a5c12), AGUARDANDO TESTE IN-GAME
-- [ ] 4. Configs JSON
+- [x] 4. Configs JSON - BUILD OK (fad7ea6f), AGUARDANDO TESTE IN-GAME
 
 ## Fix v0.2.1 - CONCLUIDO E TESTADO (menu abre, print 00:35)
 - LICAO: update de DLL exige restart do jogo, nunca ejetar com hook ativo.
@@ -20,3 +20,5 @@
 - [ ] 6. Debug overlay (Local HP, zumbis detectados)
 
 Metodologia: 1 funcao por ciclo, commit pt-BR, teste in-game antes de avancar.
+
+

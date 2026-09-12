@@ -7,6 +7,7 @@
 #include "imgui/imgui_impl_dx11.h"
 #include <Windows.h>
 #include <cstdio>
+#include <string>
 
 // ============================================================================
 // GUI.CPP - Dear ImGui D3D11 (ZB2 Menu)
@@ -350,6 +351,141 @@ namespace GUI {
         ImGui::PopID();
     }
 
+    // ---- Configs JSON (Fase 1 item 4) ----
+    // OBJETIVO: salvar/carregar todo o estado do menu em Documents\<DLL>\configs\<preset>.json.
+    // Sem libs externas: writer fprintf + parser por busca de chaves (tipos: bool/int/float/vec4/str).
+    static char s_cfgName[64] = "default";
+    static char s_cfgStatus[128] = { 0 };
+
+    static void CfgDir(char* out, size_t cap) {
+        out[0] = 0;
+        const char* app = Log::GetDir();
+        if (app && app[0]) _snprintf_s(out, cap, _TRUNCATE, "%s\\configs", app);
+    }
+
+    static void SaveConfig(const char* name) {
+        using namespace Config;
+        char dir[MAX_PATH] = { 0 }, path[MAX_PATH] = { 0 };
+        CfgDir(dir, sizeof(dir));
+        if (!dir[0]) { strncpy_s(s_cfgStatus, "Sem pasta de documentos.", _TRUNCATE); return; }
+        CreateDirectoryA(dir, nullptr);
+        _snprintf_s(path, _TRUNCATE, "%s\\%s.json", dir, name);
+        FILE* f = nullptr;
+        if (fopen_s(&f, path, "w") != 0 || !f) { strncpy_s(s_cfgStatus, "Falha ao salvar.", _TRUNCATE); return; }
+        fprintf(f, "{\n");
+#define JB(v) fprintf(f, "\"" #v "\":%s,\n", (v) ? "true" : "false")
+#define JI(v) fprintf(f, "\"" #v "\":%d,\n", (int)(v))
+#define JF(v) fprintf(f, "\"" #v "\":%f,\n", (double)(float)(v))
+#define JV(v) fprintf(f, "\"" #v "\":[%f,%f,%f,%f],\n", (double)(v)[0], (double)(v)[1], (double)(v)[2], (double)(v)[3])
+#define JS(v) fprintf(f, "\"" #v "\":\"%s\",\n", (v))
+        JB(bMenuOpen); JI(iMenuKey); JB(bWatermark); JB(bDebugOverlay); JB(bTooltips);
+        JB(bAimbot); JI(iAimKey); JI(iAimMode); JB(bAutoAim); JB(bSilentAim); JB(bAutoFire);
+        JB(bTriggerbot); JB(bVisibleCheck); JI(iAimBone); JI(iAimPriority); JF(fSmoothing);
+        JB(bLimitFov); JF(fFovAngle); JB(b360Mode); JB(bDrawFov); JF(fMaxDistance);
+        JB(bPrediction); JF(fLagComp);
+        JB(bNoRecoil); JB(bNoSpread); JB(bNoSway); JB(bRapidFire); JF(fRapidMult);
+        JB(bInfAmmo); JB(bInstantReload); JB(bFullAuto); JB(bSaitama); JF(fNadeTime);
+        JF(fExplRadius); JF(fExplDamage); JB(bContactExpl); JB(bPowerDrop);
+        JS(szItemSearch); JI(iItemAmount);
+        JB(bSpeedHack); JF(fSpeedMult); JB(bSuperJump); JF(fJumpMult); JB(bInfStamina);
+        JB(bRollSpeed); JF(fRollMult);
+        JB(bZombieEsp); JI(iZombieBox); JB(bZombieName); JB(bZombieDist); JB(bZombieHp);
+        JB(bZombieSkeleton); JB(bZombieSnap); JB(bZombieHeadDot);
+        JV(colZombieVis); JV(colZombieInv); JV(colZombieNameVis); JV(colZombieNameInv);
+        JV(colZombieDistVis); JV(colZombieDistInv); JV(colZombieHpVis); JV(colZombieHpInv);
+        JB(bAllyEsp); JI(iAllyBox); JB(bAllyName); JB(bAllyDist); JB(bAllyHp);
+        JB(bAllySkeleton); JB(bAllySnap); JB(bAllyHeadDot); JV(colAllyVis); JV(colAllyInv);
+        JB(bChams); JV(colChamsVis); JV(colChamsInv); JB(bItemEsp); JB(bItemWeapons);
+        JB(bItemRare); JB(bItemAmmo); JB(bItemSupply); JB(bPoiEsp); JV(colItem); JF(fItemRadius);
+        JF(fNameX); JF(fNameY); JF(fDistX); JF(fDistY); JF(fHpX); JF(fHpY);
+        JI(iLayoutMode); JI(iLayoutSide); JF(fLayoutOffset); JF(fLayoutSpacing);
+        JB(bSnapGrid); JF(fSnapSize); JB(bShowGuides); JB(bAlignList); JI(iListDir);
+        JF(fListSpacing); JF(fPreviewHp);
+        JB(bEnemyMagnet); JI(iMagnetKey); JI(iMagnetMode); JF(fMagnetRadius);
+        JB(bMagnetFreeze); JB(bKillOnSpawn); JB(bItemMagnet); JI(iItemMagnetKey);
+        JI(iItemMagnetType); JF(fItemMagnetRadius); JB(bAutoCollect);
+        JF(fSaveX); JF(fSaveY); JF(fSaveZ);
+        JF(fDayHour); JF(fDaySpeed); JI(iSpawnCount); JI(iSpawnBoss);
+        JF(fCamFov); JB(bThirdPerson); JF(fThirdDist); JB(bAntiAfk); JB(bNoClip);
+        JF(fNoClipSpeed); JB(bNoFall);
+#undef JB
+#undef JI
+#undef JF
+#undef JV
+#undef JS
+        fprintf(f, "\"_v\":1\n}\n");
+        fclose(f);
+        // Reescreve com '{' inicial (mantem writer simples e valido).
+        _snprintf_s(s_cfgStatus, _TRUNCATE, "Salvo: %s.json", name);
+        Log::Infof("Config salva: %s", path);
+    }
+
+    static const char* CfgFind(const std::string& s, const char* k) {
+        std::string q = std::string("\"") + k + "\"";
+        size_t p = s.find(q);
+        if (p == std::string::npos) return nullptr;
+        p = s.find(':', p);
+        if (p == std::string::npos) return nullptr;
+        return s.c_str() + p + 1;
+    }
+
+    static void LoadConfig(const char* name) {
+        using namespace Config;
+        char dir[MAX_PATH] = { 0 }, path[MAX_PATH] = { 0 };
+        CfgDir(dir, sizeof(dir));
+        if (!dir[0]) { strncpy_s(s_cfgStatus, "Sem pasta de documentos.", _TRUNCATE); return; }
+        _snprintf_s(path, _TRUNCATE, "%s\\%s.json", dir, name);
+        FILE* f = nullptr;
+        if (fopen_s(&f, path, "r") != 0 || !f) { _snprintf_s(s_cfgStatus, _TRUNCATE, "Preset '%s' nao existe.", name); return; }
+        std::string s;
+        char chunk[1024];
+        size_t n;
+        while ((n = fread(chunk, 1, sizeof(chunk), f)) > 0) s.append(chunk, n);
+        fclose(f);
+#define LB(v) do { const char* w = CfgFind(s, #v); if (w) (v) = (strncmp(w, "true", 4) == 0); } while (0)
+#define LI(v) do { const char* w = CfgFind(s, #v); if (w) (v) = atoi(w); } while (0)
+#define LF(v) do { const char* w = CfgFind(s, #v); if (w) (v) = (float)atof(w); } while (0)
+#define LV(v) do { const char* w = CfgFind(s, #v); if (w && *w == '[') sscanf_s(w, "[%f,%f,%f,%f]", &(v)[0], &(v)[1], &(v)[2], &(v)[3]); } while (0)
+#define LS(v) do { const char* w = CfgFind(s, #v); if (w) { while (*w == ' ' || *w == '\t') ++w; if (*w == '\"') { ++w; size_t i = 0; while (w[i] && w[i] != '\"' && i + 1 < sizeof(v)) { (v)[i] = w[i]; ++i; } (v)[i] = 0; } } } while (0)
+        LB(bMenuOpen); LI(iMenuKey); LB(bWatermark); LB(bDebugOverlay); LB(bTooltips);
+        LB(bAimbot); LI(iAimKey); LI(iAimMode); LB(bAutoAim); LB(bSilentAim); LB(bAutoFire);
+        LB(bTriggerbot); LB(bVisibleCheck); LI(iAimBone); LI(iAimPriority); LF(fSmoothing);
+        LB(bLimitFov); LF(fFovAngle); LB(b360Mode); LB(bDrawFov); LF(fMaxDistance);
+        LB(bPrediction); LF(fLagComp);
+        LB(bNoRecoil); LB(bNoSpread); LB(bNoSway); LB(bRapidFire); LF(fRapidMult);
+        LB(bInfAmmo); LB(bInstantReload); LB(bFullAuto); LB(bSaitama); LF(fNadeTime);
+        LF(fExplRadius); LF(fExplDamage); LB(bContactExpl); LB(bPowerDrop);
+        LS(szItemSearch); LI(iItemAmount);
+        LB(bSpeedHack); LF(fSpeedMult); LB(bSuperJump); LF(fJumpMult); LB(bInfStamina);
+        LB(bRollSpeed); LF(fRollMult);
+        LB(bZombieEsp); LI(iZombieBox); LB(bZombieName); LB(bZombieDist); LB(bZombieHp);
+        LB(bZombieSkeleton); LB(bZombieSnap); LB(bZombieHeadDot);
+        LV(colZombieVis); LV(colZombieInv); LV(colZombieNameVis); LV(colZombieNameInv);
+        LV(colZombieDistVis); LV(colZombieDistInv); LV(colZombieHpVis); LV(colZombieHpInv);
+        LB(bAllyEsp); LI(iAllyBox); LB(bAllyName); LB(bAllyDist); LB(bAllyHp);
+        LB(bAllySkeleton); LB(bAllySnap); LB(bAllyHeadDot); LV(colAllyVis); LV(colAllyInv);
+        LB(bChams); LV(colChamsVis); LV(colChamsInv); LB(bItemEsp); LB(bItemWeapons);
+        LB(bItemRare); LB(bItemAmmo); LB(bItemSupply); LB(bPoiEsp); LV(colItem); LF(fItemRadius);
+        LF(fNameX); LF(fNameY); LF(fDistX); LF(fDistY); LF(fHpX); LF(fHpY);
+        LI(iLayoutMode); LI(iLayoutSide); LF(fLayoutOffset); LF(fLayoutSpacing);
+        LB(bSnapGrid); LF(fSnapSize); LB(bShowGuides); LB(bAlignList); LI(iListDir);
+        LF(fListSpacing); LF(fPreviewHp);
+        LB(bEnemyMagnet); LI(iMagnetKey); LI(iMagnetMode); LF(fMagnetRadius);
+        LB(bMagnetFreeze); LB(bKillOnSpawn); LB(bItemMagnet); LI(iItemMagnetKey);
+        LI(iItemMagnetType); LF(fItemMagnetRadius); LB(bAutoCollect);
+        LF(fSaveX); LF(fSaveY); LF(fSaveZ);
+        LF(fDayHour); LF(fDaySpeed); LI(iSpawnCount); LI(iSpawnBoss);
+        LF(fCamFov); LB(bThirdPerson); LF(fThirdDist); LB(bAntiAfk); LB(bNoClip);
+        LF(fNoClipSpeed); LB(bNoFall);
+#undef LB
+#undef LI
+#undef LF
+#undef LV
+#undef LS
+        _snprintf_s(s_cfgStatus, _TRUNCATE, "Carregado: %s.json", name);
+        Log::Infof("Config carregada: %s", path);
+    }
+
     void RenderOverlay() {
         if (!g_bInit) return;
         ImDrawList* dl = ImGui::GetBackgroundDrawList();
@@ -530,7 +666,13 @@ namespace GUI {
                 ImGui::Checkbox("Watermark", &Config::bWatermark);
                 ImGui::Checkbox("Debug Overlay", &Config::bDebugOverlay);
                 ImGui::Checkbox("Tooltips", &Config::bTooltips);
-                ImGui::Text("Configs JSON em Documents\\<DLL> (Fase 1.4).");
+                ImGui::Separator();
+                ImGui::Text("CONFIGS (JSON)");
+                ImGui::InputText("Preset", s_cfgName, 64);
+                if (ImGui::Button("Salvar")) SaveConfig(s_cfgName); Tip("Salva tudo em configs\\<preset>.json.");
+                ImGui::SameLine();
+                if (ImGui::Button("Carregar")) LoadConfig(s_cfgName); Tip("Carrega o preset (chaves ausentes mantem valor).");
+                if (s_cfgStatus[0]) ImGui::TextDisabled("%s", s_cfgStatus);
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();
@@ -538,4 +680,6 @@ namespace GUI {
         ImGui::End();
     }
 }
+
+
 
