@@ -1,14 +1,16 @@
-﻿#include "mono.h"
+#include "mono.h"
 #include "log.h"
 #include <Windows.h>
 
 // ============================================================================
-// MONO.CPP - Binding dinamico do Mono embedding (Fase 2 item 5)
-// OBJETIVO: provar leitura real do jogo via reflection (sem CE, sem hardcode
-//   de heap). Item 5 = bind + resolve + 1 leitura viva (DaytimeController).
-// ORIGEM: Mono embedding API publica + auditoria runtime #1.
-// TESTES: com partida aberta, log exibe curTime/hora variando a cada tick.
-// HISTORICO: v0.5.0. SEH em toda leitura; Tick throttled (30 frames).
+// MONO.CPP - Binding dinamico do Mono embedding (Fase 2 itens 5+6)
+// OBJETIVO: leitura real do jogo via reflection: daytime, players (local via
+//   get_HasLocalControl) e zumbis (lista + HP chain). Sem CE, sem heap fixo.
+// ORIGEM: Mono embedding API + auditoria runtime #1 (OFFSETS.md).
+// TESTES: overlay mostra LOCAL HP / ZUMBIS / DAY; log confirma contagens.
+// HISTORICO: v0.5.0 bind+daytime. v0.6.0 entidades List<> + invoke.
+//   Layout List<T> Mono x64: _items@16, _size@24; vetor: length@16, dados@32.
+//   Validado por cruzamento com ZombieLoader.totalRealZombies@184.
 // ============================================================================
 
 typedef void* MonoDomain;
@@ -19,7 +21,6 @@ typedef void* MonoClassField;
 typedef void* MonoVTable;
 typedef void* MonoMethod;
 typedef void* MonoObject;
-typedef void* MonoExc;
 
 typedef MonoDomain* (__cdecl* FnGetRootDomain)();
 typedef MonoThread* (__cdecl* FnThreadAttach)(MonoDomain*);
@@ -29,6 +30,34 @@ typedef MonoClassField* (__cdecl* FnFieldFromName)(MonoClass*, const char*);
 typedef MonoVTable* (__cdecl* FnClassVTable)(MonoDomain*, MonoClass*);
 typedef void        (__cdecl* FnStaticGetValue)(MonoVTable*, MonoClassField*, void*);
 typedef MonoMethod* (__cdecl* FnMethodFromName)(MonoClass*, const char*, int);
+typedef MonoObject* (__cdecl* FnRuntimeInvoke)(MonoMethod*, void*, void**, MonoObject**);
+typedef void*       (__cdecl* FnObjectUnbox)(MonoObject*);
+
+// Offsets validados (auditoria #1). Nao adivinhar: tudo veio de CE MCP.
+namespace Off {
+    // PlayersController
+    constexpr int PCS_players = 48;
+    // PlayerMain (instancia)
+    constexpr int PM_healthFast = 204;
+    constexpr int PM_staminaFast = 228;
+    // ZombieLoader
+    constexpr int ZL_zombies = 88;
+    constexpr int ZL_totalReal = 184;
+    // Zombie (instancia)
+    constexpr int Z_health = 168;
+    // ZombieHealth (instancia)
+    constexpr int ZH_max = 16;
+    constexpr int ZH_amount = 32;
+    // DaytimeController (instancia)
+    constexpr int DT_cur = 172;
+    constexpr int DT_len = 72;
+    // List<T>
+    constexpr int L_items = 16;
+    constexpr int L_size = 24;
+    // Vetor Mono (T[])
+    constexpr int A_len = 16;
+    constexpr int A_data = 32;
+}
 
 namespace Mono {
     static State s;
@@ -44,27 +73,22 @@ namespace Mono {
     static FnClassVTable    pVTable = nullptr;
     static FnStaticGetValue pStaticGet = nullptr;
     static FnMethodFromName pMethodFrom = nullptr;
+    static FnRuntimeInvoke  pInvoke = nullptr;
+    static FnObjectUnbox    pUnbox = nullptr;
 
     static MonoDomain* s_dom = nullptr;
     static MonoImage*  s_img = nullptr;
 
-    // Classes resolvidas (ponteiros guardados p/ uso nos proximos itens).
     static MonoClass* cDay = nullptr;
     static MonoClass* cPlayer = nullptr;
     static MonoClass* cZombie = nullptr;
-    static MonoClass* cZHealth = nullptr;
     static MonoClass* cZLoader = nullptr;
     static MonoClass* cPlayers = nullptr;
-    static MonoClass* cMainCam = nullptr;
-    static MonoClass* cFov = nullptr;
-    static MonoClass* cNoClip = nullptr;
-    static MonoClass* cWaves = nullptr;
-    static MonoClass* cExpl = nullptr;
-    static MonoClass* cInv = nullptr;
 
     static MonoClassField* fDayInst = nullptr;
-    static MonoClassField* fDayCur = nullptr;   // +172 (validado: 9.68h)
-    static MonoClassField* fDayLen = nullptr;   // +72
+    static MonoClassField* fZLInst = nullptr;
+    static MonoClassField* fPCInst = nullptr;
+    static MonoMethod* mHasLocal = nullptr;
 
     template <typename T>
     static bool Bind(HMODULE m, const char* name, T& out) {
@@ -73,10 +97,10 @@ namespace Mono {
         return out != nullptr;
     }
 
-    static bool ResolveClass(const char* ns, const char* name, MonoClass*& out) {
-        out = pClassFrom(s_img, ns, name);
+    static bool ResolveClass(const char* name, MonoClass*& out) {
+        out = pClassFrom(s_img, "", name);
         if (out) { s.resolvedClasses++; return true; }
-        Log::Warnf("Classe nao resolvida: %s.%s", ns, name);
+        Log::Warnf("Classe nao resolvida: %s", name);
         return false;
     }
 
@@ -88,19 +112,92 @@ namespace Mono {
         return false;
     }
 
-    static bool ResolveMethod(MonoClass* c, const char* cname, const char* mname, int argc) {
+    static bool ResolveMethod(MonoClass* c, const char* cname, const char* mname, int argc, MonoMethod*& out) {
         if (!c) return false;
-        MonoMethod* m = pMethodFrom(c, mname, argc);
-        if (m) { s.resolvedMethods++; return true; }
+        out = pMethodFrom(c, mname, argc);
+        if (out) { s.resolvedMethods++; return true; }
         Log::Warnf("Metodo nao resolvido: %s.%s/%d", cname, mname, argc);
         return false;
+    }
+
+    static bool StaticInstance(MonoClass* c, MonoClassField* f, void*& out) {
+        out = nullptr;
+        if (!c || !f) return false;
+        __try {
+            MonoVTable* vt = pVTable(s_dom, c);
+            if (!vt) return false;
+            pStaticGet(vt, f, &out);
+            return out != nullptr;
+        } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    }
+
+    static float ReadF(const void* base, int off, float def = 0.0f) {
+        float v = def;
+        __try { memcpy(&v, (const char*)base + off, sizeof(v)); }
+        __except (EXCEPTION_EXECUTE_HANDLER) {}
+        return v;
+    }
+
+    static void* ReadP(const void* base, int off) {
+        void* v = nullptr;
+        __try { memcpy(&v, (const char*)base + off, sizeof(v)); }
+        __except (EXCEPTION_EXECUTE_HANDLER) {}
+        return v;
+    }
+
+    static int ReadI(const void* base, int off, int def = 0) {
+        int v = def;
+        __try { memcpy(&v, (const char*)base + off, sizeof(v)); }
+        __except (EXCEPTION_EXECUTE_HANDLER) {}
+        return v;
+    }
+
+    // Caminha List<T>: valida _size contra o teto e cada ponteiro antes de usar.
+    template <typename Fn>
+    static int WalkList(void* list, int expectMax, Fn fn) {
+        if (!list) return 0;
+        int n = 0;
+        __try {
+            int size = 0;
+            memcpy(&size, (char*)list + Off::L_size, sizeof(size));
+            if (size <= 0 || size > expectMax) return 0;
+            void* arr = nullptr;
+            memcpy(&arr, (char*)list + Off::L_items, sizeof(arr));
+            if (!arr) return 0;
+            // sanity do vetor: length coerente com size
+            long long len = 0;
+            memcpy(&len, (char*)arr + Off::A_len, sizeof(len));
+            if (len < size || len > expectMax) return 0;
+            for (int i = 0; i < size; ++i) {
+                void* e = nullptr;
+                memcpy(&e, (char*)arr + Off::A_data + (size_t)i * 8, 8);
+                if (!e) continue;
+                // prova de leitura do elemento
+                volatile char probe = 0;
+                memcpy((void*)&probe, e, 1);
+                fn(e, i);
+                n++;
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) { return n; }
+        return n;
+    }
+
+    static bool InvokeBool(MonoMethod* m, void* obj) {
+        if (!m || !obj) return false;
+        __try {
+            MonoObject* exc = nullptr;
+            MonoObject* ret = pInvoke(m, obj, nullptr, &exc);
+            if (exc || !ret) return false;
+            unsigned char v = *(unsigned char*)pUnbox(ret);
+            return v != 0;
+        } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
     }
 
     bool Init() {
         if (s.ready) return true;
         if (!s_bound) {
             HMODULE m = GetModuleHandleW(L"mono-2.0-bdwgc.dll");
-            if (!m) return false; // Mono ainda nao carregou
+            if (!m) return false;
             bool ok = true;
             ok &= Bind(m, "mono_get_root_domain", pGetRoot);
             ok &= Bind(m, "mono_thread_attach", pAttach);
@@ -110,94 +207,105 @@ namespace Mono {
             ok &= Bind(m, "mono_class_vtable", pVTable);
             ok &= Bind(m, "mono_field_static_get_value", pStaticGet);
             ok &= Bind(m, "mono_class_get_method_from_name", pMethodFrom);
+            ok &= Bind(m, "mono_runtime_invoke", pInvoke);
+            ok &= Bind(m, "mono_object_unbox", pUnbox);
             if (!ok) { Log::Error("Mono bind incompleto."); return false; }
             s_dom = pGetRoot();
             if (!s_dom) return false;
             pAttach(s_dom);
             s_bound = true;
-            Log::Info("Mono bind OK (8 funcoes), thread anexada.");
+            Log::Info("Mono bind OK (10 funcoes), thread anexada.");
         }
         s_img = pImgLoaded("Assembly-CSharp");
-        if (!s_img) return false; // cena ainda sem o assembly
+        if (!s_img) return false;
 
         s.resolvedClasses = s.resolvedFields = s.resolvedMethods = 0;
-        bool ok = true;
-        ok &= ResolveClass("", "DaytimeController", cDay);
-        ok &= ResolveClass("", "PlayerMain", cPlayer);
-        ok &= ResolveClass("", "Zombie", cZombie);
-        ok &= ResolveClass("", "ZombieHealth", cZHealth);
-        ok &= ResolveClass("", "ZombieLoader", cZLoader);
-        ok &= ResolveClass("", "PlayersController", cPlayers);
-        ok &= ResolveClass("", "MainCamera", cMainCam);
-        ok &= ResolveClass("", "FOVController", cFov);
-        ok &= ResolveClass("", "NoClip", cNoClip);
-        ok &= ResolveClass("", "WavesController", cWaves);
-        ok &= ResolveClass("", "Explosion", cExpl);
-        ok &= ResolveClass("", "PlayerInventory", cInv);
-
-        // Campos (nomes exatos da auditoria #1).
+        ResolveClass("DaytimeController", cDay);
+        ResolveClass("PlayerMain", cPlayer);
+        ResolveClass("Zombie", cZombie);
+        ResolveClass("ZombieLoader", cZLoader);
+        ResolveClass("PlayersController", cPlayers);
         ResolveField(cDay, "DaytimeController", "instance", fDayInst);
-        ResolveField(cDay, "DaytimeController", "curTime", fDayCur);
-        ResolveField(cDay, "DaytimeController", "dayDurationInMinutes", fDayLen);
-        // (campos de PlayerMain/Zombie validados no item 6; aqui valida metodos)
-        ResolveMethod(cPlayer, "PlayerMain", "get_HasLocalControl", 0);
-        ResolveMethod(cPlayer, "PlayerMain", "TakeDamage", -1);
-        ResolveMethod(cPlayer, "PlayerMain", "Revive", -1);
-        ResolveMethod(cZombie, "Zombie", "TakeDamage", -1);
-        ResolveMethod(cZombie, "Zombie", "TeleportTo", -1);
-        ResolveMethod(cZombie, "Zombie", "SetSpeed", -1);
-        ResolveMethod(cNoClip, "NoClip", "SwitchNoClip", 0);
-        ResolveMethod(cWaves, "WavesController", "StackZombies", -1);
-        ResolveMethod(cInv, "PlayerInventory", "AddItem", -1);
+        ResolveField(cZLoader, "ZombieLoader", "Instance", fZLInst);
+        ResolveField(cPlayers, "PlayersController", "instance", fPCInst);
+        ResolveMethod(cPlayer, "PlayerMain", "get_HasLocalControl", 0, mHasLocal);
 
-        s.ready = (cDay && fDayInst && fDayCur);
+        s.ready = (cDay && cPlayer && cZombie && cZLoader && cPlayers
+            && fDayInst && fZLInst && fPCInst && mHasLocal);
         if (s.ready && !s_logged) {
             s_logged = true;
             Log::Infof("Mono resolve OK: %d classes, %d campos, %d metodos.",
                 s.resolvedClasses, s.resolvedFields, s.resolvedMethods);
         }
-        if (!s.ready) Log::Warn("Mono resolve incompleto (cena sem Daytime?). Tentando de novo...");
         return s.ready;
     }
 
-    // Leitura viva: DaytimeController.instance (static) -> curTime +172.
-    static bool ReadDaytime() {
-        __try {
-            MonoVTable* vt = pVTable(s_dom, cDay);
-            if (!vt) return false;
-            void* inst = nullptr;
-            pStaticGet(vt, fDayInst, &inst);
-            if (!inst) return false;
-            float cur = 0, len = 0;
-            // Offsets validados runtime #1 (revalidados aqui contra o layout).
-            memcpy(&cur, (char*)inst + 172, sizeof(cur));
-            memcpy(&len, (char*)inst + 72, sizeof(len));
-            if (cur < -1.0f || cur > 48.0f) return false; // sanidade
-            s.dayTime = cur;
-            s.dayLenMin = len;
-            return true;
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-            return false;
+    static void ReadAll() {
+        // Daytime (prova de leitura viva simples).
+        void* day = nullptr;
+        if (StaticInstance(cDay, fDayInst, day)) {
+            s.dayTime = ReadF(day, Off::DT_cur);
+            s.dayLenMin = ReadF(day, Off::DT_len);
+        }
+        // Players: local via invoke, resto = aliados.
+        void* pcs = nullptr;
+        s.players = 0;
+        bool gotLocal = false, gotAlly = false;
+        if (StaticInstance(cPlayers, fPCInst, pcs)) {
+            void* list = ReadP(pcs, Off::PCS_players);
+            s.players = WalkList(list, 16, [&](void* e, int) {
+                bool local = InvokeBool(mHasLocal, e);
+                float hp = ReadF(e, Off::PM_healthFast);
+                if (hp < 0 || hp > 100000) return;
+                if (local && !gotLocal) {
+                    gotLocal = true;
+                    s.localHp = hp;
+                    s.localStam = ReadF(e, Off::PM_staminaFast);
+                } else if (!local && !gotAlly) {
+                    gotAlly = true;
+                    s.allyHp = hp;
+                }
+            });
+            if (!gotLocal) s.localHp = 0;
+        }
+        // Zumbis: conta vivos + HP do primeiro vivo; cruza com totalRealZombies.
+        void* zl = nullptr;
+        s.zombies = 0;
+        s.zHp0 = 0;
+        if (StaticInstance(cZLoader, fZLInst, zl)) {
+            int total = ReadI(zl, Off::ZL_totalReal, -1);
+            void* list = ReadP(zl, Off::ZL_zombies);
+            int alive = 0;
+            WalkList(list, 512, [&](void* e, int) {
+                void* h = ReadP(e, Off::Z_health);
+                if (!h) return;
+                float hp = ReadF(h, Off::ZH_amount);
+                float mx = ReadF(h, Off::ZH_max);
+                if (hp > 0 && hp <= mx && mx > 0 && mx < 1000000) {
+                    if (alive == 0) s.zHp0 = hp;
+                    alive++;
+                }
+            });
+            s.zombies = alive;
+            if (total >= 0 && (alive > total + 64))
+                s.zombies = 0; // layout divergiu: nao reporta lixo
         }
     }
 
     void Tick() {
-        if (++s_tick % 30 != 0) return; // ~2x por segundo a 60fps
+        if (++s_tick % 30 != 0) return;
         if (!s.ready && !Init()) return;
-        static int okStreak = 0;
-        if (ReadDaytime()) {
-            if (++okStreak == 1 || okStreak % 20 == 0)
-                Log::Infof("Mono live: dayTime=%.2fh dayLen=%.1fmin", s.dayTime, s.dayLenMin);
-        } else {
-            okStreak = 0;
-        }
+        static int n = 0;
+        ReadAll();
+        if (++n == 1 || n % 20 == 0)
+            Log::Infof("Mono live: localHP=%.0f stam=%.0f players=%d zombies=%d zHp0=%.0f day=%.2fh",
+                s.localHp, s.localStam, s.players, s.zombies, s.zHp0, s.dayTime);
     }
 
     const State& Get() { return s; }
     void Shutdown() {
-        s.ready = false; s_bound = false; s_logged = false;
+        s = State();
+        s_bound = false; s_logged = false;
         s_dom = nullptr; s_img = nullptr;
     }
 }
-
-

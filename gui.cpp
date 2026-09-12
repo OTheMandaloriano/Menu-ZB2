@@ -2,6 +2,7 @@
 #include "config.h"
 #include "log.h"
 #include "classes.h"
+#include "mono.h"
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_win32.h"
 #include "imgui/imgui_impl_dx11.h"
@@ -492,8 +493,16 @@ namespace GUI {
         ImGuiIO& io = ImGui::GetIO();
         if (Config::bWatermark)
             dl->AddText(ImVec2(10, 10), IM_COL32(120, 200, 255, 220), "ZB2 Menu | D3D11 | INSERT");
-        if (Config::bDebugOverlay && !Config::bMenuOpen) {
-            char b[128]; _snprintf_s(b, _TRUNCATE, "LOCAL ? | HP ? | ZUMBIS ? | %.0f fps", (double)io.Framerate);
+        // Debug overlay (Fase 2 item 6): dados VIVOS via reflection C++.
+        if (Config::bDebugOverlay) {
+            const Mono::State& st = Mono::Get();
+            char b[256];
+            if (st.ready)
+                _snprintf_s(b, _TRUNCATE, "LOCAL HP %.0f | STAM %.0f | ALIADO %.0f | ZUMBIS %d (hp0 %.0f) | DAY %.2fh | %.0f fps",
+                    (double)st.localHp, (double)st.localStam, (double)st.allyHp,
+                    st.zombies, (double)st.zHp0, (double)st.dayTime, (double)io.Framerate);
+            else
+                _snprintf_s(b, _TRUNCATE, "MONO aguardando cena... | %.0f fps", (double)io.Framerate);
             dl->AddText(ImVec2(10, 26), IM_COL32(160, 255, 160, 200), b);
         }
         if (Config::bDrawFov && Config::bAimbot && Config::bLimitFov && !Config::b360Mode) {
@@ -680,6 +689,7 @@ namespace GUI {
         ImGui::End();
     }
 }
+
 
 
 

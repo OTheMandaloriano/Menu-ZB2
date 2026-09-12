@@ -16,10 +16,11 @@
 - LICAO: update de DLL exige restart do jogo, nunca ejetar com hook ativo.
 
 ## Fase 2 - Leitura (sem render)
-- [x] 5. Reflection C++ na DLL - BUILD OK (45b3df07), AGUARDANDO TESTE IN-GAME
-- [ ] 6. Debug overlay (Local HP, zumbis detectados)
+- [x] 5. Reflection C++ na DLL - TESTADO IN-GAME OK (bind 8f, resolve 12c, dayTime vivo no log)
+- [x] 6. Debug overlay - BUILD OK (af9052f5), AGUARDANDO TESTE EM PARTIDA
 
 Metodologia: 1 funcao por ciclo, commit pt-BR, teste in-game antes de avancar.
+
 
 
 
