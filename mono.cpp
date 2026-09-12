@@ -326,6 +326,7 @@ namespace Mono {
             Vec3 wh, wf, sh, sf;
             if (!GetPos(eye, wh) || !GetPos(foot, wf)) return;
             wh.y += 0.30f; // eyeRef fica nos olhos: sobe ao topo da cabeca (em mundo = escala certa)
+            wf.y -= 0.15f; // footRef fica no tornozelo: desce a planta do pe
             if (!W2S(cam, wh, sh) || !W2S(cam, wf, sf)) return;
             EspEntry& en = s_esp[s_espN++];
             en.headX = sh.x; en.headY = sh.y;
@@ -414,6 +415,7 @@ namespace Mono {
         s_dom = nullptr; s_img = nullptr;
     }
 }
+
 
 
 
