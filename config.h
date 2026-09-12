@@ -73,7 +73,7 @@ namespace Config {
     extern bool  bZombieDist;
     extern bool  bZombieHp;
     extern bool  bZombiePct;      // % arrastavel independente (P5)
-    extern float fPctX, fPctY;    // offset do % em relacao a posicao auto
+    extern float fPctX, fPctY;    // offset do % em relacao a ancora
     extern bool  bZombieSkeleton;
     extern bool  bZombieSnap;
     extern bool  bZombieHeadDot;
@@ -113,9 +113,11 @@ namespace Config {
 
     // ---- VISUAL / Preview interativo (drag-and-drop) ----
     // Fixos: Box, Skeleton, HeadDot, Snapline. Arrastaveis: Nome, Dist, Vida.
-    extern float fNameX, fNameY;    // offset do Nome em relacao ao topo do box
-    extern float fDistX, fDistY;    // offset da Distancia
-    extern float fHpX, fHpY;        // offset da Barra de vida (orientacao auto)
+    // Ancoras do ESP (0=TL 1=TC 2=TR 3=ML 4=MC 5=MR 6=BL 7=BC 8=BR) + offsets px.
+    extern int   iNameA, iDistA, iHpA, iPctA;
+    extern float fNameX, fNameY;    // offset do Nome em relacao a ancora
+    extern float fDistX, fDistY;    // offset da Distancia em relacao a ancora
+    extern float fHpX, fHpY;        // offset da Barra de vida em relacao a ancora
     extern int   iLayoutMode;       // 0=Personalizado 1=Ao lado 2=Topo/Base/Centro
     extern int   iLayoutSide;       // 0=Direita 1=Esquerda
     extern float fLayoutOffset;     // px
