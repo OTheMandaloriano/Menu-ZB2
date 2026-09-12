@@ -387,11 +387,14 @@ namespace Mono {
     }
 
     void Tick() {
-        if (++s_tick % 30 != 0) return;
+        // ESP a ~20Hz (a cada 3 frames): snapshot lento atrasa as boxes quando
+        // a camera gira. Leituras de texto do overlay seguem a 2Hz (30 frames).
+        ++s_tick;
         if (!s.ready && !Init()) return;
+        if (s_tick % 3 == 0) BuildEsp();
+        if (s_tick % 30 != 0) return;
         static int n = 0;
         ReadAll();
-        BuildEsp();
         if (++n == 1 || n % 20 == 0)
             Log::Infof("Mono live: localHP=%.0f stam=%.0f players=%d zombies=%d zHp0=%.0f day=%.2fh",
                 s.localHp, s.localStam, s.players, s.zombies, s.zHp0, s.dayTime);
@@ -410,6 +413,7 @@ namespace Mono {
         s_dom = nullptr; s_img = nullptr;
     }
 }
+
 
 
 
