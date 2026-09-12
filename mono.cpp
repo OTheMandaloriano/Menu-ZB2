@@ -104,6 +104,7 @@ namespace Mono {
     static MonoMethod* mGetTrans = nullptr;
     static EspEntry s_esp[128];
     static int s_espN = 0;
+    static float s_dbgEyeY = 0, s_dbgFootY = 0; // medida real p/ calibrar a box
 
     template <typename T>
     static bool Bind(HMODULE m, const char* name, T& out) {
@@ -328,6 +329,7 @@ namespace Mono {
             wh.y += 0.30f; // eyeRef fica nos olhos: sobe ao topo da cabeca (em mundo = escala certa)
             wf.y -= 0.15f; // footRef fica no tornozelo: desce a planta do pe
             if (!W2S(cam, wh, sh) || !W2S(cam, wf, sf)) return;
+            if (s_espN == 0) { s_dbgEyeY = wh.y; s_dbgFootY = wf.y; }
             EspEntry& en = s_esp[s_espN++];
             en.headX = sh.x; en.headY = sh.y;
             en.footX = sf.x; en.footY = sf.y;
@@ -398,8 +400,8 @@ namespace Mono {
         static int n = 0;
         ReadAll();
         if (++n == 1 || n % 20 == 0)
-            Log::Infof("Mono live: localHP=%.0f stam=%.0f players=%d zombies=%d zHp0=%.0f day=%.2fh",
-                s.localHp, s.localStam, s.players, s.zombies, s.zHp0, s.dayTime);
+            Log::Infof("Mono live: localHP=%.0f stam=%.0f players=%d zombies=%d zHp0=%.0f day=%.2fh eyeY=%.2f footY=%.2f",
+                s.localHp, s.localStam, s.players, s.zombies, s.zHp0, s.dayTime, s_dbgEyeY, s_dbgFootY);
     }
 
     const State& Get() { return s; }
@@ -415,6 +417,7 @@ namespace Mono {
         s_dom = nullptr; s_img = nullptr;
     }
 }
+
 
 
 

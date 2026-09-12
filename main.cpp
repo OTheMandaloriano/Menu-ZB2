@@ -96,15 +96,17 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
 static LRESULT CALLBACK hkWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (uMsg == WM_KEYDOWN && ((int)wParam == Config::iMenuKey || wParam == VK_DELETE)) {
         Config::bMenuOpen = !Config::bMenuOpen;
-        // Cursor fix: menu fechado -> jogo volta a capturar o mouse.
+        // Cursor fix (v0.6.1): UMA chamada por toggle, nunca loop.
+        // Motivo: ShowCursor tem contador GLOBAL; loop ate >=0 destruia o
+        // estado do jogo (que esconde o cursor) e a seta aparecia no match,
+        // com cliques caindo fora da janela. Par abre/fecha = saldo zero.
         ImGuiIO& io = ImGui::GetIO();
         io.MouseDrawCursor = Config::bMenuOpen;
         if (!Config::bMenuOpen) {
-            // Solta qualquer captura para o jogo retomar a camera.
-            ClipCursor(nullptr);
-            while (ShowCursor(TRUE) < 0) {}
+            ClipCursor(nullptr); // solta a captura p/ o jogo retomar a camera
+            ShowCursor(TRUE);
         } else {
-            while (ShowCursor(FALSE) >= 0) {}
+            ShowCursor(FALSE);
         }
         return TRUE;
     }
@@ -198,5 +200,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved) {
     }
     return TRUE;
 }
+
 
 
