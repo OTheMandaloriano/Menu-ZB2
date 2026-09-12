@@ -17,6 +17,9 @@ namespace Mono {
         float footX, footY;  // pes (tela)
         float hp, maxHp;
         float dist; // metros ate a camera
+        float px[8], py[8]; // cantos da AABB projetados (pixels Unity, y p/ cima)
+        bool  pv[8];        // canto na frente da camera
+        bool  has3d;        // AABB valida (Box 3D real; senao fallback 2D)
         char  name[64];
         bool  onScreen;
         bool  isAlly;        // item 15 (sempre false no item 7)

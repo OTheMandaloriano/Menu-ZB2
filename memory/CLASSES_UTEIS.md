@@ -1,4 +1,4 @@
-# CLASSES_UTEIS.md - Auditoria Assembly-CSharp.dll (CE Mono Dissector, 2026-09-12)
+﻿# CLASSES_UTEIS.md - Auditoria Assembly-CSharp.dll (CE Mono Dissector, 2026-09-12)
 
 > 1358 classes enumeradas via mono_image_enumClasses. Abaixo as uteis p/ o cheat.
 > Assembly SHA c41a298975d35f0dad0a05531bce6e0b6e274d0ddf265217d65ce3ac5cbc84e1
@@ -48,3 +48,9 @@
 
 ## HUD (referencia de layout)
 - PlayerHUD, EquipmentHUD, DmgIndicator, BossHealthBar, WaveBarDisplay, MainTimerHUD, LootNotifier
+
+## Box 3D (auditoria complementar)
+- ZombieObject.meshRenderer+56 = SkinnedMeshRenderer do corpo; Renderer.bounds (AABB de mundo) cobre corpo todo.
+- Ossos: zombieEyeRef+88 (olhos), zombieFootRef+96 (tornozelo aprox.), armatureBone+72 Transform[] (skeleton, item 12).
+- Box 3D usa AABB (center/extents, 8 cantos projetados); fallback eye/foot se bounds falhar.
+

@@ -512,14 +512,35 @@ namespace GUI {
             float H = io.DisplaySize.y;
             ImU32 col = ImGui::GetColorU32(ImVec4(Config::colZombieVis[0], Config::colZombieVis[1], Config::colZombieVis[2], Config::colZombieVis[3]));
             for (int i = 0; i < n; ++i) {
-                float hx = es[i].headX, hy = H - es[i].headY;
-                float fx = es[i].footX, fy = H - es[i].footY;
-                float h = fy - hy; // altura head->pes
-                if (h > H * 2.0f) continue; // zumbi colado na camera: box degenerada vira linha
-                if (h < 4.0f) continue;
-                float w = h * 0.6f; // zumbi largo + cabeca grande (print 02:30)
-                float cx = fx; // pes como centro (estavel quando o zumbi inclina)
-                ImVec2 r0 = ImVec2(cx - w * 0.5f, hy), r1 = ImVec2(cx + w * 0.5f, fy);
+                float h = 0, w = 0, cx = 0, hy = 0, fy = 0;
+                ImVec2 r0, r1;
+                bool is3d = (Config::iZombieBox == 1 && es[i].has3d);
+                if (is3d) {
+                    // 3D real: bbox dos 8 cantos da AABB (labels ancoram nela).
+                    float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+                    int nv = 0;
+                    for (int k = 0; k < 8; ++k) {
+                        if (!es[i].pv[k]) continue;
+                        float sx = es[i].px[k], sy = H - es[i].py[k];
+                        if (sx < x0) x0 = sx; if (sx > x1) x1 = sx;
+                        if (sy < y0) y0 = sy; if (sy > y1) y1 = sy;
+                        nv++;
+                    }
+                    if (nv < 2) continue;
+                    r0 = ImVec2(x0, y0); r1 = ImVec2(x1, y1);
+                    cx = (x0 + x1) * 0.5f; w = x1 - x0; h = y1 - y0; hy = y0; fy = y1;
+                    if (h < 4.0f) continue;
+                } else {
+                    float hx = es[i].headX, hy2 = H - es[i].headY;
+                    float fx = es[i].footX, fy2 = H - es[i].footY;
+                    h = fy2 - hy2; // altura head->pes
+                    if (h > H * 2.0f) continue; // zumbi colado na camera: box degenerada vira linha
+                    if (h < 4.0f) continue;
+                    w = h * 0.6f; // zumbi largo + cabeca grande (print 02:30)
+                    cx = fx; // pes como centro (estavel quando o zumbi inclina)
+                    hy = hy2; fy = fy2;
+                    r0 = ImVec2(cx - w * 0.5f, hy); r1 = ImVec2(cx + w * 0.5f, fy);
+                }
                 if (Config::iZombieBox == 0) {
                     dl->AddRect(r0, r1, col, 0.0f, 0, 1.5f);
                 } else if (Config::iZombieBox == 2) {
@@ -533,8 +554,16 @@ namespace GUI {
                     dl->AddLine(ImVec2(r0.x, r1.y), ImVec2(r0.x, r1.y - cl), col, 1.5f);
                     dl->AddLine(r1, ImVec2(r1.x - cl, r1.y), col, 1.5f);
                     dl->AddLine(r1, ImVec2(r1.x, r1.y - cl), col, 1.5f);
+                } else if (Config::iZombieBox == 1 && es[i].has3d) {
+                    // 3D real: 12 arestas da AABB (cobre o corpo todo, qualquer tamanho).
+                    static const int E[12][2] = { {0,1},{1,3},{3,2},{2,0},{4,5},{5,7},{7,6},{6,4},{0,2},{1,3},{4,6},{5,7} };
+                    for (int e = 0; e < 12; ++e) {
+                        int a = E[e][0], b = E[e][1];
+                        if (!es[i].pv[a] || !es[i].pv[b]) continue;
+                        dl->AddLine(ImVec2(es[i].px[a], H - es[i].py[a]), ImVec2(es[i].px[b], H - es[i].py[b]), col, 1.2f);
+                    }
                 } else {
-                    // 3D fake: face traseira deslocada + arestas (item 11).
+                    // 3D fallback (bounds indisponivel): face traseira deslocada + arestas.
                     ImVec2 d = ImVec2(w * 0.28f, -h * 0.10f);
                     ImVec2 b0 = ImVec2(r0.x + d.x, r0.y + d.y), b1 = ImVec2(r1.x + d.x, r1.y + d.y);
                     dl->AddRect(b0, b1, col, 0.0f, 0, 1.0f);

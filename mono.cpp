@@ -52,6 +52,7 @@ namespace Off {
     // ZombieObject (instancia)
     constexpr int ZO_eye = 88;
     constexpr int ZO_foot = 96;
+    constexpr int ZO_mesh = 56; // SkinnedMeshRenderer do corpo (bounds p/ Box 3D)
     constexpr int Z_obj = 16;
     // MainCamera (instancia)
     constexpr int MC_cam = 32;
@@ -88,6 +89,7 @@ namespace Mono {
     static FnStringUtf8     pStrUtf8 = nullptr;
     static FnFree           pFree = nullptr;
     static MonoMethod* mGetName = nullptr;
+    static MonoMethod* mGetBounds = nullptr; // Renderer.get_bounds (Box 3D real)
 
     static MonoDomain* s_dom = nullptr;
     static MonoImage*  s_img = nullptr;
@@ -271,6 +273,8 @@ namespace Mono {
             if (cComp) ResolveMethod(cComp, "Component", "get_transform", 0, mGetTrans);
             MonoClass* cObj = pClassFrom(s_unity, "UnityEngine", "Object");
             if (cObj) { s.resolvedClasses++; ResolveMethod(cObj, "Object", "get_name", 0, mGetName); }
+            MonoClass* cRend = pClassFrom(s_unity, "UnityEngine", "Renderer");
+            if (cRend) { s.resolvedClasses++; ResolveMethod(cRend, "Renderer", "get_bounds", 0, mGetBounds); }
         } else Log::Warn("Imagem UnityEngine.CoreModule nao carregada.");
 
         s.ready = (cDay && cPlayer && cZombie && cZLoader && cPlayers
@@ -312,6 +316,24 @@ namespace Mono {
             if (exc || !ret) return false;
             memcpy(&out, pUnbox(ret), sizeof(out));
             return out.z > 0.0f;
+        } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    }
+
+    struct Bnd { Vec3 center, extents; }; // UnityEngine.Bounds (24 bytes)
+
+    // invoke Renderer.get_bounds -> AABB de MUNDO (cobre o corpo todo: pernas,
+    // bracos e cabeca, qualquer tamanho/tipo). Com validacao de sanidade.
+    static bool GetBounds(void* rend, Bnd& out) {
+        if (!mGetBounds || !rend) return false;
+        __try {
+            MonoObject* exc = nullptr;
+            MonoObject* ret = pInvoke(mGetBounds, rend, nullptr, &exc);
+            if (exc || !ret) return false;
+            memcpy(&out, pUnbox(ret), sizeof(out));
+            if (!(out.extents.x > 0.05f && out.extents.x < 6.0f)) return false;
+            if (!(out.extents.y > 0.05f && out.extents.y < 6.0f)) return false;
+            if (!(out.extents.z > 0.05f && out.extents.z < 6.0f)) return false;
+            return true;
         } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
     }
 
@@ -379,6 +401,43 @@ namespace Mono {
             if (!zo) return;
             EspEntry tmpEn; // nome antes dos Transforms (barato, 1 invoke)
             GetName(zo, tmpEn.name, sizeof(tmpEn.name));
+            for (int k = 0; k < 8; ++k) { tmpEn.pv[k] = false; tmpEn.px[k] = tmpEn.py[k] = 0; }
+            tmpEn.has3d = false;
+            // Box 3D real: AABB de mundo do corpo (sem hardcode de tamanho).
+            if (Config::iZombieBox == 1 && mGetBounds) {
+                void* mesh = ReadP(zo, Off::ZO_mesh);
+                Bnd bb;
+                if (mesh && GetBounds(mesh, bb)) {
+                    float dist = 0;
+                    if (hasCamW) {
+                        float dx = bb.center.x - camW.x, dy = bb.center.y - camW.y, dz = bb.center.z - camW.z;
+                        dist = sqrtf(dx * dx + dy * dy + dz * dz);
+                        if (dist * dist > maxD2) return;
+                    }
+                    for (int k = 0; k < 8; ++k) {
+                        Vec3 w = { bb.center.x + ((k & 1) ? bb.extents.x : -bb.extents.x),
+                                   bb.center.y + ((k & 2) ? bb.extents.y : -bb.extents.y),
+                                   bb.center.z + ((k & 4) ? bb.extents.z : -bb.extents.z) };
+                        Vec3 s3;
+                        if (W2S(cam, w, s3)) { tmpEn.px[k] = s3.x; tmpEn.py[k] = s3.y; tmpEn.pv[k] = true; }
+                    }
+            EspEntry& en = tmp[n++];
+            memcpy(en.name, tmpEn.name, sizeof(en.name));
+            en.has3d = false;
+                    en.dist = dist;
+                    memcpy(en.px, tmpEn.px, sizeof(en.px));
+                    memcpy(en.py, tmpEn.py, sizeof(en.py));
+                    memcpy(en.pv, tmpEn.pv, sizeof(en.pv));
+                    en.has3d = true;
+                    en.headX = en.headY = en.footX = en.footY = 0;
+                    en.hp = hp; en.maxHp = mx;
+                    en.onScreen = true; en.isAlly = false;
+                    return;
+                }
+                // bounds falhou: cai no caminho eye/foot abaixo (fallback documentado no log 1x).
+                static bool s_bndWarned = false;
+                if (!s_bndWarned) { s_bndWarned = true; Log::Warn("get_bounds falhou; Box 3D usando fallback eye/foot."); }
+            }
             void* eye = ReadP(zo, Off::ZO_eye);
             void* foot = ReadP(zo, Off::ZO_foot);
             if (!eye || !foot) return;
