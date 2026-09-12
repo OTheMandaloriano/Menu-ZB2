@@ -344,6 +344,13 @@ namespace Mono {
 
     static bool Fin(float v) { return v == v && v > -3.4028235e38f && v < 3.4028235e38f; }
 
+    // P1: o W2S do motor pode retornar x=50000 com z>0 (w~0+ por dentro do motor).
+    // Unica defesa: sanidade no ESPACO DE TELA. NaN falha nas comparacoes e cai aqui.
+    static bool Sane2(float x, float y) {
+        return x > -10000.0f && x < 10000.0f && y > -10000.0f && y < 10000.0f;
+    }
+    static int s_glitchLogged = 0; // log diagnostico (Passo 7), sem spam
+
     // Nome via Object.get_name (GameObject). Fallback "Zumbi".
     static void GetName(void* obj, char* out, size_t cap) {
         strncpy_s(out, cap, "Zumbi", _TRUNCATE);
@@ -437,7 +444,13 @@ namespace Mono {
                                    bb.center.y + ((k & 2) ? bb.extents.y : -bb.extents.y),
                                    bb.center.z + ((k & 4) ? bb.extents.z : -bb.extents.z) };
                         Vec3 s3;
-                        if (W2S(cam, w, s3)) { tmpEn.px[k] = s3.x; tmpEn.py[k] = s3.y; tmpEn.pv[k] = true; }
+                        if (W2S(cam, w, s3)) {
+                            if (!Sane2(s3.x, s3.y)) { // P1: coordenada explodida (w~0) nao entra
+                                if (s_glitchLogged < 5) { s_glitchLogged++; Log::Infof("[ESP-GLITCH] ent=0x%p corner=%d scr=(%.0f,%.0f)", e, k, (double)s3.x, (double)s3.y); }
+                                continue;
+                            }
+                            tmpEn.px[k] = s3.x; tmpEn.py[k] = s3.y; tmpEn.pv[k] = true;
+                        }
                     }
                     int nv = 0; // Fix B: cantos atras da camera nao desenham (sem fragmentos)
                     for (int k = 0; k < 8; ++k) if (tmpEn.pv[k]) nv++;
@@ -475,6 +488,10 @@ namespace Mono {
             wh.y += 0.45f; // cabeca cubo grande: margem maior (print 02:30)
             wf.y -= 0.35f; // footRef alto: margem generosa ate calibrar pelo print (v0.7.1)
             if (!W2S(cam, wh, sh) || !W2S(cam, wf, sf)) return;
+            if (!Sane2(sh.x, sh.y) || !Sane2(sf.x, sf.y)) { // P1: 2D aborta inteiro
+                if (s_glitchLogged < 5) { s_glitchLogged++; Log::Infof("[ESP-GLITCH] ent=0x%p head=(%.0f,%.0f) foot=(%.0f,%.0f)", e, (double)sh.x, (double)sh.y, (double)sf.x, (double)sf.y); }
+                return;
+            }
             if (n == 0) { s_dbgEyeY = wh.y; s_dbgFootY = wf.y; }
             EspEntry& en = tmp[n++];
             memcpy(en.name, tmpEn.name, sizeof(en.name));

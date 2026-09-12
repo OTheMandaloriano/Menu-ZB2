@@ -572,6 +572,8 @@ namespace GUI {
                     r0 = ImVec2(cx - w * 0.5f, hy); r1 = ImVec2(cx + w * 0.5f, fy);
                 }
                 if (Config::iZombieBox == 0) {
+                    if (r0.x < -10000 || r0.x > 10000 || r0.y < -10000 || r0.y > 10000) continue; // P1 render
+                    if (r1.x < -10000 || r1.x > 10000 || r1.y < -10000 || r1.y > 10000) continue;
                     dl->AddRect(r0, r1, col, 0.0f, 0, 1.5f);
                 } else if (Config::iZombieBox == 2) {
                     // Corners: 8 segmentos nos cantos (item 11).
@@ -590,7 +592,10 @@ namespace GUI {
                     for (int e = 0; e < 12; ++e) {
                         int a = E[e][0], b = E[e][1];
                         if (!es[i].pv[a] || !es[i].pv[b]) continue;
-                        dl->AddLine(ImVec2(es[i].px[a], H - es[i].py[a]), ImVec2(es[i].px[b], H - es[i].py[b]), col, 1.2f);
+                        ImVec2 pa = ImVec2(es[i].px[a], H - es[i].py[a]), pb2 = ImVec2(es[i].px[b], H - es[i].py[b]);
+                        if (pa.x < -10000 || pa.x > 10000 || pa.y < -10000 || pa.y > 10000) continue; // P1 render
+                        if (pb2.x < -10000 || pb2.x > 10000 || pb2.y < -10000 || pb2.y > 10000) continue;
+                        dl->AddLine(pa, pb2, col, 1.2f);
                     }
                 } else {
                     // 3D fallback (bounds indisponivel): face traseira deslocada + arestas.
