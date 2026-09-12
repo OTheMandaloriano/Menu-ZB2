@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 // Ordem estrita de inclusao: Windows/D3D11 -> kiero -> imgui -> projeto.
 // OBJETIVO: ponto unico de include para evitar divergencia de ordem entre TUs.
@@ -21,8 +21,10 @@
 #include "offsets.h"
 #include "classes.h"
 #include "gui.h"
+#include "mono.h"
 
 // Present: slot 8 da swapchain D3D11. ResizeBuffers: slot 13.
 typedef long(__stdcall* Present_t)(IDXGISwapChain*, UINT, UINT);
 typedef long(__stdcall* ResizeBuffers_t)(IDXGISwapChain*, UINT, UINT, UINT, DXGI_FORMAT, UINT);
 typedef LRESULT(CALLBACK* WNDPROC_t)(HWND, UINT, WPARAM, LPARAM);
+

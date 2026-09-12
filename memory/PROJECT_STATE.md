@@ -5,20 +5,22 @@
   Zombie HP chain, Daytime curTime, local x aliado via HasLocalControl.
 - Ver memory/OFFSETS.md, CLASSES_UTEIS.md, dump/sessao-2026-09-12_00-05.txt.
 
-## Fase 1 - Infraestrutura
+## FASE 1 - Infraestrutura - CONCLUIDA E TESTADA (hook, injetor, log, hotkeys, configs)
 - [x] 1. Hook D3D11 + ImGui funcional - TESTADO IN-GAME OK (fix v0.2.1 validado)
 - [x] 1b. Injetor C++ automatico - TESTADO (HMODULE remoto OK)
 - [x] 2. Sistema de log - VALIDADO (debug_log.txt escreve)
-- [x] 3. Hotkeys com modal - BUILD OK (a70a5c12), AGUARDANDO TESTE IN-GAME
-- [x] 4. Configs JSON - BUILD OK (fad7ea6f), AGUARDANDO TESTE IN-GAME
+- [x] 3. Hotkeys com modal - TESTADO IN-GAME OK (Aim=X via modal)
+- [x] 4. Configs JSON - TESTADO IN-GAME OK (save/load NoRecoil/NoSpread, 128 chaves)
 
 ## Fix v0.2.1 - CONCLUIDO E TESTADO (menu abre, print 00:35)
 - LICAO: update de DLL exige restart do jogo, nunca ejetar com hook ativo.
 
 ## Fase 2 - Leitura (sem render)
-- [x] 5a. Reflection Unity Mono (enumeracao + invocacao OK via CE; falta C++ mono API na DLL)
+- [x] 5. Reflection C++ na DLL - BUILD OK (45b3df07), AGUARDANDO TESTE IN-GAME
 - [ ] 6. Debug overlay (Local HP, zumbis detectados)
 
 Metodologia: 1 funcao por ciclo, commit pt-BR, teste in-game antes de avancar.
+
+
 
 

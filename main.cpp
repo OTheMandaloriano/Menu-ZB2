@@ -78,6 +78,7 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
 
+    Mono::Tick();          // reflection (Fase 2 item 5: bind + leitura viva)
     GUI::Render();         // janela do menu (4 abas)
     GUI::RenderOverlay();  // watermark/debug/FOV fora da janela
 
@@ -197,4 +198,5 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved) {
     }
     return TRUE;
 }
+
 
