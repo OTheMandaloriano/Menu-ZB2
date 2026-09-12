@@ -161,6 +161,7 @@ namespace GUI {
     bool g_bHasFocusFix = false;
     static bool g_bInit = false;
     static char s_iniPath[MAX_PATH] = { 0 };
+    static HWND s_hWnd = nullptr; // p/ clip do cursor durante o drag
 
     static const char* kAimBones[4] = { "Head", "Neck", "Chest", "Pelvis" };
     static const char* kAimPrio[3] = { "Closest to Crosshair", "Lowest HP", "Nearest Distance" };
@@ -212,6 +213,7 @@ namespace GUI {
         anchor = na;
         ox = posX - np.x; // mantem o visual: offset = pos - novaAncora
         oy = posY - np.y;
+        ClampOff(ox); ClampOff(oy); // drop fora nao perde o elemento
     }
 
     // P3: drag pelo cursor do Windows (GetCursorPos) - funciona mesmo se o
@@ -219,17 +221,36 @@ namespace GUI {
     struct DragCap { bool active = false; bool released = false; POINT start; float ox = 0, oy = 0; };
     static DragCap s_capName, s_capDist, s_capHp, s_capPct;
 
+    // P3: durante o drag, prende o cursor na janela (soltar fora = drop invalido).
+    static void DragClip(bool on) {
+        if (!s_hWnd) return;
+        if (on) {
+            RECT r;
+            if (!GetClientRect(s_hWnd, &r)) return;
+            POINT ul = { r.left, r.top }, lr = { r.right, r.bottom };
+            ClientToScreen(s_hWnd, &ul);
+            ClientToScreen(s_hWnd, &lr);
+            r.left = ul.x; r.top = ul.y; r.right = lr.x; r.bottom = lr.y;
+            ClipCursor(&r);
+        } else {
+            if (!s_capName.active && !s_capDist.active && !s_capHp.active && !s_capPct.active)
+                ClipCursor(nullptr);
+        }
+    }
+
     static void DragWin(const char* id, ImVec2 r0, ImVec2 r1, float* px, float* py, DragCap& cap, const char* tag = nullptr) {
         bool hov = ImGui::IsMouseHoveringRect(r0, r1);
         if (hov && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !cap.active) {
             cap.active = true;
             GetCursorPos(&cap.start);
             cap.ox = *px; cap.oy = *py;
+            DragClip(true);
         }
         if (cap.active) {
             if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
                 cap.active = false;
                 cap.released = true; // chamador faz SnapEl
+                DragClip(false);
             } else {
                 POINT c;
                 GetCursorPos(&c);
@@ -250,6 +271,7 @@ namespace GUI {
 
     void Initialize(HWND hWindow, ID3D11Device* pDevice, ID3D11DeviceContext* pContext) {
         if (g_bInit) return;
+        s_hWnd = hWindow;
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO();
         io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
@@ -705,7 +727,10 @@ namespace GUI {
 
     void Render() {
         ImGui::GetIO().MouseDrawCursor = Config::bMenuOpen; // sync por frame (nada desenha cursor com menu fechado)
-        if (!Config::bMenuOpen || !g_bInit) return;
+        if (!Config::bMenuOpen || !g_bInit) {
+            s_capName.active = s_capDist.active = s_capHp.active = s_capPct.active = false;
+            return;
+        }
         { // P3 diagnostico: delta zerado = Raw Input (Hipótese 1); pos parada = foco/input (H2/H3)
             static int s_mlog = 0;
             if (++s_mlog % 600 == 0) {
