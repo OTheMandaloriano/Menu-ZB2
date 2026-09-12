@@ -536,7 +536,7 @@ namespace GUI {
                     if (Config::fHpX < 0.0f || Config::fHpX > w) {
                         dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + 3, by + h), IM_COL32(40, 40, 44, 255));
                         dl->AddRectFilled(ImVec2(bx, by + h * (1 - pct)), ImVec2(bx + 3, by + h), hfill);
-                        dl->AddText(ImVec2(bx - 8, by - 16), IM_COL32_WHITE, pb);
+                        { ImVec2 psz = ImGui::CalcTextSize(pb); dl->AddText(ImVec2(bx - 4 - psz.x, by - 16), IM_COL32_WHITE, pb); } // % termina antes do nome
                     } else {
                         dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + w, by + 4), IM_COL32(40, 40, 44, 255));
                         dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + w * pct, by + 4), hfill);
@@ -734,6 +734,7 @@ namespace GUI {
         ImGui::End();
     }
 }
+
 
 
 
