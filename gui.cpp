@@ -179,6 +179,32 @@ namespace GUI {
         return ((int)((v + grid * 0.5f) / grid)) * grid;
     }
 
+    // P3: drag pelo cursor do Windows (GetCursorPos) - funciona mesmo se o
+    // MouseDelta do ImGui estiver zerado (Raw Input do jogo) ou instavel.
+    struct DragCap { bool active = false; POINT start; float ox = 0, oy = 0; };
+    static DragCap s_capName, s_capDist, s_capHp, s_capPct;
+
+    static void DragWin(const char* id, ImVec2 r0, ImVec2 r1, float* px, float* py, DragCap& cap) {
+        bool hov = ImGui::IsMouseHoveringRect(r0, r1);
+        if (hov && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !cap.active) {
+            cap.active = true;
+            GetCursorPos(&cap.start);
+            cap.ox = *px; cap.oy = *py;
+        }
+        if (cap.active) {
+            if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+                cap.active = false;
+            } else {
+                POINT c;
+                GetCursorPos(&c);
+                *px = SnapF(cap.ox + (float)(c.x - cap.start.x), Config::fSnapSize);
+                *py = SnapF(cap.oy + (float)(c.y - cap.start.y), Config::fSnapSize);
+                ClampOff(*px); ClampOff(*py); // P3: clamp com auto-ajuste
+            }
+        }
+        if (hov) ImGui::SetTooltip("%s (arraste)", id);
+    }
+
     void Initialize(HWND hWindow, ID3D11Device* pDevice, ID3D11DeviceContext* pContext) {
         if (g_bInit) return;
         ImGui::CreateContext();
@@ -233,20 +259,13 @@ namespace GUI {
         dl->AddLine(ImVec2(c.x, b0.y + 18), ImVec2(c.x, b1.y - 30), IM_COL32(255, 120, 120, 255), 1.5f);
         dl->AddLine(ImVec2(origin.x + size.x * 0.5f, origin.y + size.y), ImVec2(c.x, b1.y), IM_COL32(120, 200, 255, 200), 1.0f);
 
-        auto dragText = [&](const char* id, const char* txt, float* px, float* py, ImU32 col) {
+        auto dragText = [&](const char* id, const char* txt, float* px, float* py, DragCap& cap, ImU32 col) {
             ImVec2 tp = ImVec2(b0.x + *px, b0.y + *py);
             ImVec2 tsz = ImGui::CalcTextSize(txt);
             ImVec2 r0 = ImVec2(tp.x - 3, tp.y - 2), r1 = ImVec2(tp.x + tsz.x + 3, tp.y + tsz.y + 2);
-            bool hov = ImGui::IsMouseHoveringRect(r0, r1);
-            dl->AddRectFilled(r0, r1, hov ? IM_COL32(50, 90, 140, 160) : IM_COL32(30, 34, 42, 160));
+            dl->AddRectFilled(r0, r1, ImGui::IsMouseHoveringRect(r0, r1) ? IM_COL32(50, 90, 140, 160) : IM_COL32(30, 34, 42, 160));
             dl->AddText(tp, col, txt);
-            if (hov && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-                ImVec2 d = ImGui::GetIO().MouseDelta;
-                *px = SnapF(*px + d.x, Config::fSnapSize);
-                *py = SnapF(*py + d.y, Config::fSnapSize);
-                ClampOff(*px); ClampOff(*py); // P3: nao sai da area
-            }
-            if (hov) ImGui::SetTooltip("%s (arraste)", id);
+            DragWin(id, r0, r1, px, py, cap);
         };
 
         // P5: texto com base fixa + offset arrastavel (usado pelo %).
@@ -254,23 +273,16 @@ namespace GUI {
             ImVec2 tp = ImVec2(b0.x + baseX + *px, b0.y + baseY + *py);
             ImVec2 tsz = ImGui::CalcTextSize(txt);
             ImVec2 r0 = ImVec2(tp.x - 3, tp.y - 2), r1 = ImVec2(tp.x + tsz.x + 3, tp.y + tsz.y + 2);
-            bool hov = ImGui::IsMouseHoveringRect(r0, r1);
-            dl->AddRectFilled(r0, r1, hov ? IM_COL32(50, 90, 140, 160) : IM_COL32(30, 34, 42, 160));
+            dl->AddRectFilled(r0, r1, ImGui::IsMouseHoveringRect(r0, r1) ? IM_COL32(50, 90, 140, 160) : IM_COL32(30, 34, 42, 160));
             dl->AddText(tp, col, txt);
-            if (hov && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-                ImVec2 d = ImGui::GetIO().MouseDelta;
-                *px = SnapF(*px + d.x, Config::fSnapSize);
-                *py = SnapF(*py + d.y, Config::fSnapSize);
-                ClampOff(*px); ClampOff(*py);
-            }
-            if (hov) ImGui::SetTooltip("%s (arraste)", id);
+            DragWin(id, r0, r1, px, py, s_capPct);
         };
 
         if (Config::bZombieName)
-            dragText("Nome", "zumbi_01", &Config::fNameX, &Config::fNameY, IM_COL32_WHITE);
+            dragText("Nome", "zumbi_01", &Config::fNameX, &Config::fNameY, s_capName, IM_COL32_WHITE);
         if (Config::bZombieDist) {
             char b[32]; _snprintf_s(b, _TRUNCATE, "%.0fm", 45.0f);
-            dragText("Distancia", b, &Config::fDistX, &Config::fDistY, IM_COL32(200, 220, 255, 255));
+            dragText("Distancia", b, &Config::fDistX, &Config::fDistY, s_capDist, IM_COL32(200, 220, 255, 255));
         }
         if (Config::bZombieHp) {
             // Orientacao automatica pela posicao da barra (briefing Pt.7.9)
@@ -288,12 +300,7 @@ namespace GUI {
                 if (Config::bZombiePct)
                     dragTextOff("% Vida", pb, (p1.x + 4) - b0.x, (p0.y - 2) - b0.y, &Config::fPctX, &Config::fPctY, IM_COL32_WHITE);
                 ImVec2 r0 = ImVec2(p0.x - 3, p0.y - 3), r1 = ImVec2(p1.x + 34, p1.y + 3);
-                if (ImGui::IsMouseHoveringRect(r0, r1) && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-                    ImVec2 d = ImGui::GetIO().MouseDelta;
-                    Config::fHpX = SnapF(Config::fHpX + d.x, Config::fSnapSize);
-                    Config::fHpY = SnapF(Config::fHpY + d.y, Config::fSnapSize);
-                    ClampOff(Config::fHpX); ClampOff(Config::fHpY);
-                }
+                DragWin("Barra Vida", r0, r1, &Config::fHpX, &Config::fHpY, s_capHp);
             } else {
                 ImVec2 p0 = ImVec2(b0.x + cx, b0.y + cy), p1 = ImVec2(p0.x + 5, p0.y + bh);
                 dl->AddRectFilled(p0, p1, IM_COL32(40, 40, 44, 255));
@@ -303,18 +310,16 @@ namespace GUI {
                 if (Config::bZombiePct)
                     dragTextOff("% Vida", pb, (p0.x - 8) - b0.x, (p0.y - 16) - b0.y, &Config::fPctX, &Config::fPctY, IM_COL32_WHITE);
                 ImVec2 r0 = ImVec2(p0.x - 12, p0.y - 18), r1 = ImVec2(p1.x + 4, p1.y + 3);
-                if (ImGui::IsMouseHoveringRect(r0, r1) && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-                    ImVec2 d = ImGui::GetIO().MouseDelta;
-                    Config::fHpX = SnapF(Config::fHpX + d.x, Config::fSnapSize);
-                    Config::fHpY = SnapF(Config::fHpY + d.y, Config::fSnapSize);
-                    ClampOff(Config::fHpX); ClampOff(Config::fHpY);
-                }
+                DragWin("Barra Vida", r0, r1, &Config::fHpX, &Config::fHpY, s_capHp);
             }
             (void)topbot;
         }
         char hpb[64]; _snprintf_s(hpb, _TRUNCATE, "HP preview: %.0f%%", (double)Config::fPreviewHp);
         dl->AddText(ImVec2(origin.x + 8, origin.y + size.y - 18), IM_COL32(150, 150, 160, 255), hpb);
     }
+
+    static bool g_bEditMode = false; // P3: modo edicao de layout
+    static float s_snap[8] = { 0 };  // snapshot p/ Cancelar
 
     // ---- Hotkeys com modal (Fase 1 item 3) ----
     // OBJETIVO: clique no botao -> modal captura a proxima tecla/mouse. ESC cancela.
@@ -560,6 +565,7 @@ namespace GUI {
                     r0 = ImVec2(x0, y0); r1 = ImVec2(x1, y1);
                     cx = (x0 + x1) * 0.5f; w = x1 - x0; h = y1 - y0; hy = y0; fy = y1;
                     if (h < 4.0f) continue;
+                    if (w > io.DisplaySize.x || h > io.DisplaySize.y) continue; // P1: box maior que a tela = lixo
                 } else {
                     float hx = es[i].headX, hy2 = H - es[i].headY;
                     float fx = es[i].footX, fy2 = H - es[i].footY;
@@ -569,6 +575,7 @@ namespace GUI {
                     w = h * 0.6f; // zumbi largo + cabeca grande (print 02:30)
                     cx = fx; // pes como centro (estavel quando o zumbi inclina)
                     hy = hy2; fy = fy2;
+                    if (w > io.DisplaySize.x || h > io.DisplaySize.y) continue; // P1: box maior que a tela = lixo
                     r0 = ImVec2(cx - w * 0.5f, hy); r1 = ImVec2(cx + w * 0.5f, fy);
                 }
                 if (Config::iZombieBox == 0) {
@@ -645,6 +652,17 @@ namespace GUI {
     void Render() {
         ImGui::GetIO().MouseDrawCursor = Config::bMenuOpen; // sync por frame (nada desenha cursor com menu fechado)
         if (!Config::bMenuOpen || !g_bInit) return;
+        { // P3 diagnostico: delta zerado = Raw Input (Hipótese 1); pos parada = foco/input (H2/H3)
+            static int s_mlog = 0;
+            if (++s_mlog % 600 == 0) {
+                ImGuiIO& dio = ImGui::GetIO();
+                POINT wp;
+                GetCursorPos(&wp);
+                Log::Infof("[MOUSE] delta=(%.1f,%.1f) imgui=(%.0f,%.0f) win=(%ld,%ld)",
+                    (double)dio.MouseDelta.x, (double)dio.MouseDelta.y,
+                    (double)dio.MousePos.x, (double)dio.MousePos.y, wp.x, wp.y);
+            }
+        }
         ImGui::SetNextWindowSize(ImVec2(860, 560), ImGuiCond_FirstUseEver);
         if (!ImGui::Begin("ZB2 Menu - Zumbi Blocks 2 (D3D11)", &Config::bMenuOpen)) { ImGui::End(); return; }
 
@@ -705,6 +723,33 @@ namespace GUI {
             }
             // ---- 2 VISUAL ----
             if (ImGui::BeginTabItem("VISUAL")) {
+                if (!g_bEditMode) {
+                    if (ImGui::Button("Editar Layout do ESP")) {
+                        s_snap[0] = Config::fNameX; s_snap[1] = Config::fNameY;
+                        s_snap[2] = Config::fDistX; s_snap[3] = Config::fDistY;
+                        s_snap[4] = Config::fHpX; s_snap[5] = Config::fHpY;
+                        s_snap[6] = Config::fPctX; s_snap[7] = Config::fPctY;
+                        g_bEditMode = true;
+                    }
+                    Tip("Abre o editor de layout (arrasto pelo cursor do Windows).");
+                } else {
+                    ImGui::Text("MODO EDICAO - arraste Nome, Dist, Vida, %% (clamp automatico)");
+                    ImVec2 epv = ImGui::GetCursorScreenPos();
+                    ImVec2 epsz = ImVec2(ImGui::GetContentRegionAvail().x, 420);
+                    ImGui::InvisibleButton("pv_edit_zone", epsz);
+                    DrawEspPreview(epv, epsz);
+                    if (ImGui::Button("Salvar Layout")) { g_bEditMode = false; SaveConfig(s_cfgName); }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Cancelar")) {
+                        Config::fNameX = s_snap[0]; Config::fNameY = s_snap[1];
+                        Config::fDistX = s_snap[2]; Config::fDistY = s_snap[3];
+                        Config::fHpX = s_snap[4]; Config::fHpY = s_snap[5];
+                        Config::fPctX = s_snap[6]; Config::fPctY = s_snap[7];
+                        g_bEditMode = false;
+                    }
+                    ImGui::EndTabItem();
+                }
+                if (!g_bEditMode) {
                 ImGui::Checkbox("ESP Zumbis", &Config::bZombieEsp);
                 ImGui::Combo("Box Zumbi", &Config::iZombieBox, kBoxType, 3);
                 ImGui::Checkbox("Nome", &Config::bZombieName); ImGui::SameLine();
@@ -753,7 +798,8 @@ namespace GUI {
                 ImGui::Checkbox("Snap to Grid", &Config::bSnapGrid);
                 ImGui::SliderFloat("Grid", &Config::fSnapSize, 1, 20, "%.0fpx");
                 ImGui::Checkbox("Guias", &Config::bShowGuides);
-                ImGui::EndTabItem();
+                } // fim conteudo normal (modo edicao mostra so o preview)
+                if (!g_bEditMode) ImGui::EndTabItem();
             }
             // ---- 3 MISC (sempre 3a aba) ----
             if (ImGui::BeginTabItem("MISC")) {

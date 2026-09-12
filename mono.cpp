@@ -312,6 +312,8 @@ namespace Mono {
     }
 
     // invoke Camera.WorldToScreenPoint(mundo) -> pixels Unity (y de baixo p/ cima).
+    // P1 (glitch): exige z > 1m. Com z~0.01 o motor retorna x=±8000 "valido" e a
+    // box vira linha horizontal gigante - sanidade ±10000 nunca pega esse caso.
     static bool W2S(void* cam, const Vec3& w, Vec3& out) {
         if (!mW2S || !cam) return false;
         __try {
@@ -320,7 +322,7 @@ namespace Mono {
             MonoObject* ret = pInvoke(mW2S, cam, args, &exc);
             if (exc || !ret) return false;
             memcpy(&out, pUnbox(ret), sizeof(out));
-            return out.z > 0.0f;
+            return out.z > 1.0f;
         } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
     }
 
