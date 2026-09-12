@@ -505,8 +505,8 @@ namespace GUI {
                 _snprintf_s(b, _TRUNCATE, "MONO aguardando cena... | %.0f fps", (double)io.Framerate);
             dl->AddText(ImVec2(10, 26), IM_COL32(160, 255, 160, 200), b);
         }
-        // ESP Zumbis Box 2D (Fase 3 item 7): head/pes ja em pixels Unity; inverte Y.
-        if (Config::bZombieEsp && Config::iZombieBox == 0) {
+        // ESP Zumbis Box (Fase 3 itens 7/11): head/pes ja em pixels Unity; inverte Y.
+        if (Config::bZombieEsp) {
             Mono::EspEntry es[128];
             int n = Mono::GetEsp(es, 128);
             float H = io.DisplaySize.y;
@@ -519,7 +519,29 @@ namespace GUI {
                 if (h < 4.0f) continue;
                 float w = h * 0.6f; // zumbi largo + cabeca grande (print 02:30)
                 float cx = fx; // pes como centro (estavel quando o zumbi inclina)
-                dl->AddRect(ImVec2(cx - w * 0.5f, hy), ImVec2(cx + w * 0.5f, fy), col, 0.0f, 0, 1.5f);
+                ImVec2 r0 = ImVec2(cx - w * 0.5f, hy), r1 = ImVec2(cx + w * 0.5f, fy);
+                if (Config::iZombieBox == 0) {
+                    dl->AddRect(r0, r1, col, 0.0f, 0, 1.5f);
+                } else if (Config::iZombieBox == 2) {
+                    // Corners: 8 segmentos nos cantos (item 11).
+                    float cl = h * 0.22f; if (cl > w * 0.45f) cl = w * 0.45f;
+                    dl->AddLine(r0, ImVec2(r0.x + cl, r0.y), col, 1.5f);
+                    dl->AddLine(r0, ImVec2(r0.x, r0.y + cl), col, 1.5f);
+                    dl->AddLine(ImVec2(r1.x, r0.y), ImVec2(r1.x - cl, r0.y), col, 1.5f);
+                    dl->AddLine(ImVec2(r1.x, r0.y), ImVec2(r1.x, r0.y + cl), col, 1.5f);
+                    dl->AddLine(ImVec2(r0.x, r1.y), ImVec2(r0.x + cl, r1.y), col, 1.5f);
+                    dl->AddLine(ImVec2(r0.x, r1.y), ImVec2(r0.x, r1.y - cl), col, 1.5f);
+                    dl->AddLine(r1, ImVec2(r1.x - cl, r1.y), col, 1.5f);
+                    dl->AddLine(r1, ImVec2(r1.x, r1.y - cl), col, 1.5f);
+                } else {
+                    // 3D fake: face traseira deslocada + arestas (item 11).
+                    ImVec2 d = ImVec2(w * 0.28f, -h * 0.10f);
+                    ImVec2 b0 = ImVec2(r0.x + d.x, r0.y + d.y), b1 = ImVec2(r1.x + d.x, r1.y + d.y);
+                    dl->AddRect(b0, b1, col, 0.0f, 0, 1.0f);
+                    dl->AddRect(r0, r1, col, 0.0f, 0, 1.5f);
+                    dl->AddLine(r0, b0, col, 1.0f); dl->AddLine(ImVec2(r1.x, r0.y), ImVec2(b1.x, b0.y), col, 1.0f);
+                    dl->AddLine(ImVec2(r0.x, r1.y), ImVec2(b0.x, b1.y), col, 1.0f); dl->AddLine(r1, b1, col, 1.0f);
+                }
                 if (Config::bZombieDist) {
                     char db[32]; _snprintf_s(db, _TRUNCATE, "%.0fm", (double)es[i].dist);
                     ImU32 dcol = ImGui::GetColorU32(ImVec4(Config::colZombieDistVis[0], Config::colZombieDistVis[1], Config::colZombieDistVis[2], Config::colZombieDistVis[3]));
@@ -734,6 +756,7 @@ namespace GUI {
         ImGui::End();
     }
 }
+
 
 
 
