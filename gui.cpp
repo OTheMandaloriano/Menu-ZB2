@@ -76,6 +76,8 @@ namespace Config {
     bool  bZombieName = true;
     bool  bZombieDist = true;
     bool  bZombieHp = true;
+    bool  bZombiePct = true;
+    float fPctX = 0.0f, fPctY = 0.0f;
     bool  bZombieSkeleton = false;
     bool  bZombieSnap = false;
     bool  bZombieHeadDot = false;
@@ -166,6 +168,12 @@ namespace GUI {
     static const char* kMagType[5] = { "Armas", "Municao", "Loot", "Caixas", "Todos" };
     static const char* kLayout[3] = { "Personalizado", "Ao Lado do Box", "Topo/Base/Centro" };
 
+    // P3: offsets do preview sao relativos ao box; clamp evita perder o elemento.
+    static void ClampOff(float& v) {
+        if (v < -300.0f) v = -300.0f;
+        if (v > 300.0f) v = 300.0f;
+    }
+
     static float SnapF(float v, float grid) {
         if (!Config::bSnapGrid || grid <= 0.01f) return v;
         return ((int)((v + grid * 0.5f) / grid)) * grid;
@@ -236,6 +244,24 @@ namespace GUI {
                 ImVec2 d = ImGui::GetIO().MouseDelta;
                 *px = SnapF(*px + d.x, Config::fSnapSize);
                 *py = SnapF(*py + d.y, Config::fSnapSize);
+                ClampOff(*px); ClampOff(*py); // P3: nao sai da area
+            }
+            if (hov) ImGui::SetTooltip("%s (arraste)", id);
+        };
+
+        // P5: texto com base fixa + offset arrastavel (usado pelo %).
+        auto dragTextOff = [&](const char* id, const char* txt, float baseX, float baseY, float* px, float* py, ImU32 col) {
+            ImVec2 tp = ImVec2(b0.x + baseX + *px, b0.y + baseY + *py);
+            ImVec2 tsz = ImGui::CalcTextSize(txt);
+            ImVec2 r0 = ImVec2(tp.x - 3, tp.y - 2), r1 = ImVec2(tp.x + tsz.x + 3, tp.y + tsz.y + 2);
+            bool hov = ImGui::IsMouseHoveringRect(r0, r1);
+            dl->AddRectFilled(r0, r1, hov ? IM_COL32(50, 90, 140, 160) : IM_COL32(30, 34, 42, 160));
+            dl->AddText(tp, col, txt);
+            if (hov && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+                ImVec2 d = ImGui::GetIO().MouseDelta;
+                *px = SnapF(*px + d.x, Config::fSnapSize);
+                *py = SnapF(*py + d.y, Config::fSnapSize);
+                ClampOff(*px); ClampOff(*py);
             }
             if (hov) ImGui::SetTooltip("%s (arraste)", id);
         };
@@ -259,12 +285,14 @@ namespace GUI {
                 dl->AddRectFilled(p0, p1, IM_COL32(40, 40, 44, 255));
                 dl->AddRectFilled(p0, ImVec2(p0.x + bw * pct, p1.y), fill);
                 char pb[16]; _snprintf_s(pb, _TRUNCATE, "%.0f%%", (double)Config::fPreviewHp);
-                dl->AddText(ImVec2(p1.x + 4, p0.y - 2), IM_COL32_WHITE, pb);
+                if (Config::bZombiePct)
+                    dragTextOff("% Vida", pb, (p1.x + 4) - b0.x, (p0.y - 2) - b0.y, &Config::fPctX, &Config::fPctY, IM_COL32_WHITE);
                 ImVec2 r0 = ImVec2(p0.x - 3, p0.y - 3), r1 = ImVec2(p1.x + 34, p1.y + 3);
                 if (ImGui::IsMouseHoveringRect(r0, r1) && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
                     ImVec2 d = ImGui::GetIO().MouseDelta;
                     Config::fHpX = SnapF(Config::fHpX + d.x, Config::fSnapSize);
                     Config::fHpY = SnapF(Config::fHpY + d.y, Config::fSnapSize);
+                    ClampOff(Config::fHpX); ClampOff(Config::fHpY);
                 }
             } else {
                 ImVec2 p0 = ImVec2(b0.x + cx, b0.y + cy), p1 = ImVec2(p0.x + 5, p0.y + bh);
@@ -272,12 +300,14 @@ namespace GUI {
                 float fh = bh * pct;
                 dl->AddRectFilled(ImVec2(p0.x, p1.y - fh), p1, fill);
                 char pb[16]; _snprintf_s(pb, _TRUNCATE, "%.0f%%", (double)Config::fPreviewHp);
-                dl->AddText(ImVec2(p0.x - 8, p0.y - 16), IM_COL32_WHITE, pb);
+                if (Config::bZombiePct)
+                    dragTextOff("% Vida", pb, (p0.x - 8) - b0.x, (p0.y - 16) - b0.y, &Config::fPctX, &Config::fPctY, IM_COL32_WHITE);
                 ImVec2 r0 = ImVec2(p0.x - 12, p0.y - 18), r1 = ImVec2(p1.x + 4, p1.y + 3);
                 if (ImGui::IsMouseHoveringRect(r0, r1) && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
                     ImVec2 d = ImGui::GetIO().MouseDelta;
                     Config::fHpX = SnapF(Config::fHpX + d.x, Config::fSnapSize);
                     Config::fHpY = SnapF(Config::fHpY + d.y, Config::fSnapSize);
+                    ClampOff(Config::fHpX); ClampOff(Config::fHpY);
                 }
             }
             (void)topbot;
@@ -390,7 +420,7 @@ namespace GUI {
         JS(szItemSearch); JI(iItemAmount);
         JB(bSpeedHack); JF(fSpeedMult); JB(bSuperJump); JF(fJumpMult); JB(bInfStamina);
         JB(bRollSpeed); JF(fRollMult);
-        JB(bZombieEsp); JI(iZombieBox); JB(bZombieName); JB(bZombieDist); JB(bZombieHp);
+        JB(bZombieEsp); JI(iZombieBox); JB(bZombieName); JB(bZombieDist);         JB(bZombieHp); JB(bZombiePct); JF(fPctX); JF(fPctY);
         JB(bZombieSkeleton); JB(bZombieSnap); JB(bZombieHeadDot);
         JV(colZombieVis); JV(colZombieInv); JV(colZombieNameVis); JV(colZombieNameInv);
         JV(colZombieDistVis); JV(colZombieDistInv); JV(colZombieHpVis); JV(colZombieHpInv);
@@ -459,7 +489,7 @@ namespace GUI {
         LS(szItemSearch); LI(iItemAmount);
         LB(bSpeedHack); LF(fSpeedMult); LB(bSuperJump); LF(fJumpMult); LB(bInfStamina);
         LB(bRollSpeed); LF(fRollMult);
-        LB(bZombieEsp); LI(iZombieBox); LB(bZombieName); LB(bZombieDist); LB(bZombieHp);
+        LB(bZombieEsp); LI(iZombieBox); LB(bZombieName); LB(bZombieDist); LB(bZombieHp); LB(bZombiePct); LF(fPctX); LF(fPctY);
         LB(bZombieSkeleton); LB(bZombieSnap); LB(bZombieHeadDot);
         LV(colZombieVis); LV(colZombieInv); LV(colZombieNameVis); LV(colZombieNameInv);
         LV(colZombieDistVis); LV(colZombieDistInv); LV(colZombieHpVis); LV(colZombieHpInv);
@@ -587,11 +617,11 @@ namespace GUI {
                     if (Config::fHpX < 0.0f || Config::fHpX > w) {
                         dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + 3, by + h), IM_COL32(40, 40, 44, 255));
                         dl->AddRectFilled(ImVec2(bx, by + h * (1 - pct)), ImVec2(bx + 3, by + h), hfill);
-                        { ImVec2 psz = ImGui::CalcTextSize(pb); dl->AddText(ImVec2(bx - 4 - psz.x, by - 16), IM_COL32_WHITE, pb); } // % termina antes do nome
+                        { ImVec2 psz = ImGui::CalcTextSize(pb); if (Config::bZombiePct) dl->AddText(ImVec2(bx - 4 - psz.x + Config::fPctX, by - 16 + Config::fPctY), IM_COL32_WHITE, pb); } // % termina antes do nome
                     } else {
                         dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + w, by + 4), IM_COL32(40, 40, 44, 255));
                         dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + w * pct, by + 4), hfill);
-                        dl->AddText(ImVec2(bx + w + 4, by - 2), IM_COL32_WHITE, pb);
+                        if (Config::bZombiePct) dl->AddText(ImVec2(bx + w + 4 + Config::fPctX, by - 2 + Config::fPctY), IM_COL32_WHITE, pb);
                     }
                 }
                 if (Config::bZombieName && es[i].name[0]) {
@@ -674,7 +704,8 @@ namespace GUI {
                 ImGui::Combo("Box Zumbi", &Config::iZombieBox, kBoxType, 3);
                 ImGui::Checkbox("Nome", &Config::bZombieName); ImGui::SameLine();
                 ImGui::Checkbox("Distancia", &Config::bZombieDist); ImGui::SameLine();
-                ImGui::Checkbox("Vida", &Config::bZombieHp);
+                ImGui::Checkbox("Vida", &Config::bZombieHp); ImGui::SameLine();
+                ImGui::Checkbox("%", &Config::bZombiePct); Tip("Porcentagem arrastavel no preview.");
                 ImGui::Checkbox("Skeleton", &Config::bZombieSkeleton); ImGui::SameLine();
                 ImGui::Checkbox("Snapline", &Config::bZombieSnap); ImGui::SameLine();
                 ImGui::Checkbox("Head Dot", &Config::bZombieHeadDot);
@@ -712,6 +743,7 @@ namespace GUI {
                     Config::fNameX = 0; Config::fNameY = -18;
                     Config::fDistX = 0; Config::fDistY = 4;
                     Config::fHpX = -8; Config::fHpY = 0;
+                    Config::fPctX = 0; Config::fPctY = 0;
                 }
                 ImGui::Checkbox("Snap to Grid", &Config::bSnapGrid);
                 ImGui::SliderFloat("Grid", &Config::fSnapSize, 1, 20, "%.0fpx");

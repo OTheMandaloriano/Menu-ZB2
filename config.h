@@ -72,6 +72,8 @@ namespace Config {
     extern bool  bZombieName;
     extern bool  bZombieDist;
     extern bool  bZombieHp;
+    extern bool  bZombiePct;      // % arrastavel independente (P5)
+    extern float fPctX, fPctY;    // offset do % em relacao a posicao auto
     extern bool  bZombieSkeleton;
     extern bool  bZombieSnap;
     extern bool  bZombieHeadDot;

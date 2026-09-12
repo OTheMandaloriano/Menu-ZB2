@@ -20,6 +20,8 @@ namespace Mono {
         float px[8], py[8]; // cantos da AABB projetados (pixels Unity, y p/ cima)
         bool  pv[8];        // canto na frente da camera
         bool  has3d;        // AABB valida (Box 3D real; senao fallback 2D)
+        void* ent;          // ponteiro da entidade (log diagnostico P1)
+        float ex, ey, ez;   // extents da AABB (log diagnostico P1)
         char  name[64];
         bool  onScreen;
         bool  isAlly;        // item 15 (sempre false no item 7)

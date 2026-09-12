@@ -92,7 +92,9 @@ namespace Mono {
     static MonoMethod* mGetName = nullptr;
     static MonoMethod* mGetBounds = nullptr; // Renderer.get_bounds (Box 3D real)
     static int s_ghostDead = 0;   // HP>0 mas isAlive=false (animacao de morte)
-    static int s_ghostBad = 0;    // centro nao-finito / absurdo
+    static int s_ghostBad = 0;    // centro/pos nao-finito, absurdo ou origem
+    static void* s_lastEnts[128]; // snapshot anterior (log de transicoes P1)
+    static int s_lastN = 0;
 
     static MonoDomain* s_dom = nullptr;
     static MonoImage*  s_img = nullptr;
@@ -422,6 +424,8 @@ namespace Mono {
                     if (!Fin(bb.center.x) || !Fin(bb.center.y) || !Fin(bb.center.z)) { s_ghostBad++; return; } // Fix C
                     float gl = bb.center.x * bb.center.x + bb.center.y * bb.center.y + bb.center.z * bb.center.z;
                     if (gl > 10000.0f * 10000.0f) { s_ghostBad++; return; }
+                    if (fabsf(bb.center.x) < 0.5f && fabsf(bb.center.y) < 0.5f && fabsf(bb.center.z) < 0.5f) { s_ghostBad++; return; } // spawn em (0,0,0)
+                    bb.extents.x *= 0.7f; bb.extents.z *= 0.7f; // P2 opcao 3: AABB pega bracos/arma nas laterais
                     float dist = 0;
                     if (hasCamW) {
                         float dx = bb.center.x - camW.x, dy = bb.center.y - camW.y, dz = bb.center.z - camW.z;
@@ -446,6 +450,7 @@ namespace Mono {
                     memcpy(en.py, tmpEn.py, sizeof(en.py));
                     memcpy(en.pv, tmpEn.pv, sizeof(en.pv));
                     en.has3d = true;
+                    en.ent = e; en.ex = bb.extents.x; en.ey = bb.extents.y; en.ez = bb.extents.z;
                     en.headX = en.headY = en.footX = en.footY = 0;
                     en.hp = hp; en.maxHp = mx;
                     en.onScreen = true; en.isAlly = false;
@@ -476,10 +481,37 @@ namespace Mono {
             en.dist = dist;
             en.headX = sh.x; en.headY = sh.y;
             en.footX = sf.x; en.footY = sf.y;
+            en.ent = e; en.ex = en.ey = en.ez = 0;
             en.hp = hp; en.maxHp = mx;
             en.onScreen = true; en.isAlly = false;
         });
-        // Publica o snapshot sob lock (render nunca bloqueia em invoke).
+        // Diagnostico P1: transicoes add/remove com identidade (causa raiz, nao supressao).
+        EnterCriticalSection(&s_espCS);
+        {
+            int logged = 0;
+            for (int i = 0; i < n && logged < 6; ++i) {
+                bool known = false;
+                for (int j = 0; j < s_lastN; ++j) if (s_lastEnts[j] == tmp[i].ent) { known = true; break; }
+                if (!known) {
+                    Log::Infof("[ESP+] ent=0x%p nome=%s hp=%.0f/%.0f dist=%.1f ext=(%.2f,%.2f,%.2f)",
+                        tmp[i].ent, tmp[i].name, (double)tmp[i].hp, (double)tmp[i].maxHp,
+                        (double)tmp[i].dist, (double)tmp[i].ex, (double)tmp[i].ey, (double)tmp[i].ez);
+                    logged++;
+                }
+            }
+            for (int j = 0; j < s_lastN && logged < 8; ++j) {
+                bool gone = true;
+                for (int i = 0; i < n; ++i) if (tmp[i].ent == s_lastEnts[j]) { gone = false; break; }
+                if (gone) { Log::Infof("[ESP-] ent=0x%p", s_lastEnts[j]); logged++; }
+            }
+            s_lastN = n > 128 ? 128 : n;
+            for (int i = 0; i < s_lastN; ++i) s_lastEnts[i] = tmp[i].ent;
+            s_espN = s_lastN; // publica o snapshot (lock ja adquirido acima)
+            s.espShown = s_espN;
+            for (int i = 0; i < s_espN; ++i) s_esp[i] = tmp[i];
+        }
+        LeaveCriticalSection(&s_espCS);
+        // Métrica de custo do ciclo (fora do lock).
         QueryPerformanceCounter(&t1);
         {
             LARGE_INTEGER fr;
@@ -487,11 +519,6 @@ namespace Mono {
             float ms = (float)(t1.QuadPart - t0.QuadPart) * 1000.0f / (float)fr.QuadPart;
             s.espMs = s.espMs * 0.9f + ms * 0.1f;
         }
-        EnterCriticalSection(&s_espCS);
-        s_espN = n > 128 ? 128 : n;
-        s.espShown = s_espN;
-        for (int i = 0; i < s_espN; ++i) s_esp[i] = tmp[i];
-        LeaveCriticalSection(&s_espCS);
     }
 
     static DWORD WINAPI EspThread(LPVOID) {
