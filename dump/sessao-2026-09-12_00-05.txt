@@ -1,0 +1,23 @@
+SESSAO 2026-09-12 ~00:05 BRT - Auditoria runtime #1 (partida ao vivo)
+Alvo: ZumbiBlocks2.exe pid 25388, SHA 66c3ed68...0a | Assembly-CSharp 1468928 bytes SHA c41a2989...e1
+CE MCP Bridge v12 reiniciado por autonomia (CE estava fechado; autorun ce_mcp_bridge_autorun.lua carregou o pipe v99).
+
+Comandos MCP usados:
+- ping -> alive 12.0.0
+- open_process 25388 -> ZumbiBlocks2.exe
+- get_process_info / enum_modules offset 50 -> mono-2.0-bdwgc.dll 0x7FFE01C30000, d3d11.dll presente, UnityPlayer.dll
+- evaluate_lua LaunchMonoDataCollector() -> ok
+- evaluate_lua mono_enumAssemblies + mono_getImageFromAssembly -> Assembly-CSharp localizada (142 assemblies)
+- evaluate_lua mono_image_enumClasses -> 1358 classes
+- evaluate_lua dump campos/metodos: ZombieHealth, Zombie, ZombieAI, ZombieObject, ZombieIdentity, PlayerMain, PlayerMovement, NoClip, PlayerPositionSynchronizer, PlayerInventory, DaytimeController, Explosion, MainCamera, FOVController, WavesController, BossBehaviour, WaveSpawner, DatabaseItem, PlayersController, ZombieLoader, EntityLocator
+- evaluate_lua mono_class_findInstancesOfClassListOnly -> PlayerMain=2, Zombie=25, ZombieObject=25, singletons=1
+- read_memory PlayerMain+0..288 -> ponteiros de componentes validos
+- read_integer float PM+204/208/224 = 100.0 (HP/stamina cheios)
+- evaluate_lua mono_invoke get_HasLocalControl -> PM1=1 (local), PM2=0 (aliado)
+- evaluate_lua cadeia Zombie+168 -> ZombieHealth+32: 80.0/80.0 vivos (x4), 0.0/0.0 morto (x1)
+- evaluate_lua DaytimeController+172 curTime=9.68h | PM1 stam~95.9 (em movimento), PM2 hp=50.0 (aliado ferido)
+
+Conclusoes:
+- Sem AOB/ponteiros fixos: tudo via reflection Mono (re-resolver por partida).
+- Proximo: ??ße???s? memory/ atualizada; Fase 1 item 2 (log) + item 3 (hotkeys) antes do ESP.
+- Pendente do usuario: confirmar em partida/host, testar DLL Fase 1 item 1.
