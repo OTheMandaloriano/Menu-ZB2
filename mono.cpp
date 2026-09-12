@@ -91,6 +91,11 @@ namespace Mono {
     static FnFree           pFree = nullptr;
     static MonoMethod* mGetName = nullptr;
     static MonoMethod* mGetBounds = nullptr; // Renderer.get_bounds (Box 3D real)
+    static MonoMethod* mGetViewMat = nullptr; // Camera.get_worldToCameraMatrix (VP proprio)
+    static MonoMethod* mGetProjMat = nullptr; // Camera.get_projectionMatrix (VP proprio)
+    static float s_vp[16];       // VP = P*V (column-major, padrao Unity)
+    static bool  s_vpOk = false;
+    static float s_vpW = 1920.0f, s_vpH = 1080.0f;
     static int s_ghostDead = 0;   // HP>0 mas isAlive=false (animacao de morte)
     static int s_ghostBad = 0;    // centro/pos nao-finito, absurdo ou origem
     static void* s_lastEnts[128]; // snapshot anterior (log de transicoes P1)
@@ -274,6 +279,8 @@ namespace Mono {
             if (cCamU) s.resolvedClasses++;
             if (cTrans) s.resolvedClasses++;
             if (cCamU) { MonoMethod* t = pMethodFrom(cCamU, "WorldToScreenPoint", 1); if (t) { mW2S = t; s.resolvedMethods++; } else Log::Warn("Metodo nao resolvido: Camera.WorldToScreenPoint/1"); }
+            if (cCamU) { MonoMethod* t = pMethodFrom(cCamU, "get_worldToCameraMatrix", 0); if (t) { mGetViewMat = t; s.resolvedMethods++; } else Log::Warn("Metodo nao resolvido: Camera.get_worldToCameraMatrix/0"); }
+            if (cCamU) { MonoMethod* t = pMethodFrom(cCamU, "get_projectionMatrix", 0); if (t) { mGetProjMat = t; s.resolvedMethods++; } else Log::Warn("Metodo nao resolvido: Camera.get_projectionMatrix/0"); }
             if (cTrans) ResolveMethod(cTrans, "Transform", "get_position", 0, mGetPos);
             if (cComp) ResolveMethod(cComp, "Component", "get_transform", 0, mGetTrans);
             MonoClass* cObj = pClassFrom(s_unity, "UnityEngine", "Object");
@@ -311,10 +318,46 @@ namespace Mono {
         } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
     }
 
+    void SetViewport(float w, float h) {
+        if (w > 100 && h > 100) { s_vpW = w; s_vpH = h; }
+    }
+
+    // Le matriz 4x4 da camera (64 bytes, column-major Unity).
+    static bool GetMat(MonoMethod* m, void* cam, float out[16]) {
+        if (!m || !cam) return false;
+        __try {
+            MonoObject* exc = nullptr;
+            MonoObject* ret = pInvoke(m, cam, nullptr, &exc);
+            if (exc || !ret) return false;
+            memcpy(out, pUnbox(ret), 64);
+            for (int i = 0; i < 16; ++i) if (!(out[i] == out[i])) return false;
+            return true;
+        } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    }
+
+    static void MulVP(const float P[16], const float V[16], float O[16]) {
+        for (int i = 0; i < 4; ++i)
+            for (int j = 0; j < 4; ++j)
+                O[i + 4 * j] = P[i] * V[4 * j] + P[i + 4] * V[1 + 4 * j] + P[i + 8] * V[2 + 4 * j] + P[i + 12] * V[3 + 4 * j];
+    }
+
     // invoke Camera.WorldToScreenPoint(mundo) -> pixels Unity (y de baixo p/ cima).
-    // P1 (glitch): exige z > 1m. Com z~0.01 o motor retorna x=±8000 "valido" e a
-    // box vira linha horizontal gigante - sanidade ±10000 nunca pega esse caso.
+    // P1 (glitch): VP proprio com guard real de clip.w. Fallback = motor (z>1m).
     static bool W2S(void* cam, const Vec3& w, Vec3& out) {
+        if (s_vpOk) {
+            // Caminho proprio: controle total do clip.w (padrao da industria).
+            float cx = s_vp[0] * w.x + s_vp[4] * w.y + s_vp[8] * w.z + s_vp[12];
+            float cy = s_vp[1] * w.x + s_vp[5] * w.y + s_vp[9] * w.z + s_vp[13];
+            float cw = s_vp[3] * w.x + s_vp[7] * w.y + s_vp[11] * w.z + s_vp[15];
+            if (!(cw > 0.1f)) return false; // atras/perto demais: descarta antes de dividir
+            float inv = 1.0f / cw;
+            float nx = cx * inv, ny = cy * inv;
+            if (!(nx == nx && ny == ny)) return false;
+            out.x = (nx * 0.5f + 0.5f) * s_vpW;
+            out.y = (ny * 0.5f + 0.5f) * s_vpH;
+            out.z = cw;
+            return true;
+        }
         if (!mW2S || !cam) return false;
         __try {
             void* args[1] = { (void*)&w };
@@ -388,6 +431,15 @@ namespace Mono {
         if (!StaticInstance(cMC, fInst, mcObj)) return;
         void* cam = ReadP(mcObj, Off::MC_cam);
         if (!cam) return;
+        // VP proprio 1x por ciclo (2 invokes): todas as projecoes do ciclo usam a mesma matriz.
+        s_vpOk = false;
+        {
+            float V[16], P[16];
+            if (GetMat(mGetViewMat, cam, V) && GetMat(mGetProjMat, cam, P)) {
+                MulVP(P, V, s_vp);
+                s_vpOk = true;
+            }
+        }
         // Posicao da camera 1x por ciclo p/ cull por distancia (poupa 2 invokes de W2S nos longe).
         Vec3 camW = { 0, 0, 0 };
         bool hasCamW = false;

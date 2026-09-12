@@ -58,6 +58,7 @@ static long __stdcall hkResizeBuffers(IDXGISwapChain* pSwapChain, UINT BufferCou
 }
 
 static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Flags) {
+    if (Flags & DXGI_PRESENT_TEST) return oPresent(pSwapChain, SyncInterval, Flags); // teste oculto: nao desenha
     if (!g_bInit) {
         // Guarda: sem janela nao ha como inicializar o backend Win32 do ImGui
         // (HWND nulo => DisplaySize 0,0 => menu invisivel). Pula o frame.
@@ -78,6 +79,7 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
     ImGui_ImplDX11_NewFrame();
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
+    Mono::SetViewport(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y);
 
     Mono::Tick();          // reflection (Fase 2 item 5: bind + leitura viva)
     { static int s_clipTick = 0;
