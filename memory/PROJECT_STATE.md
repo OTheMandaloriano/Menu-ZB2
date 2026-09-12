@@ -1,4 +1,4 @@
-# PROJECT_STATE.md - Estado atual (ZB2 Menu)
+﻿# PROJECT_STATE.md - Estado atual (ZB2 Menu)
 
 ## Fase 1 - Infraestrutura - CONCLUIDA E TESTADA
 ## Fase 2 - Leitura - CONCLUIDA E TESTADA (reflection C++, overlay)
@@ -15,3 +15,6 @@
 - [ ] 15. ESP Aliados (azul)
 
 Metodologia: 1 funcao por ciclo, commit pt-BR, teste in-game antes de avancar.
+
+## Cursor modo janela - TESTADO OK (clip com menu fechado)
+
