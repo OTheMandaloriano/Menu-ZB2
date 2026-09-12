@@ -115,6 +115,7 @@ namespace Config {
     // Fixos: Box, Skeleton, HeadDot, Snapline. Arrastaveis: Nome, Dist, Vida.
     // Ancoras do ESP (0=TL 1=TC 2=TR 3=ML 4=MC 5=MR 6=BL 7=BC 8=BR) + offsets px.
     extern int   iNameA, iDistA, iHpA, iPctA;
+    extern int   iCfgVer; // versao do schema (v2 = fabrica calibrada)
     extern float fPropN, fPropD, fPropH, fPropP; // proporcional do offset hibrido (Pilar 2)
     extern float fNameX, fNameY;    // offset do Nome em relacao a ancora
     extern float fDistX, fDistY;    // offset da Distancia em relacao a ancora
