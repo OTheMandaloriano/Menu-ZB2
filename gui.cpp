@@ -555,8 +555,8 @@ namespace GUI {
                     dl->AddLine(r1, ImVec2(r1.x - cl, r1.y), col, 1.5f);
                     dl->AddLine(r1, ImVec2(r1.x, r1.y - cl), col, 1.5f);
                 } else if (Config::iZombieBox == 1 && es[i].has3d) {
-                    // 3D real: 12 arestas da AABB (cobre o corpo todo, qualquer tamanho).
-                    static const int E[12][2] = { {0,1},{1,3},{3,2},{2,0},{4,5},{5,7},{7,6},{6,4},{0,2},{1,3},{4,6},{5,7} };
+                    // 3D real: 12 arestas da AABB (frente 4 + fundo 4 + profundidade 4).
+                    static const int E[12][2] = { {0,1},{1,3},{3,2},{2,0},{4,5},{5,7},{7,6},{6,4},{0,4},{1,5},{2,6},{3,7} };
                     for (int e = 0; e < 12; ++e) {
                         int a = E[e][0], b = E[e][1];
                         if (!es[i].pv[a] || !es[i].pv[b]) continue;
