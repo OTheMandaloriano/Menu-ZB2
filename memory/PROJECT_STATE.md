@@ -17,9 +17,10 @@
 
 ## Fase 2 - Leitura (sem render)
 - [x] 5. Reflection C++ na DLL - TESTADO IN-GAME OK (bind 8f, resolve 12c, dayTime vivo no log)
-- [x] 6. Debug overlay - BUILD OK (af9052f5), AGUARDANDO TESTE EM PARTIDA
+- [x] 6. Debug overlay - TESTADO EM PARTIDA OK (localHP=100, zombies=28@80, day vivo) apos fix A_len
 
 Metodologia: 1 funcao por ciclo, commit pt-BR, teste in-game antes de avancar.
+
 
 
 
