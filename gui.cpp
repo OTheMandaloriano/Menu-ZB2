@@ -519,6 +519,10 @@ namespace GUI {
                 float w = h * 0.5f;
                 float cx = fx; // pes como centro (estavel quando o zumbi inclina)
                 dl->AddRect(ImVec2(cx - w * 0.5f, hy), ImVec2(cx + w * 0.5f, fy), col, 0.0f, 0, 1.5f);
+                if (Config::bZombieName && es[i].name[0]) {
+                    ImU32 ncol = ImGui::GetColorU32(ImVec4(Config::colZombieNameVis[0], Config::colZombieNameVis[1], Config::colZombieNameVis[2], Config::colZombieNameVis[3]));
+                    dl->AddText(ImVec2(cx - w * 0.5f + Config::fNameX, hy + Config::fNameY), ncol, es[i].name);
+                }
             }
         }
         if (Config::bDrawFov && Config::bAimbot && Config::bLimitFov && !Config::b360Mode) {
@@ -706,6 +710,7 @@ namespace GUI {
         ImGui::End();
     }
 }
+
 
 
 

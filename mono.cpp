@@ -33,6 +33,8 @@ typedef void        (__cdecl* FnStaticGetValue)(MonoVTable*, MonoClassField*, vo
 typedef MonoMethod* (__cdecl* FnMethodFromName)(MonoClass*, const char*, int);
 typedef MonoObject* (__cdecl* FnRuntimeInvoke)(MonoMethod*, void*, void**, MonoObject**);
 typedef void*       (__cdecl* FnObjectUnbox)(MonoObject*);
+typedef char*       (__cdecl* FnStringUtf8)(MonoObject*);
+typedef void        (__cdecl* FnFree)(void*);
 
 // Offsets validados (auditoria #1). Nao adivinhar: tudo veio de CE MCP.
 namespace Off {
@@ -82,6 +84,9 @@ namespace Mono {
     static FnMethodFromName pMethodFrom = nullptr;
     static FnRuntimeInvoke  pInvoke = nullptr;
     static FnObjectUnbox    pUnbox = nullptr;
+    static FnStringUtf8     pStrUtf8 = nullptr;
+    static FnFree           pFree = nullptr;
+    static MonoMethod* mGetName = nullptr;
 
     static MonoDomain* s_dom = nullptr;
     static MonoImage*  s_img = nullptr;
@@ -230,6 +235,8 @@ namespace Mono {
             ok &= Bind(m, "mono_class_get_method_from_name", pMethodFrom);
             ok &= Bind(m, "mono_runtime_invoke", pInvoke);
             ok &= Bind(m, "mono_object_unbox", pUnbox);
+            ok &= Bind(m, "mono_string_to_utf8", pStrUtf8);
+            ok &= Bind(m, "mono_free", pFree);
             if (!ok) { Log::Error("Mono bind incompleto."); return false; }
             s_dom = pGetRoot();
             if (!s_dom) return false;
@@ -261,6 +268,8 @@ namespace Mono {
             if (cCamU) { MonoMethod* t = pMethodFrom(cCamU, "WorldToScreenPoint", 1); if (t) { mW2S = t; s.resolvedMethods++; } else Log::Warn("Metodo nao resolvido: Camera.WorldToScreenPoint/1"); }
             if (cTrans) ResolveMethod(cTrans, "Transform", "get_position", 0, mGetPos);
             if (cComp) ResolveMethod(cComp, "Component", "get_transform", 0, mGetTrans);
+            MonoClass* cObj = pClassFrom(s_unity, "UnityEngine", "Object");
+            if (cObj) { s.resolvedClasses++; ResolveMethod(cObj, "Object", "get_name", 0, mGetName); }
         } else Log::Warn("Imagem UnityEngine.CoreModule nao carregada.");
 
         s.ready = (cDay && cPlayer && cZombie && cZLoader && cPlayers
@@ -305,7 +314,20 @@ namespace Mono {
         } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
     }
 
-    // Monta snapshot do ESP (zumbis). Roda no Tick (2Hz), nao por frame.
+    // Nome via Object.get_name (GameObject). Fallback "Zumbi".
+    static void GetName(void* obj, char* out, size_t cap) {
+        strncpy_s(out, cap, "Zumbi", _TRUNCATE);
+        if (!mGetName || !obj || !pStrUtf8 || !pFree) return;
+        __try {
+            MonoObject* exc = nullptr;
+            MonoObject* ret = pInvoke(mGetName, obj, nullptr, &exc);
+            if (exc || !ret) return;
+            char* u = pStrUtf8(ret);
+            if (u) { strncpy_s(out, cap, u, _TRUNCATE); pFree(u); }
+        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
+
+    // Monta snapshot do ESP (zumbis). Roda na worker 30Hz, nao por frame.
     static void BuildEsp() {
         EspEntry tmp[128];
         int n = 0;
@@ -347,6 +369,8 @@ namespace Mono {
             if (hp <= 0 || mx <= 0 || hp > mx) return; // so vivos
             void* zo = ReadP(e, Off::Z_obj);
             if (!zo) return;
+            EspEntry tmpEn; // nome antes dos Transforms (barato, 1 invoke)
+            GetName(zo, tmpEn.name, sizeof(tmpEn.name));
             void* eye = ReadP(zo, Off::ZO_eye);
             void* foot = ReadP(zo, Off::ZO_foot);
             if (!eye || !foot) return;
@@ -361,6 +385,7 @@ namespace Mono {
             if (!W2S(cam, wh, sh) || !W2S(cam, wf, sf)) return;
             if (n == 0) { s_dbgEyeY = wh.y; s_dbgFootY = wf.y; }
             EspEntry& en = tmp[n++];
+            memcpy(en.name, tmpEn.name, sizeof(en.name));
             en.headX = sh.x; en.headY = sh.y;
             en.footX = sf.x; en.footY = sf.y;
             en.hp = hp; en.maxHp = mx;
@@ -475,6 +500,8 @@ namespace Mono {
         s_dom = nullptr; s_img = nullptr;
     }
 }
+
+
 
 
 

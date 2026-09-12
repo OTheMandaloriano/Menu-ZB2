@@ -16,6 +16,7 @@ namespace Mono {
         float headX, headY;  // cabeca (tela)
         float footX, footY;  // pes (tela)
         float hp, maxHp;
+        char  name[64];
         bool  onScreen;
         bool  isAlly;        // item 15 (sempre false no item 7)
     };
@@ -46,4 +47,5 @@ namespace Mono {
     int GetEsp(EspEntry* out, int max);
     void Shutdown();
 }
+
 
