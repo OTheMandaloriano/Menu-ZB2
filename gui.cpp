@@ -116,7 +116,9 @@ namespace Config {
     float fNameX = 0.0f, fNameY = -16.0f;
     float fDistX = 0.0f, fDistY = 4.0f;
     float fHpX   = -6.0f, fHpY = 0.0f;   // ZERO ABSOLUTO: topo da barra alinhado com o topo do box!
-    int   iNameA = 1, iDistA = 7, iHpA = 0, iPctA = 5; // TC, BC, TL, MR (Zero colisoes!)
+    int   iNameA = 1, iDistA = 7, iHpA = 0, iPctA = 5; // legado v2 (migracao)
+    int   iSideN = 0, iSideD = 1, iSideH = 2, iSideP = 3; // topo, base, esq, dir
+    int   iAlinN = 1, iAlinD = 1, iAlinH = 1, iAlinP = 1; // centro
     int   iCfgVer = 2;
     float fPropN = 0.05f, fPropD = 0.05f, fPropH = 0.06f, fPropP = 0.06f; // Pilar 2
     int   iLayoutMode = 0;
@@ -170,7 +172,23 @@ namespace GUI {
     static const char* kBoxType[3] = { "2D", "3D", "Corners" };
     static const char* kBossName[3] = { "Riot", "Queen", "Reaper" };
     static const char* kMagType[5] = { "Armas", "Municao", "Loot", "Caixas", "Todos" };
-    static const char* kLayout[3] = { "Personalizado", "Ao Lado do Box", "Topo/Base/Centro" };
+    static const char* kLayout[3] = { "Personalizado", "Classico Esquerda", "Classico Direita" };
+
+    // A07: presets preenchem o MESMO modelo do arraste (lado/alin/nudge/prop).
+    static void ApplyPreset(int p) {
+        if (p == 1) { // Classico Esquerda: barra esq, nome topo, dist base, % dir
+            Config::iSideN = 0; Config::iAlinN = 1; Config::fNameX = 0; Config::fNameY = -16;
+            Config::iSideD = 1; Config::iAlinD = 1; Config::fDistX = 0; Config::fDistY = 4;
+            Config::iSideH = 2; Config::iAlinH = 1; Config::fHpX = -6; Config::fHpY = 0;
+            Config::iSideP = 3; Config::iAlinP = 1; Config::fPctX = 4; Config::fPctY = 0;
+        } else if (p == 2) { // Classico Direita: espelho
+            Config::iSideN = 0; Config::iAlinN = 1; Config::fNameX = 0; Config::fNameY = -16;
+            Config::iSideD = 1; Config::iAlinD = 1; Config::fDistX = 0; Config::fDistY = 4;
+            Config::iSideH = 3; Config::iAlinH = 1; Config::fHpX = 6; Config::fHpY = 0;
+            Config::iSideP = 2; Config::iAlinP = 1; Config::fPctX = -4; Config::fPctY = 0;
+        }
+        Config::iLayoutMode = p;
+    }
 
     // P3: offsets do preview sao relativos ao box; clamp evita perder o elemento.
     static void ClampOff(float& v) {
@@ -180,8 +198,35 @@ namespace GUI {
     }
 
     static float SnapF(float v, float grid) {
+        // A08: arredondamento simetrico e idempotente (snap(snap(x))==snap(x)).
         if (!Config::bSnapGrid || grid <= 0.01f) return v;
-        return ((int)((v + grid * 0.5f) / grid)) * grid;
+        float q = v / grid;
+        float r = (q >= 0.0f) ? floorf(q + 0.5f) : -floorf(-q + 0.5f);
+        return r * grid;
+    }
+
+    // Drop: lado pela borda mais proxima do centro (lado atual vence empates em 6px),
+    // alinhamento por t, nudge = sobra clampada em ±60. Sem salto: posicao preservada.
+    static ImVec2 PlaceEl(int side, int align, float ew, float eh, float gap, ImVec2 mn, ImVec2 mx);
+    static float ElGap(int side, float prop, float bw, float bh);
+    static void DropEl(int& side, int& al, float& nx, float& ny, float prop, float ew, float eh, float bw, float bh, ImVec2 dropTL) {
+        float cx = dropTL.x + ew * 0.5f, cy = dropTL.y + eh * 0.5f;
+        float d[4] = { fabsf(cy - 0.0f), fabsf(cy - bh), fabsf(cx - 0.0f), fabsf(cx - bw) };
+        if (side >= 0 && side < 4) d[side] -= 6.0f; // histerese
+        int ns = 0;
+        for (int i = 1; i < 4; ++i) if (d[i] < d[ns]) ns = i;
+        float t = 0.5f;
+        if (ns == 0 || ns == 1) t = bw > 0.01f ? cx / bw : 0.5f;
+        else t = bh > 0.01f ? cy / bh : 0.5f;
+        if (t < 0) t = 0; if (t > 1) t = 1;
+        int na = t < 0.33f ? 0 : (t > 0.66f ? 2 : 1);
+        ImVec2 mn = ImVec2(0, 0), mx = ImVec2(bw, bh);
+        float gap = ElGap(ns, prop, bw, bh);
+        ImVec2 base = PlaceEl(ns, na, ew, eh, gap, mn, mx);
+        side = ns; al = na;
+        nx = dropTL.x - base.x; ny = dropTL.y - base.y;
+        if (nx < -60) nx = -60; if (nx > 60) nx = 60;
+        if (ny < -60) ny = -60; if (ny > 60) ny = 60;
     }
 
     // Ancoras do ESP (0=TL 1=TC 2=TR 3=ML 4=MC 5=MR 6=BL 7=BC 8=BR).
@@ -241,10 +286,13 @@ namespace GUI {
         }
     }
 
+    static DragCap* s_dragOwner = nullptr; // A09: captura unica (sobreposicao resolve por ordem)
+
     static void DragWin(const char* id, ImVec2 r0, ImVec2 r1, float* px, float* py, DragCap& cap, const char* tag = nullptr) {
         bool hov = ImGui::IsMouseHoveringRect(r0, r1);
-        if (hov && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !cap.active) {
+        if (hov && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !cap.active && !s_dragOwner) {
             cap.active = true;
+            s_dragOwner = &cap;
             GetCursorPos(&cap.start);
             cap.ox = *px; cap.oy = *py;
             DragClip(true);
@@ -253,7 +301,11 @@ namespace GUI {
             if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
                 cap.active = false;
                 cap.released = true; // chamador faz SnapEl
+                if (s_dragOwner == &cap) s_dragOwner = nullptr;
                 DragClip(false);
+            } else if (s_dragOwner != &cap) {
+                cap.active = false; // outro dono assumiu: solta sem confirmar
+                if (s_dragOwner == &cap) s_dragOwner = nullptr;
             } else {
                 POINT c;
                 GetCursorPos(&c);
@@ -269,9 +321,41 @@ namespace GUI {
     }
 
     static bool HpHorizAnchor(int a) {
-        // So TOP_CENTER (1) ou BOT_CENTER (7) deitam a barra. Lateral = sempre vertical!
+        // Legado: orientacao agora vem do LADO (PlaceEl). Mantido p/ compat.
         return (a == 1 || a == 7);
     }
+
+    // Layout lado+alinhamento (SSOT preview+jogo). side:0=topo 1=base 2=esq 3=dir.
+    // align: 0=inicio 1=centro 2=fim. Retorna o CANTO SUPERIOR ESQUERDO do
+    // retangulo do elemento (ew,eh medidos), totalmente fora do box + gap.
+    static ImVec2 PlaceEl(int side, int align, float ew, float eh, float gap, ImVec2 mn, ImVec2 mx) {
+        if (side < 0 || side > 3) side = 0;
+        if (align < 0 || align > 2) align = 1;
+        float x, y;
+        if (side == 0) {
+            y = mn.y - gap - eh;
+            x = align == 0 ? mn.x : (align == 1 ? (mn.x + mx.x) * 0.5f - ew * 0.5f : mx.x - ew);
+        } else if (side == 1) {
+            y = mx.y + gap;
+            x = align == 0 ? mn.x : (align == 1 ? (mn.x + mx.x) * 0.5f - ew * 0.5f : mx.x - ew);
+        } else if (side == 2) {
+            x = mn.x - gap - ew;
+            y = align == 0 ? mn.y : (align == 1 ? (mn.y + mx.y) * 0.5f - eh * 0.5f : mx.y - eh);
+        } else {
+            x = mx.x + gap;
+            y = align == 0 ? mn.y : (align == 1 ? (mn.y + mx.y) * 0.5f - eh * 0.5f : mx.y - eh);
+        }
+        return ImVec2(x, y);
+    }
+    // Gap = 8px minimos + extra proporcional (lado esq/dir usa largura, resto altura).
+    static float ElGap(int side, float prop, float bw, float bh) {
+        float ref = (side == 2 || side == 3) ? bw : bh;
+        if (ref < 1.0f) ref = 1.0f;
+        float g = 8.0f + (prop > 0.0f ? prop * ref : 0.0f);
+        if (g > 68.0f) g = 68.0f;
+        return g;
+    }
+    static bool BarHorizSide(int side) { return side == 0 || side == 1; }
 
     // Pilar 2: offset hibrido = base (usuario) + extra proporcional clampado.
     // ref = largura (ancoras laterais) ou altura (demais). extra=0 se prop=0.
@@ -309,7 +393,7 @@ namespace GUI {
     }
 
     static void LoadConfig(const char* name); // forward (definida abaixo)
-    static void SaveConfig(const char* name); // forward (definida abaixo)
+    static bool SaveConfig(const char* name); // forward (definida abaixo)
 
     void Initialize(HWND hWindow, ID3D11Device* pDevice, ID3D11DeviceContext* pContext) {
         if (g_bInit) return;
@@ -357,6 +441,7 @@ namespace GUI {
 
         dl->AddRectFilled(origin, ImVec2(origin.x + size.x, origin.y + size.y),
             IM_COL32(12, 14, 18, 255));
+        ImGui::PushClipRect(origin, ImVec2(origin.x + size.x, origin.y + size.y), true); // A11: clip do canvas
         if (Config::bShowGuides) {
             dl->AddLine(ImVec2(c.x, origin.y), ImVec2(c.x, origin.y + size.y), IM_COL32(60, 60, 70, 255));
             dl->AddLine(ImVec2(origin.x, c.y), ImVec2(origin.x + size.x, c.y), IM_COL32(60, 60, 70, 255));
@@ -368,58 +453,101 @@ namespace GUI {
         dl->AddLine(ImVec2(c.x, b0.y + 18), ImVec2(c.x, b1.y - 30), IM_COL32(255, 120, 120, 255), 1.5f);
         dl->AddLine(ImVec2(origin.x + size.x * 0.5f, origin.y + size.y), ImVec2(c.x, b1.y), IM_COL32(120, 200, 255, 200), 1.0f);
 
-        // Elemento de texto ancorado: pos = ancora(box) + offset; soltar = re-ancorar.
-        auto dragEl = [&](const char* id, const char* txt, int& anchor, float* px, float* py, DragCap& cap, float prop, float minE, float maxE, ImU32 col) {
-            ImVec2 hp2 = HybridPos(anchor, *px, *py, prop, minE, maxE, ImVec2(0, 0), ImVec2(bw, bh));
-            ImVec2 tp = ImVec2(b0.x + hp2.x, b0.y + hp2.y);
+        // Modelo lado+alinhamento (SSOT com o jogo). idx: 0=nome 1=dist 2=vida 3=pct.
+        int* pSide[4] = { &Config::iSideN, &Config::iSideD, &Config::iSideH, &Config::iSideP };
+        int* pAl[4] = { &Config::iAlinN, &Config::iAlinD, &Config::iAlinH, &Config::iAlinP };
+        float* pNx[4] = { &Config::fNameX, &Config::fDistX, &Config::fHpX, &Config::fPctX };
+        float* pNy[4] = { &Config::fNameY, &Config::fDistY, &Config::fHpY, &Config::fPctY };
+        float* pPr[4] = { &Config::fPropN, &Config::fPropD, &Config::fPropH, &Config::fPropP };
+        bool* pEn[4] = { &Config::bZombieName, &Config::bZombieDist, &Config::bZombieHp, &Config::bZombiePct };
+        DragCap* pCap[4] = { &s_capName, &s_capDist, &s_capHp, &s_capPct };
+        const char* pId[4] = { "Nome", "Distancia", "Barra Vida", "% Vida" };
+        const char* sideNm[4] = { "TOPO", "BASE", "ESQ", "DIR" };
+        const char* alNm[3] = { "INI", "CENTRO", "FIM" };
+
+        // Texto lado+alinhamento com retangulo medido (fora do box, com gap).
+        auto dragEl = [&](int e, const char* txt, ImU32 col) {
             ImVec2 tsz = ImGui::CalcTextSize(txt);
-            ImVec2 r0 = ImVec2(tp.x - 3, tp.y - 2), r1 = ImVec2(tp.x + tsz.x + 3, tp.y + tsz.y + 2);
+            ImVec2 tp = PlaceEl(*pSide[e], *pAl[e], tsz.x, tsz.y, ElGap(*pSide[e], *pPr[e], bw, bh), ImVec2(0, 0), ImVec2(bw, bh));
+            tp.x += *pNx[e]; tp.y += *pNy[e];
+            ImVec2 gp = ImVec2(b0.x + tp.x, b0.y + tp.y);
+            ImVec2 r0 = ImVec2(gp.x - 4, gp.y - 3), r1 = ImVec2(gp.x + tsz.x + 4, gp.y + tsz.y + 3);
             dl->AddRectFilled(r0, r1, ImGui::IsMouseHoveringRect(r0, r1) ? IM_COL32(50, 90, 140, 160) : IM_COL32(30, 34, 42, 160));
-            dl->AddText(tp, col, txt);
-            DragWin(id, r0, r1, px, py, cap, AnchorName(anchor));
-            if (cap.released) { cap.released = false; SnapEl(anchor, *px, *py, bw, bh); }
+            dl->AddText(gp, col, txt);
+            char tag[32]; _snprintf_s(tag, _TRUNCATE, "%s %s", sideNm[*pSide[e] < 0 || *pSide[e] > 3 ? 0 : *pSide[e]], alNm[*pAl[e] < 0 || *pAl[e] > 2 ? 1 : *pAl[e]]);
+            DragWin(pId[e], r0, r1, pNx[e], pNy[e], *pCap[e], tag);
+            if (pCap[e]->released) {
+                pCap[e]->released = false;
+                DropEl(*pSide[e], *pAl[e], *pNx[e], *pNy[e], *pPr[e], tsz.x, tsz.y, bw, bh, ImVec2(tp.x - b0.x, tp.y - b0.y));
+                Config::iLayoutMode = 0; // arraste manual = Personalizado (A07)
+            }
         };
 
-        if (Config::bZombieName)
-            dragEl("Nome", "zumbi_01", Config::iNameA, &Config::fNameX, &Config::fNameY, s_capName, Config::fPropN, 15.0f, 60.0f, IM_COL32_WHITE);
-        if (Config::bZombieDist) {
+        if (*pEn[0])
+            dragEl(0, "zumbi_01", IM_COL32_WHITE);
+        if (*pEn[1]) {
             char b[32]; _snprintf_s(b, _TRUNCATE, "%.0fm", 45.0f);
-            dragEl("Distancia", b, Config::iDistA, &Config::fDistX, &Config::fDistY, s_capDist, Config::fPropD, 15.0f, 60.0f, IM_COL32(200, 220, 255, 255));
+            dragEl(1, b, IM_COL32(200, 220, 255, 255));
         }
-        if (Config::bZombieHp) {
-            // Barra auto-orientada pela ANCORA (nao pela posicao): TOP/BOTTOM = horizontal.
-            bool horiz = HpHorizAnchor(Config::iHpA);
-            ImVec2 hp0 = HybridPos(Config::iHpA, Config::fHpX, Config::fHpY, Config::fPropH, 6.0f, 50.0f, ImVec2(0, 0), ImVec2(bw, bh));
+        if (*pEn[2]) {
+            // Barra pelo LADO (esq/dir = vertical 5xH; topo/base = horizontal Wx5).
+            bool horiz = BarHorizSide(*pSide[2]);
             float pct = Config::fPreviewHp / 100.0f;
+            if (pct < 0) pct = 0; if (pct > 1) pct = 1;
             float hc[4]; HpColor(Config::fPreviewHp, hc);
             ImU32 fill = IM_COL32((int)(hc[0]*255), (int)(hc[1]*255), (int)(hc[2]*255), 255);
-            ImVec2 p0 = ImVec2(b0.x + hp0.x, b0.y + hp0.y);
-            ImVec2 p1 = horiz ? ImVec2(p0.x + bw, p0.y + 8) : ImVec2(p0.x + 5, p0.y + bh);
+            float blen = horiz ? bw : bh;
+            ImVec2 bp = PlaceEl(*pSide[2], *pAl[2], horiz ? blen : 5.0f, horiz ? 5.0f : blen,
+                ElGap(*pSide[2], *pPr[2], bw, bh), ImVec2(0, 0), ImVec2(bw, bh));
+            ImVec2 p0 = ImVec2(b0.x + bp.x + *pNx[2], b0.y + bp.y + *pNy[2]);
+            ImVec2 p1 = horiz ? ImVec2(p0.x + blen, p0.y + 5) : ImVec2(p0.x + 5, p0.y + blen);
             dl->AddRectFilled(p0, p1, IM_COL32(40, 40, 44, 255));
-            if (horiz) dl->AddRectFilled(p0, ImVec2(p0.x + bw * pct, p1.y), fill);
-            else { float fh = bh * pct; dl->AddRectFilled(ImVec2(p0.x, p1.y - fh), p1, fill); }
+            if (horiz) dl->AddRectFilled(p0, ImVec2(p0.x + blen * pct, p1.y), fill);
+            else dl->AddRectFilled(ImVec2(p0.x, p0.y + blen * (1 - pct)), p1, fill);
             ImVec2 r0 = ImVec2(p0.x - 4, p0.y - 4), r1 = ImVec2(p1.x + 4, p1.y + 4);
-            DragWin("Barra Vida", r0, r1, &Config::fHpX, &Config::fHpY, s_capHp, AnchorName(Config::iHpA));
-            if (s_capHp.released) { s_capHp.released = false; SnapEl(Config::iHpA, Config::fHpX, Config::fHpY, bw, bh); }
+            char tag[32]; _snprintf_s(tag, _TRUNCATE, "lado %s", sideNm[*pSide[2] < 0 || *pSide[2] > 3 ? 2 : *pSide[2]]);
+            DragWin(pId[2], r0, r1, pNx[2], pNy[2], *pCap[2], tag);
+            if (pCap[2]->released) {
+                pCap[2]->released = false;
+                DropEl(*pSide[2], *pAl[2], *pNx[2], *pNy[2], *pPr[2], p1.x - p0.x, p1.y - p0.y, bw, bh,
+                    ImVec2(p0.x - b0.x, p0.y - b0.y));
+                Config::iLayoutMode = 0;
+            }
         }
         // Pilar 4: % independente da barra grafica.
-        if (Config::bZombiePct) {
+        if (*pEn[3]) {
             char pb[16]; _snprintf_s(pb, _TRUNCATE, "%.0f%%", (double)Config::fPreviewHp);
-            ImVec2 pap = HybridPos(Config::iPctA, Config::fPctX, Config::fPctY, Config::fPropP, 15.0f, 50.0f, ImVec2(0, 0), ImVec2(bw, bh));
-            ImVec2 tp = ImVec2(b0.x + pap.x, b0.y + pap.y);
-            ImVec2 tsz = ImGui::CalcTextSize(pb);
-            ImVec2 q0 = ImVec2(tp.x - 3, tp.y - 2), q1 = ImVec2(tp.x + tsz.x + 3, tp.y + tsz.y + 2);
-            dl->AddRectFilled(q0, q1, ImGui::IsMouseHoveringRect(q0, q1) ? IM_COL32(50, 90, 140, 160) : IM_COL32(30, 34, 42, 160));
-            dl->AddText(tp, IM_COL32_WHITE, pb);
-            DragWin("% Vida", q0, q1, &Config::fPctX, &Config::fPctY, s_capPct, AnchorName(Config::iPctA));
-            if (s_capPct.released) { s_capPct.released = false; SnapEl(Config::iPctA, Config::fPctX, Config::fPctY, bw, bh); }
+            dragEl(3, pb, IM_COL32_WHITE);
         }
         char hpb[64]; _snprintf_s(hpb, _TRUNCATE, "HP preview: %.0f%%", (double)Config::fPreviewHp);
         dl->AddText(ImVec2(origin.x + 8, origin.y + size.y - 18), IM_COL32(150, 150, 160, 255), hpb);
+        ImGui::PopClipRect(); // A11
     }
 
     static bool g_bEditMode = false; // P3: modo edicao de layout
-    static float s_snap[8] = { 0 };  // snapshot p/ Cancelar
+    // A06: snapshot COMPLETO do layout (lados, alinhamentos, nudges, props, toggles).
+    struct LayoutSnap { int side[4], al[4]; float nx[4], ny[4], pr[4]; bool en[4]; };
+    static LayoutSnap s_snap;
+    static void SnapshotLayout() {
+        s_snap.side[0] = Config::iSideN; s_snap.al[0] = Config::iAlinN;
+        s_snap.nx[0] = Config::fNameX; s_snap.ny[0] = Config::fNameY; s_snap.pr[0] = Config::fPropN; s_snap.en[0] = Config::bZombieName;
+        s_snap.side[1] = Config::iSideD; s_snap.al[1] = Config::iAlinD;
+        s_snap.nx[1] = Config::fDistX; s_snap.ny[1] = Config::fDistY; s_snap.pr[1] = Config::fPropD; s_snap.en[1] = Config::bZombieDist;
+        s_snap.side[2] = Config::iSideH; s_snap.al[2] = Config::iAlinH;
+        s_snap.nx[2] = Config::fHpX; s_snap.ny[2] = Config::fHpY; s_snap.pr[2] = Config::fPropH; s_snap.en[2] = Config::bZombieHp;
+        s_snap.side[3] = Config::iSideP; s_snap.al[3] = Config::iAlinP;
+        s_snap.nx[3] = Config::fPctX; s_snap.ny[3] = Config::fPctY; s_snap.pr[3] = Config::fPropP; s_snap.en[3] = Config::bZombiePct;
+    }
+    static void RestoreLayout() {
+        Config::iSideN = s_snap.side[0]; Config::iAlinN = s_snap.al[0];
+        Config::fNameX = s_snap.nx[0]; Config::fNameY = s_snap.ny[0]; Config::fPropN = s_snap.pr[0]; Config::bZombieName = s_snap.en[0];
+        Config::iSideD = s_snap.side[1]; Config::iAlinD = s_snap.al[1];
+        Config::fDistX = s_snap.nx[1]; Config::fDistY = s_snap.ny[1]; Config::fPropD = s_snap.pr[1]; Config::bZombieDist = s_snap.en[1];
+        Config::iSideH = s_snap.side[2]; Config::iAlinH = s_snap.al[2];
+        Config::fHpX = s_snap.nx[2]; Config::fHpY = s_snap.ny[2]; Config::fPropH = s_snap.pr[2]; Config::bZombieHp = s_snap.en[2];
+        Config::iSideP = s_snap.side[3]; Config::iAlinP = s_snap.al[3];
+        Config::fPctX = s_snap.nx[3]; Config::fPctY = s_snap.ny[3]; Config::fPropP = s_snap.pr[3]; Config::bZombiePct = s_snap.en[3];
+    }
 
     // ---- Hotkeys com modal (Fase 1 item 3) ----
     // OBJETIVO: clique no botao -> modal captura a proxima tecla/mouse. ESC cancela.
@@ -499,15 +627,16 @@ namespace GUI {
         if (app && app[0]) _snprintf_s(out, cap, _TRUNCATE, "%s\\configs", app);
     }
 
-    static void SaveConfig(const char* name) {
+    static bool SaveConfig(const char* name) {
         using namespace Config;
-        char dir[MAX_PATH] = { 0 }, path[MAX_PATH] = { 0 };
+        char dir[MAX_PATH] = { 0 }, path[MAX_PATH] = { 0 }, tmp[MAX_PATH] = { 0 };
         CfgDir(dir, sizeof(dir));
-        if (!dir[0]) { strncpy_s(s_cfgStatus, "Sem pasta de documentos.", _TRUNCATE); return; }
+        if (!dir[0]) { strncpy_s(s_cfgStatus, "Sem pasta de documentos.", _TRUNCATE); return false; }
         CreateDirectoryA(dir, nullptr);
         _snprintf_s(path, _TRUNCATE, "%s\\%s.json", dir, name);
+        _snprintf_s(tmp, _TRUNCATE, "%s\\%s.json.tmp", dir, name);
         FILE* f = nullptr;
-        if (fopen_s(&f, path, "w") != 0 || !f) { strncpy_s(s_cfgStatus, "Falha ao salvar.", _TRUNCATE); return; }
+        if (fopen_s(&f, tmp, "w") != 0 || !f) { strncpy_s(s_cfgStatus, "Falha ao salvar.", _TRUNCATE); return false; }
         fprintf(f, "{\n");
 #define JB(v) fprintf(f, "\"" #v "\":%s,\n", (v) ? "true" : "false")
 #define JI(v) fprintf(f, "\"" #v "\":%d,\n", (int)(v))
@@ -525,7 +654,8 @@ namespace GUI {
         JS(szItemSearch); JI(iItemAmount);
         JB(bSpeedHack); JF(fSpeedMult); JB(bSuperJump); JF(fJumpMult); JB(bInfStamina);
         JB(bRollSpeed); JF(fRollMult);
-        JB(bZombieEsp); JI(iZombieBox); JB(bZombieName); JB(bZombieDist);         JB(bZombieHp); JB(bZombiePct); JF(fPctX); JF(fPctY); JI(iNameA); JI(iDistA); JI(iHpA); JI(iPctA); JF(fPropN); JF(fPropD); JF(fPropH); JF(fPropP);
+        JB(bZombieEsp); JI(iZombieBox); JB(bZombieName); JB(bZombieDist); JB(bZombieHp); JB(bZombiePct); JF(fPctX); JF(fPctY); JI(iNameA); JI(iDistA); JI(iHpA); JI(iPctA); JF(fPropN); JF(fPropD); JF(fPropH); JF(fPropP);
+        JI(iSideN); JI(iSideD); JI(iSideH); JI(iSideP); JI(iAlinN); JI(iAlinD); JI(iAlinH); JI(iAlinP);
         JB(bZombieSkeleton); JB(bZombieSnap); JB(bZombieHeadDot);
         JV(colZombieVis); JV(colZombieInv); JV(colZombieNameVis); JV(colZombieNameInv);
         JV(colZombieDistVis); JV(colZombieDistInv); JV(colZombieHpVis); JV(colZombieHpInv);
@@ -549,11 +679,16 @@ namespace GUI {
 #undef JF
 #undef JV
 #undef JS
-        fprintf(f, "\"_v\":2\n}\n");
+        fprintf(f, "\"_v\":3\n}\n");
         fclose(f);
-        // Reescreve com '{' inicial (mantem writer simples e valido).
+        // A12: publicacao atomica (tmp + rename); sem .bak espalhado no sucesso.
+        if (!MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+            _snprintf_s(s_cfgStatus, _TRUNCATE, "Falha ao publicar (tmp mantido).");
+            return false;
+        }
         _snprintf_s(s_cfgStatus, _TRUNCATE, "Salvo: %s.json", name);
         Log::Infof("Config salva: %s", path);
+        return true;
     }
 
     static const char* CfgFind(const std::string& s, const char* k) {
@@ -565,30 +700,71 @@ namespace GUI {
         return s.c_str() + p + 1;
     }
 
+    // A13: valida o modelo de layout apos carregar/migrar/resetar.
+    static void ValidateLayout() {
+        using namespace Config;
+        int* sides[4] = { &iSideN, &iSideD, &iSideH, &iSideP };
+        int* als[4] = { &iAlinN, &iAlinD, &iAlinH, &iAlinP };
+        float* nxs[4] = { &fNameX, &fDistX, &fHpX, &fPctX };
+        float* nys[4] = { &fNameY, &fDistY, &fHpY, &fPctY };
+        float* prs[4] = { &fPropN, &fPropD, &fPropH, &fPropP };
+        const int ds[4] = { 0, 1, 2, 3 }, da[4] = { 1, 1, 2, 1 };
+        for (int i = 0; i < 4; ++i) {
+            if (*sides[i] < 0 || *sides[i] > 3) *sides[i] = ds[i];
+            if (*als[i] < 0 || *als[i] > 2) *als[i] = da[i];
+            if (!(*nxs[i] == *nxs[i]) || *nxs[i] < -300 || *nxs[i] > 300) *nxs[i] = 0;
+            if (!(*nys[i] == *nys[i]) || *nys[i] < -300 || *nys[i] > 300) *nys[i] = 0;
+            if (!(*prs[i] == *prs[i]) || *prs[i] < 0 || *prs[i] > 1) *prs[i] = 0.05f;
+        }
+        if (!(fSnapSize == fSnapSize) || fSnapSize < 1 || fSnapSize > 20) fSnapSize = 5;
+        if (!(fPreviewHp == fPreviewHp) || fPreviewHp < 0 || fPreviewHp > 100) fPreviewHp = 87;
+        if (iLayoutMode < 0 || iLayoutMode > 2) iLayoutMode = 0;
+    }
+
+    // Migracao ancora(9) -> lado+alinhamento (v2 -> v3). Cantos: lado vence.
+    static void MigrateAnchors() {
+        using namespace Config;
+        int* sides[4] = { &iSideN, &iSideD, &iSideH, &iSideP };
+        int* als[4] = { &iAlinN, &iAlinD, &iAlinH, &iAlinP };
+        int olds[4] = { iNameA, iDistA, iHpA, iPctA };
+        for (int i = 0; i < 4; ++i) {
+            int a = olds[i];
+            if (a < 0 || a > 8) continue;
+            int row = a / 3, col = a % 3;
+            // TL/TR/BL/BR: lado pela fileira/coluna dominante (doc: lado vence empates).
+            if (a == 0) { *sides[i] = 0; *als[i] = 0; }
+            else if (a == 2) { *sides[i] = 0; *als[i] = 2; }
+            else if (a == 6) { *sides[i] = 1; *als[i] = 0; }
+            else if (a == 8) { *sides[i] = 1; *als[i] = 2; }
+            else if (row == 0) { *sides[i] = 0; *als[i] = col; }
+            else if (row == 2) { *sides[i] = 1; *als[i] = col; }
+            else { *sides[i] = (col == 2) ? 3 : 2; *als[i] = 1; }
+            (void)row; (void)col;
+        }
+    }
+
     static void LoadConfig(const char* name) {
         using namespace Config;
-        char dir[MAX_PATH] = { 0 }, path[MAX_PATH] = { 0 };
+        char dir[MAX_PATH] = { 0 }, path[MAX_PATH] = { 0 }, bak[MAX_PATH] = { 0 };
         CfgDir(dir, sizeof(dir));
         if (!dir[0]) { strncpy_s(s_cfgStatus, "Sem pasta de documentos.", _TRUNCATE); return; }
         _snprintf_s(path, _TRUNCATE, "%s\\%s.json", dir, name);
+        _snprintf_s(bak, _TRUNCATE, "%s\\%s.json.bak", dir, name);
         FILE* f = nullptr;
-        if (fopen_s(&f, path, "r") != 0 || !f) { ApplyFactoryDefaults(); SaveConfig(name); _snprintf_s(s_cfgStatus, _TRUNCATE, "Preset novo (fabrica v2): %s.", name); return; }
+        if (fopen_s(&f, path, "r") != 0 || !f) { ApplyFactoryDefaults(); SaveConfig(name); _snprintf_s(s_cfgStatus, _TRUNCATE, "Preset novo (fabrica v3): %s.", name); return; }
         std::string s;
         char chunk[1024];
         size_t n;
         while ((n = fread(chunk, 1, sizeof(chunk), f)) > 0) s.append(chunk, n);
         fclose(f);
-        { // Pilar 6: schema < v2 e incompativel -> apaga sem .bak e recria fabrica.
+        { // A12: schema < v3 -> backup unico + parse legado + fabrica de layout + salva.
             const char* w = CfgFind(s, "_v");
             int ver = w ? atoi(w) : 0;
-            if (ver < 2) {
-                Log::Infof("[CONFIG] Legado v%d apagado; fabrica v2 aplicada.", ver);
-                remove(path);
-                ApplyFactoryDefaults();
-                SaveConfig(name);
-                _snprintf_s(s_cfgStatus, _TRUNCATE, "Config antiga convertida p/ fabrica v2.");
-                return;
-            }
+            if (ver < 3) {
+                Log::Infof("[CONFIG] Legado v%d: backup + migracao p/ v3.", ver);
+                CopyFileA(path, bak, FALSE);
+                iCfgVer = ver; // marca: pos-parse migra
+            } else iCfgVer = ver;
         }
 #define LB(v) do { const char* w = CfgFind(s, #v); if (w) (v) = (strncmp(w, "true", 4) == 0); } while (0)
 #define LI(v) do { const char* w = CfgFind(s, #v); if (w) (v) = atoi(w); } while (0)
@@ -607,6 +783,7 @@ namespace GUI {
         LB(bSpeedHack); LF(fSpeedMult); LB(bSuperJump); LF(fJumpMult); LB(bInfStamina);
         LB(bRollSpeed); LF(fRollMult);
         LB(bZombieEsp); LI(iZombieBox); LB(bZombieName); LB(bZombieDist); LB(bZombieHp); LB(bZombiePct); LF(fPctX); LF(fPctY); LI(iNameA); LI(iDistA); LI(iHpA); LI(iPctA); LF(fPropN); LF(fPropD); LF(fPropH); LF(fPropP);
+        LI(iSideN); LI(iSideD); LI(iSideH); LI(iSideP); LI(iAlinN); LI(iAlinD); LI(iAlinH); LI(iAlinP);
         LB(bZombieSkeleton); LB(bZombieSnap); LB(bZombieHeadDot);
         LV(colZombieVis); LV(colZombieInv); LV(colZombieNameVis); LV(colZombieNameInv);
         LV(colZombieDistVis); LV(colZombieDistInv); LV(colZombieHpVis); LV(colZombieHpInv);
@@ -630,7 +807,18 @@ namespace GUI {
 #undef LF
 #undef LV
 #undef LS
-        _snprintf_s(s_cfgStatus, _TRUNCATE, "Carregado: %s.json", name);
+        if (iCfgVer < 3) { // pos-parse: v2 tem ancoras (migra), v0/v1 nao (fabrica).
+            const char* w = CfgFind(s, "iNameA");
+            if (w) MigrateAnchors();
+            else ApplyFactoryDefaults();
+            iCfgVer = 3;
+            ValidateLayout();
+            SaveConfig(name);
+            _snprintf_s(s_cfgStatus, _TRUNCATE, "Migrado p/ v3 (backup .bak).");
+        } else {
+            ValidateLayout();
+            _snprintf_s(s_cfgStatus, _TRUNCATE, "Carregado: %s.json", name);
+        }
         Log::Infof("Config carregada: %s", path);
     }
 
@@ -736,26 +924,31 @@ namespace GUI {
                     dl->AddLine(r0, b0, col, 1.0f); dl->AddLine(ImVec2(r1.x, r0.y), ImVec2(b1.x, b0.y), col, 1.0f);
                     dl->AddLine(ImVec2(r0.x, r1.y), ImVec2(b0.x, b1.y), col, 1.0f); dl->AddLine(r1, b1, col, 1.0f);
                 }
+                float bw2 = r1.x - r0.x, bh2 = r1.y - r0.y; // ref p/ gap proporcional
                 if (Config::bZombieDist) {
                     char db[32]; _snprintf_s(db, _TRUNCATE, "%.0fm", (double)es[i].dist);
                     ImU32 dcol = ImGui::GetColorU32(ImVec4(Config::colZombieDistVis[0], Config::colZombieDistVis[1], Config::colZombieDistVis[2], Config::colZombieDistVis[3]));
-                    ImVec2 dap = HybridPos(Config::iDistA, Config::fDistX, Config::fDistY, Config::fPropD, 15.0f, 60.0f, r0, r1);
-                    dl->AddText(ImVec2(dap.x, dap.y), dcol, db);
+                    ImVec2 dsz = ImGui::CalcTextSize(db);
+                    ImVec2 dp = PlaceEl(Config::iSideD, Config::iAlinD, dsz.x, dsz.y, ElGap(Config::iSideD, Config::fPropD, bw2, bh2), r0, r1);
+                    dl->AddText(ImVec2(dp.x + Config::fDistX, dp.y + Config::fDistY), dcol, db);
                 }
                 if (Config::bZombieHp && es[i].maxHp > 0) {
-                    // Barra ancorada + auto-orientada pela ancora (TOP/BOTTOM = horizontal).
+                    // Barra pelo LADO (esq/dir = vertical 5xH; topo/base = horizontal Wx5).
                     float pct = es[i].hp / es[i].maxHp;
                     if (pct < 0) pct = 0; if (pct > 1) pct = 1;
                     float hc[4]; HpColor(pct * 100.0f, hc);
                     ImU32 hfill = ImGui::GetColorU32(ImVec4(hc[0], hc[1], hc[2], hc[3]));
-                    ImVec2 hap = HybridPos(Config::iHpA, Config::fHpX, Config::fHpY, Config::fPropH, 6.0f, 50.0f, r0, r1);
-                    float bx = hap.x, by = hap.y;
-                    if (HpHorizAnchor(Config::iHpA)) {
-                        dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + w, by + 4), IM_COL32(40, 40, 44, 255));
-                        dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + w * pct, by + 4), hfill);
+                    bool horiz = BarHorizSide(Config::iSideH);
+                    float blen = horiz ? bw2 : bh2;
+                    ImVec2 bp = PlaceEl(Config::iSideH, Config::iAlinH, horiz ? blen : 5.0f, horiz ? 5.0f : blen,
+                        ElGap(Config::iSideH, Config::fPropH, bw2, bh2), r0, r1);
+                    float bx = bp.x + Config::fHpX, by = bp.y + Config::fHpY;
+                    if (horiz) {
+                        dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + blen, by + 5), IM_COL32(40, 40, 44, 255));
+                        dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + blen * pct, by + 5), hfill);
                     } else {
-                        dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + 3, by + h), IM_COL32(40, 40, 44, 255));
-                        dl->AddRectFilled(ImVec2(bx, by + h * (1 - pct)), ImVec2(bx + 3, by + h), hfill);
+                        dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + 5, by + blen), IM_COL32(40, 40, 44, 255));
+                        dl->AddRectFilled(ImVec2(bx, by + blen * (1 - pct)), ImVec2(bx + 5, by + blen), hfill);
                     }
                 }
                 // Pilar 4: % independente da barra grafica.
@@ -763,13 +956,15 @@ namespace GUI {
                     float pct2 = es[i].hp / es[i].maxHp;
                     if (pct2 < 0) pct2 = 0; if (pct2 > 1) pct2 = 1;
                     char pb[16]; _snprintf_s(pb, _TRUNCATE, "%.0f%%", (double)(pct2 * 100.0));
-                    ImVec2 pap = HybridPos(Config::iPctA, Config::fPctX, Config::fPctY, Config::fPropP, 15.0f, 50.0f, r0, r1);
-                    dl->AddText(ImVec2(pap.x, pap.y), IM_COL32_WHITE, pb);
+                    ImVec2 psz = ImGui::CalcTextSize(pb);
+                    ImVec2 pp = PlaceEl(Config::iSideP, Config::iAlinP, psz.x, psz.y, ElGap(Config::iSideP, Config::fPropP, bw2, bh2), r0, r1);
+                    dl->AddText(ImVec2(pp.x + Config::fPctX, pp.y + Config::fPctY), IM_COL32_WHITE, pb);
                 }
                 if (Config::bZombieName && es[i].name[0]) {
                     ImU32 ncol = ImGui::GetColorU32(ImVec4(Config::colZombieNameVis[0], Config::colZombieNameVis[1], Config::colZombieNameVis[2], Config::colZombieNameVis[3]));
-                    ImVec2 nap = HybridPos(Config::iNameA, Config::fNameX, Config::fNameY, Config::fPropN, 15.0f, 60.0f, r0, r1);
-                    dl->AddText(ImVec2(nap.x, nap.y), ncol, es[i].name);
+                    ImVec2 nsz = ImGui::CalcTextSize(es[i].name);
+                    ImVec2 np = PlaceEl(Config::iSideN, Config::iAlinN, nsz.x, nsz.y, ElGap(Config::iSideN, Config::fPropN, bw2, bh2), r0, r1);
+                    dl->AddText(ImVec2(np.x + Config::fNameX, np.y + Config::fNameY), ncol, es[i].name);
                 }
             }
         }
@@ -783,7 +978,10 @@ namespace GUI {
     void Render() {
         ImGui::GetIO().MouseDrawCursor = Config::bMenuOpen; // sync por frame (nada desenha cursor com menu fechado)
         if (!Config::bMenuOpen || !g_bInit) {
+            // Fecha gesto sem soltar o clamp: ele equivale ao clamp do jogo
+            // (mesma janela/mesmo rect) e o toggle reaplica o do jogo.
             s_capName.active = s_capDist.active = s_capHp.active = s_capPct.active = false;
+            s_dragOwner = nullptr;
             return;
         }
         { // P3 diagnostico: delta zerado = Raw Input (Hipótese 1); pos parada = foco/input (H2/H3)
@@ -856,32 +1054,29 @@ namespace GUI {
                 ImGui::EndTabItem();
             }
             // ---- 2 VISUAL ----
+            // A05: UM EndTabItem incondicional por BeginTabItem (transicao nao controla pareamento).
             if (ImGui::BeginTabItem("VISUAL")) {
                 if (!g_bEditMode) {
                     if (ImGui::Button("Editar Layout do ESP")) {
-                        s_snap[0] = Config::fNameX; s_snap[1] = Config::fNameY;
-                        s_snap[2] = Config::fDistX; s_snap[3] = Config::fDistY;
-                        s_snap[4] = Config::fHpX; s_snap[5] = Config::fHpY;
-                        s_snap[6] = Config::fPctX; s_snap[7] = Config::fPctY;
+                        SnapshotLayout();
                         g_bEditMode = true;
                     }
                     Tip("Abre o editor de layout (arrasto pelo cursor do Windows).");
                 } else {
-                    ImGui::Text("MODO EDICAO - arraste Nome, Dist, Vida, %% (clamp automatico)");
+                    ImGui::Text("MODO EDICAO - arraste Nome, Dist, Vida, %% (lado+alinhamento auto)");
                     ImVec2 epv = ImGui::GetCursorScreenPos();
                     ImVec2 epsz = ImVec2(ImGui::GetContentRegionAvail().x, 420);
                     ImGui::InvisibleButton("pv_edit_zone", epsz);
                     DrawEspPreview(epv, epsz);
-                    if (ImGui::Button("Salvar Layout")) { g_bEditMode = false; SaveConfig(s_cfgName); }
+                    if (ImGui::Button("Salvar Layout")) {
+                        if (SaveConfig(s_cfgName)) g_bEditMode = false;
+                        else _snprintf_s(s_cfgStatus, _TRUNCATE, "FALHA ao salvar (rascunho mantido).");
+                    }
                     ImGui::SameLine();
                     if (ImGui::Button("Cancelar")) {
-                        Config::fNameX = s_snap[0]; Config::fNameY = s_snap[1];
-                        Config::fDistX = s_snap[2]; Config::fDistY = s_snap[3];
-                        Config::fHpX = s_snap[4]; Config::fHpY = s_snap[5];
-                        Config::fPctX = s_snap[6]; Config::fPctY = s_snap[7];
+                        RestoreLayout();
                         g_bEditMode = false;
                     }
-                    ImGui::EndTabItem();
                 }
                 if (!g_bEditMode) {
                 ImGui::Checkbox("ESP Zumbis", &Config::bZombieEsp);
@@ -922,13 +1117,14 @@ namespace GUI {
                 ImGui::InvisibleButton("pv_zone", psz);
                 DrawEspPreview(pv, psz);
                 ImGui::Combo("Layout", &Config::iLayoutMode, kLayout, 3);
+                if (Config::iLayoutMode == 1 || Config::iLayoutMode == 2) ApplyPreset(Config::iLayoutMode);
                 ImGui::SliderFloat("HP simulado", &Config::fPreviewHp, 0, 100, "%.0f%%");
                 if (ImGui::Button("Resetar Posicoes")) {
                     ApplyFactoryDefaults();
                 }
-                ImGui::TextDisabled("Ancoras: Nome[%s] Dist[%s] Vida[%s] %%[%s]",
-                    AnchorName(Config::iNameA), AnchorName(Config::iDistA),
-                    AnchorName(Config::iHpA), AnchorName(Config::iPctA));
+                ImGui::TextDisabled("Lados: Nome[%d/%d] Dist[%d/%d] Vida[%d/%d] %%[%d/%d] (lado/alin)",
+                    Config::iSideN, Config::iAlinN, Config::iSideD, Config::iAlinD,
+                    Config::iSideH, Config::iAlinH, Config::iSideP, Config::iAlinP);
                 ImGui::SliderFloat("Prop Nome", &Config::fPropN, 0.0f, 0.2f, "%.2f"); Tip("Extra proporcional do Nome.");
                 ImGui::SliderFloat("Prop Dist", &Config::fPropD, 0.0f, 0.2f, "%.2f");
                 ImGui::SliderFloat("Prop Vida", &Config::fPropH, 0.0f, 0.2f, "%.2f");
@@ -937,7 +1133,7 @@ namespace GUI {
                 ImGui::SliderFloat("Grid", &Config::fSnapSize, 1, 20, "%.0fpx");
                 ImGui::Checkbox("Guias", &Config::bShowGuides);
                 } // fim conteudo normal (modo edicao mostra so o preview)
-                if (!g_bEditMode) ImGui::EndTabItem();
+                ImGui::EndTabItem(); // A05: unico e incondicional
             }
             // ---- 3 MISC (sempre 3a aba) ----
             if (ImGui::BeginTabItem("MISC")) {

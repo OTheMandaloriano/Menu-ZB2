@@ -114,7 +114,10 @@ namespace Config {
     // ---- VISUAL / Preview interativo (drag-and-drop) ----
     // Fixos: Box, Skeleton, HeadDot, Snapline. Arrastaveis: Nome, Dist, Vida.
     // Ancoras do ESP (0=TL 1=TC 2=TR 3=ML 4=MC 5=MR 6=BL 7=BC 8=BR) + offsets px.
-    extern int   iNameA, iDistA, iHpA, iPctA;
+    extern int   iNameA, iDistA, iHpA, iPctA; // legado v2 (migracao)
+    // Lado (0=topo 1=base 2=esq 3=dir) + alinhamento (0=ini 1=centro 2=fim).
+    extern int   iSideN, iSideD, iSideH, iSideP;
+    extern int   iAlinN, iAlinD, iAlinH, iAlinP;
     extern int   iCfgVer; // versao do schema (v2 = fabrica calibrada)
     extern float fPropN, fPropD, fPropH, fPropP; // proporcional do offset hibrido (Pilar 2)
     extern float fNameX, fNameY;    // offset do Nome em relacao a ancora
