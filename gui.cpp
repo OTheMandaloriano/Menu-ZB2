@@ -117,6 +117,7 @@ namespace Config {
     float fDistX = 0.0f, fDistY = 4.0f;
     float fHpX = -8.0f, fHpY = -85.0f;
     int   iNameA = 0, iDistA = 6, iHpA = 3, iPctA = 0; // TL, BL, ML, TL
+    float fPropN = 0.05f, fPropD = 0.05f, fPropH = 0.06f, fPropP = 0.06f; // Pilar 2
     int   iLayoutMode = 0;
     int   iLayoutSide = 0;
     float fLayoutOffset = 5.0f;
@@ -269,6 +270,22 @@ namespace GUI {
         return a <= 2 || a >= 6 || a == 4;
     }
 
+    // Pilar 2: offset hibrido = base (usuario) + extra proporcional clampado.
+    // ref = largura (ancoras laterais) ou altura (demais). maxE = teto (doc: 60/50).
+    // min_px=0 por decisao: minimo >0 brigaria com elementos colados de proposito.
+    static ImVec2 HybridPos(int anchor, float baseX, float baseY, float prop, float maxE, ImVec2 mn, ImVec2 mx) {
+        ImVec2 ap = AnchorPt(anchor, mn, mx);
+        float ref = (anchor == 3 || anchor == 5) ? (mx.x - mn.x) : (mx.y - mn.y);
+        if (ref < 0) ref = 0;
+        float extra = prop * ref;
+        if (extra < 0) extra = 0;
+        if (extra > maxE) extra = maxE;
+        int col = anchor % 3, row = anchor / 3;
+        float dx = col == 0 ? -1.0f : (col == 2 ? 1.0f : 0.0f);
+        float dy = row == 0 ? -1.0f : (row == 2 ? 1.0f : 0.0f);
+        return ImVec2(ap.x + baseX + dx * extra, ap.y + baseY + dy * extra);
+    }
+
     void Initialize(HWND hWindow, ID3D11Device* pDevice, ID3D11DeviceContext* pContext) {
         if (g_bInit) return;
         s_hWnd = hWindow;
@@ -325,9 +342,9 @@ namespace GUI {
         dl->AddLine(ImVec2(origin.x + size.x * 0.5f, origin.y + size.y), ImVec2(c.x, b1.y), IM_COL32(120, 200, 255, 200), 1.0f);
 
         // Elemento de texto ancorado: pos = ancora(box) + offset; soltar = re-ancorar.
-        auto dragEl = [&](const char* id, const char* txt, int& anchor, float* px, float* py, DragCap& cap, ImU32 col) {
-            ImVec2 ap = AnchorPt(anchor, ImVec2(0, 0), ImVec2(bw, bh));
-            ImVec2 tp = ImVec2(b0.x + ap.x + *px, b0.y + ap.y + *py);
+        auto dragEl = [&](const char* id, const char* txt, int& anchor, float* px, float* py, DragCap& cap, float prop, float maxE, ImU32 col) {
+            ImVec2 hp2 = HybridPos(anchor, *px, *py, prop, maxE, ImVec2(0, 0), ImVec2(bw, bh));
+            ImVec2 tp = ImVec2(b0.x + hp2.x, b0.y + hp2.y);
             ImVec2 tsz = ImGui::CalcTextSize(txt);
             ImVec2 r0 = ImVec2(tp.x - 3, tp.y - 2), r1 = ImVec2(tp.x + tsz.x + 3, tp.y + tsz.y + 2);
             dl->AddRectFilled(r0, r1, ImGui::IsMouseHoveringRect(r0, r1) ? IM_COL32(50, 90, 140, 160) : IM_COL32(30, 34, 42, 160));
@@ -337,19 +354,19 @@ namespace GUI {
         };
 
         if (Config::bZombieName)
-            dragEl("Nome", "zumbi_01", Config::iNameA, &Config::fNameX, &Config::fNameY, s_capName, IM_COL32_WHITE);
+            dragEl("Nome", "zumbi_01", Config::iNameA, &Config::fNameX, &Config::fNameY, s_capName, Config::fPropN, 60.0f, IM_COL32_WHITE);
         if (Config::bZombieDist) {
             char b[32]; _snprintf_s(b, _TRUNCATE, "%.0fm", 45.0f);
-            dragEl("Distancia", b, Config::iDistA, &Config::fDistX, &Config::fDistY, s_capDist, IM_COL32(200, 220, 255, 255));
+            dragEl("Distancia", b, Config::iDistA, &Config::fDistX, &Config::fDistY, s_capDist, Config::fPropD, 60.0f, IM_COL32(200, 220, 255, 255));
         }
         if (Config::bZombieHp) {
             // Barra auto-orientada pela ANCORA (nao pela posicao): TOP/BOTTOM = horizontal.
             bool horiz = HpHorizAnchor(Config::iHpA);
-            ImVec2 ap = AnchorPt(Config::iHpA, ImVec2(0, 0), ImVec2(bw, bh));
+            ImVec2 hp0 = HybridPos(Config::iHpA, Config::fHpX, Config::fHpY, Config::fPropH, 50.0f, ImVec2(0, 0), ImVec2(bw, bh));
             float pct = Config::fPreviewHp / 100.0f;
             float hc[4]; HpColor(Config::fPreviewHp, hc);
             ImU32 fill = IM_COL32((int)(hc[0]*255), (int)(hc[1]*255), (int)(hc[2]*255), 255);
-            ImVec2 p0 = ImVec2(b0.x + ap.x + Config::fHpX, b0.y + ap.y + Config::fHpY);
+            ImVec2 p0 = ImVec2(b0.x + hp0.x, b0.y + hp0.y);
             ImVec2 p1 = horiz ? ImVec2(p0.x + bw, p0.y + 8) : ImVec2(p0.x + 5, p0.y + bh);
             dl->AddRectFilled(p0, p1, IM_COL32(40, 40, 44, 255));
             if (horiz) dl->AddRectFilled(p0, ImVec2(p0.x + bw * pct, p1.y), fill);
@@ -357,8 +374,8 @@ namespace GUI {
             char pb[16]; _snprintf_s(pb, _TRUNCATE, "%.0f%%", (double)Config::fPreviewHp);
             if (Config::bZombiePct) {
                 // % tem ancora propria (independente da barra).
-                ImVec2 pap = AnchorPt(Config::iPctA, ImVec2(0, 0), ImVec2(bw, bh));
-                ImVec2 tp = ImVec2(b0.x + pap.x + Config::fPctX, b0.y + pap.y + Config::fPctY);
+                ImVec2 pap = HybridPos(Config::iPctA, Config::fPctX, Config::fPctY, Config::fPropP, 50.0f, ImVec2(0, 0), ImVec2(bw, bh));
+                ImVec2 tp = ImVec2(b0.x + pap.x, b0.y + pap.y);
                 ImVec2 tsz = ImGui::CalcTextSize(pb);
                 ImVec2 q0 = ImVec2(tp.x - 3, tp.y - 2), q1 = ImVec2(tp.x + tsz.x + 3, tp.y + tsz.y + 2);
                 dl->AddRectFilled(q0, q1, ImGui::IsMouseHoveringRect(q0, q1) ? IM_COL32(50, 90, 140, 160) : IM_COL32(30, 34, 42, 160));
@@ -481,7 +498,7 @@ namespace GUI {
         JS(szItemSearch); JI(iItemAmount);
         JB(bSpeedHack); JF(fSpeedMult); JB(bSuperJump); JF(fJumpMult); JB(bInfStamina);
         JB(bRollSpeed); JF(fRollMult);
-        JB(bZombieEsp); JI(iZombieBox); JB(bZombieName); JB(bZombieDist);         JB(bZombieHp); JB(bZombiePct); JF(fPctX); JF(fPctY); JI(iNameA); JI(iDistA); JI(iHpA); JI(iPctA);
+        JB(bZombieEsp); JI(iZombieBox); JB(bZombieName); JB(bZombieDist);         JB(bZombieHp); JB(bZombiePct); JF(fPctX); JF(fPctY); JI(iNameA); JI(iDistA); JI(iHpA); JI(iPctA); JF(fPropN); JF(fPropD); JF(fPropH); JF(fPropP);
         JB(bZombieSkeleton); JB(bZombieSnap); JB(bZombieHeadDot);
         JV(colZombieVis); JV(colZombieInv); JV(colZombieNameVis); JV(colZombieNameInv);
         JV(colZombieDistVis); JV(colZombieDistInv); JV(colZombieHpVis); JV(colZombieHpInv);
@@ -550,7 +567,7 @@ namespace GUI {
         LS(szItemSearch); LI(iItemAmount);
         LB(bSpeedHack); LF(fSpeedMult); LB(bSuperJump); LF(fJumpMult); LB(bInfStamina);
         LB(bRollSpeed); LF(fRollMult);
-        LB(bZombieEsp); LI(iZombieBox); LB(bZombieName); LB(bZombieDist); LB(bZombieHp); LB(bZombiePct); LF(fPctX); LF(fPctY); LI(iNameA); LI(iDistA); LI(iHpA); LI(iPctA);
+        LB(bZombieEsp); LI(iZombieBox); LB(bZombieName); LB(bZombieDist); LB(bZombieHp); LB(bZombiePct); LF(fPctX); LF(fPctY); LI(iNameA); LI(iDistA); LI(iHpA); LI(iPctA); LF(fPropN); LF(fPropD); LF(fPropH); LF(fPropP);
         LB(bZombieSkeleton); LB(bZombieSnap); LB(bZombieHeadDot);
         LV(colZombieVis); LV(colZombieInv); LV(colZombieNameVis); LV(colZombieNameInv);
         LV(colZombieDistVis); LV(colZombieDistInv); LV(colZombieHpVis); LV(colZombieHpInv);
@@ -683,8 +700,8 @@ namespace GUI {
                 if (Config::bZombieDist) {
                     char db[32]; _snprintf_s(db, _TRUNCATE, "%.0fm", (double)es[i].dist);
                     ImU32 dcol = ImGui::GetColorU32(ImVec4(Config::colZombieDistVis[0], Config::colZombieDistVis[1], Config::colZombieDistVis[2], Config::colZombieDistVis[3]));
-                    ImVec2 dap = AnchorPt(Config::iDistA, r0, r1);
-                    dl->AddText(ImVec2(dap.x + Config::fDistX, dap.y + Config::fDistY), dcol, db);
+                    ImVec2 dap = HybridPos(Config::iDistA, Config::fDistX, Config::fDistY, Config::fPropD, 60.0f, r0, r1);
+                    dl->AddText(ImVec2(dap.x, dap.y), dcol, db);
                 }
                 if (Config::bZombieHp && es[i].maxHp > 0) {
                     // Barra ancorada + auto-orientada pela ancora (TOP/BOTTOM = horizontal).
@@ -692,29 +709,29 @@ namespace GUI {
                     if (pct < 0) pct = 0; if (pct > 1) pct = 1;
                     float hc[4]; HpColor(pct * 100.0f, hc);
                     ImU32 hfill = ImGui::GetColorU32(ImVec4(hc[0], hc[1], hc[2], hc[3]));
-                    ImVec2 hap = AnchorPt(Config::iHpA, r0, r1);
-                    float bx = hap.x + Config::fHpX, by = hap.y + Config::fHpY;
+                    ImVec2 hap = HybridPos(Config::iHpA, Config::fHpX, Config::fHpY, Config::fPropH, 50.0f, r0, r1);
+                    float bx = hap.x, by = hap.y;
                     char pb[16]; _snprintf_s(pb, _TRUNCATE, "%.0f%%", (double)(pct * 100.0));
                     if (HpHorizAnchor(Config::iHpA)) {
                         dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + w, by + 4), IM_COL32(40, 40, 44, 255));
                         dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + w * pct, by + 4), hfill);
                         if (Config::bZombiePct) {
-                            ImVec2 pap = AnchorPt(Config::iPctA, r0, r1);
-                            dl->AddText(ImVec2(pap.x + Config::fPctX, pap.y + Config::fPctY), IM_COL32_WHITE, pb);
+                            ImVec2 pap = HybridPos(Config::iPctA, Config::fPctX, Config::fPctY, Config::fPropP, 50.0f, r0, r1);
+                            dl->AddText(ImVec2(pap.x, pap.y), IM_COL32_WHITE, pb);
                         }
                     } else {
                         dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + 3, by + h), IM_COL32(40, 40, 44, 255));
                         dl->AddRectFilled(ImVec2(bx, by + h * (1 - pct)), ImVec2(bx + 3, by + h), hfill);
                         if (Config::bZombiePct) {
-                            ImVec2 pap = AnchorPt(Config::iPctA, r0, r1);
-                            dl->AddText(ImVec2(pap.x + Config::fPctX, pap.y + Config::fPctY), IM_COL32_WHITE, pb);
+                            ImVec2 pap = HybridPos(Config::iPctA, Config::fPctX, Config::fPctY, Config::fPropP, 50.0f, r0, r1);
+                            dl->AddText(ImVec2(pap.x, pap.y), IM_COL32_WHITE, pb);
                         }
                     }
                 }
                 if (Config::bZombieName && es[i].name[0]) {
                     ImU32 ncol = ImGui::GetColorU32(ImVec4(Config::colZombieNameVis[0], Config::colZombieNameVis[1], Config::colZombieNameVis[2], Config::colZombieNameVis[3]));
-                    ImVec2 nap = AnchorPt(Config::iNameA, r0, r1);
-                    dl->AddText(ImVec2(nap.x + Config::fNameX, nap.y + Config::fNameY), ncol, es[i].name);
+                    ImVec2 nap = HybridPos(Config::iNameA, Config::fNameX, Config::fNameY, Config::fPropN, 60.0f, r0, r1);
+                    dl->AddText(ImVec2(nap.x, nap.y), ncol, es[i].name);
                 }
             }
         }
@@ -869,14 +886,18 @@ namespace GUI {
                 ImGui::Combo("Layout", &Config::iLayoutMode, kLayout, 3);
                 ImGui::SliderFloat("HP simulado", &Config::fPreviewHp, 0, 100, "%.0f%%");
                 if (ImGui::Button("Resetar Posicoes")) {
-                    Config::fNameX = 0; Config::fNameY = -18; Config::iNameA = 0;
-                    Config::fDistX = 0; Config::fDistY = 4; Config::iDistA = 6;
-                    Config::fHpX = -8; Config::fHpY = -85; Config::iHpA = 3;
-                    Config::fPctX = -38; Config::fPctY = -16; Config::iPctA = 0;
+                    Config::fNameX = 0; Config::fNameY = -18; Config::iNameA = 0; Config::fPropN = 0.05f;
+                    Config::fDistX = 0; Config::fDistY = 4; Config::iDistA = 6; Config::fPropD = 0.05f;
+                    Config::fHpX = -8; Config::fHpY = -85; Config::iHpA = 3; Config::fPropH = 0.06f;
+                    Config::fPctX = -38; Config::fPctY = -16; Config::iPctA = 0; Config::fPropP = 0.06f;
                 }
                 ImGui::TextDisabled("Ancoras: Nome[%s] Dist[%s] Vida[%s] %%[%s]",
                     AnchorName(Config::iNameA), AnchorName(Config::iDistA),
                     AnchorName(Config::iHpA), AnchorName(Config::iPctA));
+                ImGui::SliderFloat("Prop Nome", &Config::fPropN, 0.0f, 0.2f, "%.2f"); Tip("Extra proporcional do Nome.");
+                ImGui::SliderFloat("Prop Dist", &Config::fPropD, 0.0f, 0.2f, "%.2f");
+                ImGui::SliderFloat("Prop Vida", &Config::fPropH, 0.0f, 0.2f, "%.2f");
+                ImGui::SliderFloat("Prop %%", &Config::fPropP, 0.0f, 0.2f, "%.2f");
                 ImGui::Checkbox("Snap to Grid", &Config::bSnapGrid);
                 ImGui::SliderFloat("Grid", &Config::fSnapSize, 1, 20, "%.0fpx");
                 ImGui::Checkbox("Guias", &Config::bShowGuides);
