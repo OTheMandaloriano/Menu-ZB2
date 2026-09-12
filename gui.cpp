@@ -565,18 +565,29 @@ namespace GUI {
                     r0 = ImVec2(x0, y0); r1 = ImVec2(x1, y1);
                     cx = (x0 + x1) * 0.5f; w = x1 - x0; h = y1 - y0; hy = y0; fy = y1;
                     if (h < 4.0f) continue;
-                    if (w > io.DisplaySize.x || h > io.DisplaySize.y) continue; // P1: box maior que a tela = lixo
+                    // Melee: box maior que a tela prende na viewport em vez de sumir.
+                    if (w > io.DisplaySize.x || h > io.DisplaySize.y) {
+                        r0.x = r0.x < -100 ? -100 : r0.x; r0.y = r0.y < -100 ? -100 : r0.y;
+                        r1.x = r1.x > io.DisplaySize.x + 100 ? io.DisplaySize.x + 100 : r1.x;
+                        r1.y = r1.y > io.DisplaySize.y + 100 ? io.DisplaySize.y + 100 : r1.y;
+                        if (r1.x - r0.x < 4 || r1.y - r0.y < 4) continue;
+                    }
                 } else {
                     float hx = es[i].headX, hy2 = H - es[i].headY;
                     float fx = es[i].footX, fy2 = H - es[i].footY;
                     h = fy2 - hy2; // altura head->pes
-                    if (h > H * 2.0f) continue; // zumbi colado na camera: box degenerada vira linha
                     if (h < 4.0f) continue;
                     w = h * 0.6f; // zumbi largo + cabeca grande (print 02:30)
                     cx = fx; // pes como centro (estavel quando o zumbi inclina)
                     hy = hy2; fy = fy2;
-                    if (w > io.DisplaySize.x || h > io.DisplaySize.y) continue; // P1: box maior que a tela = lixo
                     r0 = ImVec2(cx - w * 0.5f, hy); r1 = ImVec2(cx + w * 0.5f, fy);
+                    if (w > io.DisplaySize.x || h > io.DisplaySize.y) {
+                        // Melee: prende na viewport em vez de sumir.
+                        r0.x = r0.x < -100 ? -100 : r0.x; r0.y = r0.y < -100 ? -100 : r0.y;
+                        r1.x = r1.x > io.DisplaySize.x + 100 ? io.DisplaySize.x + 100 : r1.x;
+                        r1.y = r1.y > io.DisplaySize.y + 100 ? io.DisplaySize.y + 100 : r1.y;
+                        if (r1.x - r0.x < 4 || r1.y - r0.y < 4) continue;
+                    }
                 }
                 if (Config::iZombieBox == 0) {
                     if (r0.x < -10000 || r0.x > 10000 || r0.y < -10000 || r0.y > 10000) continue; // P1 render

@@ -349,7 +349,7 @@ namespace Mono {
             float cx = s_vp[0] * w.x + s_vp[4] * w.y + s_vp[8] * w.z + s_vp[12];
             float cy = s_vp[1] * w.x + s_vp[5] * w.y + s_vp[9] * w.z + s_vp[13];
             float cw = s_vp[3] * w.x + s_vp[7] * w.y + s_vp[11] * w.z + s_vp[15];
-            if (!(cw > 0.1f)) return false; // atras/perto demais: descarta antes de dividir
+            if (!(cw > 0.05f)) return false; // melee (~1m) ainda projeta; sanidade barra o lixo
             float inv = 1.0f / cw;
             float nx = cx * inv, ny = cy * inv;
             if (!(nx == nx && ny == ny)) return false;
