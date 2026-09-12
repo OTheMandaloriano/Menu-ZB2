@@ -320,6 +320,19 @@ namespace Mono {
         if (!StaticInstance(cMC, fInst, mcObj)) return;
         void* cam = ReadP(mcObj, Off::MC_cam);
         if (!cam) return;
+        // Posicao da camera 1x por ciclo p/ cull por distancia (poupa 2 invokes de W2S nos longe).
+        Vec3 camW = { 0, 0, 0 };
+        bool hasCamW = false;
+        if (mGetTrans) {
+            MonoObject* exc = nullptr;
+            MonoObject* tr = nullptr;
+            __try { tr = pInvoke(mGetTrans, cam, nullptr, &exc); } __except (EXCEPTION_EXECUTE_HANDLER) { tr = nullptr; exc = (MonoObject*)1; }
+            if (tr && !exc) hasCamW = GetPos(tr, camW);
+        }
+        float maxD = Config::fMaxDistance;
+        float maxD2 = maxD * maxD;
+        LARGE_INTEGER t0, t1;
+        QueryPerformanceCounter(&t0);
         void* zl = nullptr;
         if (!cZLoader) return;
         MonoClassField* fZL = pFieldFrom(cZLoader, "Instance");
@@ -339,6 +352,10 @@ namespace Mono {
             if (!eye || !foot) return;
             Vec3 wh, wf, sh, sf;
             if (!GetPos(eye, wh) || !GetPos(foot, wf)) return;
+            if (hasCamW) {
+                float dx = wh.x - camW.x, dy = wh.y - camW.y, dz = wh.z - camW.z;
+                if (dx * dx + dy * dy + dz * dz > maxD2) return;
+            }
             wh.y += 0.30f; // eyeRef fica nos olhos: sobe ao topo da cabeca (em mundo = escala certa)
             wf.y -= 0.35f; // footRef alto: margem generosa ate calibrar pelo print (v0.7.1)
             if (!W2S(cam, wh, sh) || !W2S(cam, wf, sf)) return;
@@ -350,19 +367,27 @@ namespace Mono {
             en.onScreen = true; en.isAlly = false;
         });
         // Publica o snapshot sob lock (render nunca bloqueia em invoke).
+        QueryPerformanceCounter(&t1);
+        {
+            LARGE_INTEGER fr;
+            QueryPerformanceFrequency(&fr);
+            float ms = (float)(t1.QuadPart - t0.QuadPart) * 1000.0f / (float)fr.QuadPart;
+            s.espMs = s.espMs * 0.9f + ms * 0.1f;
+        }
         EnterCriticalSection(&s_espCS);
         s_espN = n > 128 ? 128 : n;
+        s.espShown = s_espN;
         for (int i = 0; i < s_espN; ++i) s_esp[i] = tmp[i];
         LeaveCriticalSection(&s_espCS);
     }
 
     static DWORD WINAPI EspThread(LPVOID) {
         pAttach(s_dom); // worker precisa do proprio attach no Mono
-        Log::Info("Thread ESP iniciada (20Hz, fora do Present).");
+        Log::Info("Thread ESP iniciada (30Hz, fora do Present).");
         while (s_espRun) {
             if (s.ready && Config::bZombieEsp) BuildEsp();
             else { EnterCriticalSection(&s_espCS); s_espN = 0; LeaveCriticalSection(&s_espCS); }
-            Sleep(50);
+            Sleep(33); // ~30Hz: boxes a 30fps parecem grudadas; 20Hz parecia "queda de FPS"
         }
         return 0;
     }
@@ -450,6 +475,8 @@ namespace Mono {
         s_dom = nullptr; s_img = nullptr;
     }
 }
+
+
 
 
 

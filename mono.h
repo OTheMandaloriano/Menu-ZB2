@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 // ============================================================================
 // MONO.H - Reflection Unity Mono via binding dinamico (ZB2 Menu)
@@ -30,6 +30,8 @@ namespace Mono {
         int   players = 0;
         int   zombies = 0;
         float zHp0 = 0.0f;
+        float espMs = 0.0f;    // custo do BuildEsp (diagnostico)
+        int   espShown = 0;
         int   resolvedClasses = 0;
         int   resolvedFields = 0;
         int   resolvedMethods = 0;
@@ -44,3 +46,4 @@ namespace Mono {
     int GetEsp(EspEntry* out, int max);
     void Shutdown();
 }
+

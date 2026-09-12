@@ -93,26 +93,39 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
 }
 
 // WndProc: INSERT/DELETE alterna; cursor fix devolve controle ao jogo fechado.
+static bool s_cursorHiddenByUs = false; // guarda: par abre/fecha a prova de key-repeat
+
 static LRESULT CALLBACK hkWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (uMsg == WM_KEYDOWN && ((int)wParam == Config::iMenuKey || wParam == VK_DELETE)) {
         Config::bMenuOpen = !Config::bMenuOpen;
-        // Cursor fix (v0.6.1): UMA chamada por toggle, nunca loop.
-        // Motivo: ShowCursor tem contador GLOBAL; loop ate >=0 destruia o
-        // estado do jogo (que esconde o cursor) e a seta aparecia no match,
-        // com cliques caindo fora da janela. Par abre/fecha = saldo zero.
+        // Cursor (v0.7.1): idempotente por estado + diagnostico no log.
+        // ShowCursor tem contador GLOBAL da sessao; builds antigas (loop)
+        // podem ter deixado ele corrompido - o log abaixo denuncia (se ao
+        // fechar o cnt ja estiver >=0, a sessao esta corrompida: reboot limpa).
         ImGuiIO& io = ImGui::GetIO();
         io.MouseDrawCursor = Config::bMenuOpen;
         if (!Config::bMenuOpen) {
             ClipCursor(nullptr); // solta a captura p/ o jogo retomar a camera
-            ShowCursor(TRUE);
+            if (s_cursorHiddenByUs) {
+                int c = ShowCursor(TRUE);
+                s_cursorHiddenByUs = false;
+                Log::Infof("Cursor restaurado p/ jogo (cnt=%d).", c);
+            }
         } else {
-            ShowCursor(FALSE);
+            if (!s_cursorHiddenByUs) {
+                int c = ShowCursor(FALSE);
+                s_cursorHiddenByUs = true;
+                Log::Infof("Cursor oculto p/ menu (cnt=%d).", c);
+            }
         }
         return TRUE;
     }
-    if (Config::bMenuOpen && g_bInit) {
-        if (ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam))
-            return TRUE;
+    // Menu fechado (ou GUI ainda nao init): jogo processa tudo, sem tocar.
+    if (!Config::bMenuOpen || !g_bInit)
+        return CallWindowProc(oWndProc, hWnd, uMsg, wParam, lParam);
+    if (ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam))
+        return TRUE;
+    {
         ImGuiIO& io = ImGui::GetIO();
         if (io.WantCaptureMouse && (uMsg >= WM_MOUSEFIRST && uMsg <= WM_MOUSELAST))
             return TRUE;
@@ -200,6 +213,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved) {
     }
     return TRUE;
 }
+
 
 
 

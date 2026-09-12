@@ -498,9 +498,9 @@ namespace GUI {
             const Mono::State& st = Mono::Get();
             char b[256];
             if (st.ready)
-                _snprintf_s(b, _TRUNCATE, "LOCAL HP %.0f | STAM %.0f | ALIADO %.0f | ZUMBIS %d (hp0 %.0f) | DAY %.2fh | %.0f fps",
+                _snprintf_s(b, _TRUNCATE, "LOCAL HP %.0f | STAM %.0f | ALIADO %.0f | ZUMBIS %d (hp0 %.0f) | DAY %.2fh | ESP %d %.1fms | %.0f fps",
                     (double)st.localHp, (double)st.localStam, (double)st.allyHp,
-                    st.zombies, (double)st.zHp0, (double)st.dayTime, (double)io.Framerate);
+                    st.zombies, (double)st.zHp0, (double)st.dayTime, st.espShown, (double)st.espMs, (double)io.Framerate);
             else
                 _snprintf_s(b, _TRUNCATE, "MONO aguardando cena... | %.0f fps", (double)io.Framerate);
             dl->AddText(ImVec2(10, 26), IM_COL32(160, 255, 160, 200), b);
@@ -529,6 +529,7 @@ namespace GUI {
     }
 
     void Render() {
+        ImGui::GetIO().MouseDrawCursor = Config::bMenuOpen; // sync por frame (nada desenha cursor com menu fechado)
         if (!Config::bMenuOpen || !g_bInit) return;
         ImGui::SetNextWindowSize(ImVec2(860, 560), ImGuiCond_FirstUseEver);
         if (!ImGui::Begin("ZB2 Menu - Zumbi Blocks 2 (D3D11)", &Config::bMenuOpen)) { ImGui::End(); return; }
@@ -705,6 +706,8 @@ namespace GUI {
         ImGui::End();
     }
 }
+
+
 
 
 
