@@ -525,6 +525,24 @@ namespace GUI {
                     ImU32 dcol = ImGui::GetColorU32(ImVec4(Config::colZombieDistVis[0], Config::colZombieDistVis[1], Config::colZombieDistVis[2], Config::colZombieDistVis[3]));
                     dl->AddText(ImVec2(cx - w * 0.5f + Config::fDistX, fy + Config::fDistY), dcol, db);
                 }
+                if (Config::bZombieHp && es[i].maxHp > 0) {
+                    // Health bar auto-orientada (briefing Pt.7.9): lados = vertical, topo/base = horizontal.
+                    float pct = es[i].hp / es[i].maxHp;
+                    if (pct < 0) pct = 0; if (pct > 1) pct = 1;
+                    float hc[4]; HpColor(pct * 100.0f, hc);
+                    ImU32 hfill = ImGui::GetColorU32(ImVec4(hc[0], hc[1], hc[2], hc[3]));
+                    float bx = cx - w * 0.5f + Config::fHpX, by = hy + Config::fHpY;
+                    char pb[16]; _snprintf_s(pb, _TRUNCATE, "%.0f%%", (double)(pct * 100.0));
+                    if (Config::fHpX < 0.0f || Config::fHpX > w) {
+                        dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + 3, by + h), IM_COL32(40, 40, 44, 255));
+                        dl->AddRectFilled(ImVec2(bx, by + h * (1 - pct)), ImVec2(bx + 3, by + h), hfill);
+                        dl->AddText(ImVec2(bx - 8, by - 16), IM_COL32_WHITE, pb);
+                    } else {
+                        dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + w, by + 4), IM_COL32(40, 40, 44, 255));
+                        dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + w * pct, by + 4), hfill);
+                        dl->AddText(ImVec2(bx + w + 4, by - 2), IM_COL32_WHITE, pb);
+                    }
+                }
                 if (Config::bZombieName && es[i].name[0]) {
                     ImU32 ncol = ImGui::GetColorU32(ImVec4(Config::colZombieNameVis[0], Config::colZombieNameVis[1], Config::colZombieNameVis[2], Config::colZombieNameVis[3]));
                     dl->AddText(ImVec2(cx - w * 0.5f + Config::fNameX, hy + Config::fNameY), ncol, es[i].name);
@@ -716,6 +734,7 @@ namespace GUI {
         ImGui::End();
     }
 }
+
 
 
 
