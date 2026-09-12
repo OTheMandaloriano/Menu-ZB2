@@ -505,6 +505,22 @@ namespace GUI {
                 _snprintf_s(b, _TRUNCATE, "MONO aguardando cena... | %.0f fps", (double)io.Framerate);
             dl->AddText(ImVec2(10, 26), IM_COL32(160, 255, 160, 200), b);
         }
+        // ESP Zumbis Box 2D (Fase 3 item 7): head/pes ja em pixels Unity; inverte Y.
+        if (Config::bZombieEsp && Config::iZombieBox == 0) {
+            Mono::EspEntry es[128];
+            int n = Mono::GetEsp(es, 128);
+            float H = io.DisplaySize.y;
+            ImU32 col = ImGui::GetColorU32(ImVec4(Config::colZombieVis[0], Config::colZombieVis[1], Config::colZombieVis[2], Config::colZombieVis[3]));
+            for (int i = 0; i < n; ++i) {
+                float hx = es[i].headX, hy = H - es[i].headY;
+                float fx = es[i].footX, fy = H - es[i].footY;
+                float h = fy - hy; // altura head->pes
+                if (h < 4.0f) continue;
+                float w = h * 0.5f;
+                float cx = (hx + fx) * 0.5f;
+                dl->AddRect(ImVec2(cx - w * 0.5f, hy), ImVec2(cx + w * 0.5f, fy), col, 0.0f, 0, 1.5f);
+            }
+        }
         if (Config::bDrawFov && Config::bAimbot && Config::bLimitFov && !Config::b360Mode) {
             ImVec2 sc = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
             float r = Config::fFovAngle * 4.0f;
@@ -689,6 +705,8 @@ namespace GUI {
         ImGui::End();
     }
 }
+
+
 
 
 

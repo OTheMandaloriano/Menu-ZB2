@@ -4,21 +4,32 @@
 // MONO.H - Reflection Unity Mono via binding dinamico (ZB2 Menu)
 // OBJETIVO: ler classes/campos do Assembly-CSharp sem linkar contra o Mono.
 // ORIGEM: offsets validados na auditoria runtime #1 (memory/OFFSETS.md).
-// TESTES: log resolve OK + overlay com HP local e contagem de zumbis.
-// HISTORICO: v0.5.0 bind + daytime. v0.6.0 entidades (List<> + HasLocalControl).
+// TESTES: overlay com HP local/zumbis; ESP Box 2D via WorldToScreen.
+// HISTORICO: v0.5.0 bind + daytime. v0.6.0 entidades. v0.7.0 W2S + Box 2D.
 // ============================================================================
 
 namespace Mono {
+    struct Vec3 { float x, y, z; };
+
+    // Entrada de ESP (Fase 3): coordenadas JA em pixels ImGui (y para baixo).
+    struct EspEntry {
+        float headX, headY;  // cabeca (tela)
+        float footX, footY;  // pes (tela)
+        float hp, maxHp;
+        bool  onScreen;
+        bool  isAlly;        // item 15 (sempre false no item 7)
+    };
+
     struct State {
         bool  ready = false;
         float dayTime = 0.0f;
         float dayLenMin = 0.0f;
-        float localHp = 0.0f;    // PlayerMain.healthFast do player local
-        float localStam = 0.0f;  // staminaFast
-        float allyHp = 0.0f;     // primeiro aliado (ForeignPlayer)
+        float localHp = 0.0f;
+        float localStam = 0.0f;
+        float allyHp = 0.0f;
         int   players = 0;
-        int   zombies = 0;       // vivos (hp>0)
-        float zHp0 = 0.0f;       // HP do primeiro zumbi vivo
+        int   zombies = 0;
+        float zHp0 = 0.0f;
         int   resolvedClasses = 0;
         int   resolvedFields = 0;
         int   resolvedMethods = 0;
@@ -27,5 +38,9 @@ namespace Mono {
     bool Init();
     void Tick();
     const State& Get();
+
+    // Snapshot do ESP (preenchido no Tick; ler no Render).
+    // N <0 = todos; retorna quantidade escrita.
+    int GetEsp(EspEntry* out, int max);
     void Shutdown();
 }

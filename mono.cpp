@@ -1,4 +1,5 @@
 ﻿#include "mono.h"
+#include "config.h"
 #include "log.h"
 #include <Windows.h>
 
@@ -45,6 +46,12 @@ namespace Off {
     constexpr int ZL_totalReal = 184;
     // Zombie (instancia)
     constexpr int Z_health = 168;
+    // ZombieObject (instancia)
+    constexpr int ZO_eye = 88;
+    constexpr int ZO_foot = 96;
+    constexpr int Z_obj = 16;
+    // MainCamera (instancia)
+    constexpr int MC_cam = 32;
     // ZombieHealth (instancia)
     constexpr int ZH_max = 16;
     constexpr int ZH_amount = 32;
@@ -89,6 +96,14 @@ namespace Mono {
     static MonoClassField* fZLInst = nullptr;
     static MonoClassField* fPCInst = nullptr;
     static MonoMethod* mHasLocal = nullptr;
+    static MonoImage*  s_unity = nullptr;
+    static MonoClass*  cCamU = nullptr;
+    static MonoClass*  cTrans = nullptr;
+    static MonoMethod* mGetPos = nullptr;
+    static MonoMethod* mW2S = nullptr;
+    static MonoMethod* mGetTrans = nullptr;
+    static EspEntry s_esp[128];
+    static int s_espN = 0;
 
     template <typename T>
     static bool Bind(HMODULE m, const char* name, T& out) {
@@ -229,6 +244,18 @@ namespace Mono {
         ResolveField(cZLoader, "ZombieLoader", "Instance", fZLInst);
         ResolveField(cPlayers, "PlayersController", "instance", fPCInst);
         ResolveMethod(cPlayer, "PlayerMain", "get_HasLocalControl", 0, mHasLocal);
+        s_unity = pImgLoaded("UnityEngine.CoreModule");
+        if (s_unity) {
+            s.resolvedClasses++;
+            cCamU = pClassFrom(s_unity, "UnityEngine", "Camera");
+            cTrans = pClassFrom(s_unity, "UnityEngine", "Transform");
+            MonoClass* cComp = pClassFrom(s_unity, "UnityEngine", "Component");
+            if (cCamU) s.resolvedClasses++;
+            if (cTrans) s.resolvedClasses++;
+            if (cCamU) { MonoMethod* t = pMethodFrom(cCamU, "WorldToScreenPoint", 1); if (t) { mW2S = t; s.resolvedMethods++; } else Log::Warn("Metodo nao resolvido: Camera.WorldToScreenPoint/1"); }
+            if (cTrans) ResolveMethod(cTrans, "Transform", "get_position", 0, mGetPos);
+            if (cComp) ResolveMethod(cComp, "Component", "get_transform", 0, mGetTrans);
+        } else Log::Warn("Imagem UnityEngine.CoreModule nao carregada.");
 
         s.ready = (cDay && cPlayer && cZombie && cZLoader && cPlayers
             && fDayInst && fZLInst && fPCInst && mHasLocal);
@@ -238,6 +265,73 @@ namespace Mono {
                 s.resolvedClasses, s.resolvedFields, s.resolvedMethods);
         }
         return s.ready;
+    }
+
+    // invoke Transform.get_position -> mundo. Retorna false se falhar.
+    static bool GetPos(void* trans, Vec3& out) {
+        if (!mGetPos || !trans) return false;
+        __try {
+            MonoObject* exc = nullptr;
+            MonoObject* ret = pInvoke(mGetPos, trans, nullptr, &exc);
+            if (exc || !ret) return false;
+            memcpy(&out, pUnbox(ret), sizeof(out));
+            return true;
+        } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    }
+
+    // invoke Camera.WorldToScreenPoint(mundo) -> pixels Unity (y de baixo p/ cima).
+    static bool W2S(void* cam, const Vec3& w, Vec3& out) {
+        if (!mW2S || !cam) return false;
+        __try {
+            void* args[1] = { (void*)&w };
+            MonoObject* exc = nullptr;
+            MonoObject* ret = pInvoke(mW2S, cam, args, &exc);
+            if (exc || !ret) return false;
+            memcpy(&out, pUnbox(ret), sizeof(out));
+            return out.z > 0.0f;
+        } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    }
+
+    // Monta snapshot do ESP (zumbis). Roda no Tick (2Hz), nao por frame.
+    static void BuildEsp() {
+        s_espN = 0;
+        if (!Config::bZombieEsp || !mGetPos || !mW2S || !mGetTrans) return;
+        // MainCamera.instance (static) -> cam@32 (UnityEngine.Camera).
+        // Re-resolve aqui (barato, 2Hz) para pegar a Camera viva.
+        MonoClass* cMC = pClassFrom(s_img, "", "MainCamera");
+        if (!cMC) return;
+        MonoClassField* fInst = pFieldFrom(cMC, "instance");
+        if (!fInst) return;
+        void* mcObj = nullptr;
+        if (!StaticInstance(cMC, fInst, mcObj)) return;
+        void* cam = ReadP(mcObj, Off::MC_cam);
+        if (!cam) return;
+        void* zl = nullptr;
+        if (!cZLoader) return;
+        MonoClassField* fZL = pFieldFrom(cZLoader, "Instance");
+        if (!fZL || !StaticInstance(cZLoader, fZL, zl)) return;
+        void* list = ReadP(zl, Off::ZL_zombies);
+        WalkList(list, 512, [&](void* e, int) {
+            if (s_espN >= 128) return;
+            void* h = ReadP(e, Off::Z_health);
+            if (!h) return;
+            float hp = ReadF(h, Off::ZH_amount);
+            float mx = ReadF(h, Off::ZH_max);
+            if (hp <= 0 || mx <= 0 || hp > mx) return; // so vivos
+            void* zo = ReadP(e, Off::Z_obj);
+            if (!zo) return;
+            void* eye = ReadP(zo, Off::ZO_eye);
+            void* foot = ReadP(zo, Off::ZO_foot);
+            if (!eye || !foot) return;
+            Vec3 wh, wf, sh, sf;
+            if (!GetPos(eye, wh) || !GetPos(foot, wf)) return;
+            if (!W2S(cam, wh, sh) || !W2S(cam, wf, sf)) return;
+            EspEntry& en = s_esp[s_espN++];
+            en.headX = sh.x; en.headY = sh.y;
+            en.footX = sf.x; en.footY = sf.y;
+            en.hp = hp; en.maxHp = mx;
+            en.onScreen = true; en.isAlly = false;
+        });
     }
 
     static void ReadAll() {
@@ -297,16 +391,27 @@ namespace Mono {
         if (!s.ready && !Init()) return;
         static int n = 0;
         ReadAll();
+        BuildEsp();
         if (++n == 1 || n % 20 == 0)
             Log::Infof("Mono live: localHP=%.0f stam=%.0f players=%d zombies=%d zHp0=%.0f day=%.2fh",
                 s.localHp, s.localStam, s.players, s.zombies, s.zHp0, s.dayTime);
     }
 
     const State& Get() { return s; }
+    int GetEsp(EspEntry* out, int max) {
+        if (!out || max <= 0) return 0;
+        int n = s_espN < max ? s_espN : max;
+        for (int i = 0; i < n; ++i) out[i] = s_esp[i];
+        return n;
+    }
     void Shutdown() {
         s = State();
         s_bound = false; s_logged = false;
         s_dom = nullptr; s_img = nullptr;
     }
 }
+
+
+
+
 
