@@ -113,10 +113,10 @@ namespace Config {
     float colItem[4] = { 1, 0.85f, 0.2f, 1 };
     float fItemRadius = 150.0f;
 
-    float fNameX = 0.0f, fNameY = -18.0f;
+    float fNameX = 0.0f, fNameY = -16.0f;
     float fDistX = 0.0f, fDistY = 4.0f;
-    float fHpX = -8.0f, fHpY = -85.0f;
-    int   iNameA = 0, iDistA = 6, iHpA = 3, iPctA = 0; // TL, BL, ML, TL
+    float fHpX   = -6.0f, fHpY = 0.0f;   // ZERO ABSOLUTO: topo da barra alinhado com o topo do box!
+    int   iNameA = 1, iDistA = 7, iHpA = 0, iPctA = 5; // TC, BC, TL, MR (Zero colisoes!)
     int   iCfgVer = 2;
     float fPropN = 0.05f, fPropD = 0.05f, fPropH = 0.06f, fPropP = 0.06f; // Pilar 2
     int   iLayoutMode = 0;
@@ -174,8 +174,9 @@ namespace GUI {
 
     // P3: offsets do preview sao relativos ao box; clamp evita perder o elemento.
     static void ClampOff(float& v) {
-        if (v < -300.0f) v = -300.0f;
-        if (v > 300.0f) v = 300.0f;
+        // Trava de respiro: nenhum elemento se afasta mais que 25px da entidade.
+        if (v < -25.0f) v = -25.0f;
+        if (v >  25.0f) v =  25.0f;
     }
 
     static float SnapF(float v, float grid) {
@@ -267,26 +268,34 @@ namespace GUI {
         }
     }
 
-    static bool HpHorizAnchor(int a) { // TOP_*/BOTTOM_*/CENTER = horizontal; ML/MR = vertical
-        return a <= 2 || a >= 6 || a == 4;
+    static bool HpHorizAnchor(int a) {
+        // So TOP_CENTER (1) ou BOT_CENTER (7) deitam a barra. Lateral = sempre vertical!
+        return (a == 1 || a == 7);
     }
 
     // Pilar 2: offset hibrido = base (usuario) + extra proporcional clampado.
     // ref = largura (ancoras laterais) ou altura (demais). extra=0 se prop=0.
     static ImVec2 HybridPos(int anchor, float baseX, float baseY, float prop, float minE, float maxE, ImVec2 mn, ImVec2 mx) {
         ImVec2 ap = AnchorPt(anchor, mn, mx);
-        float ref = (anchor == 3 || anchor == 5) ? (mx.x - mn.x) : (mx.y - mn.y);
-        if (ref < 0) ref = 0;
-        float extra = 0.0f;
-        if (prop > 0.0f) {
-            extra = prop * ref;
-            if (extra < minE) extra = minE;
-            if (extra > maxE) extra = maxE;
-        }
+        // Laterais E cantos usam largura; topo/base/centro usam altura.
+        bool useW = (anchor == 3 || anchor == 5 || anchor == 0 || anchor == 2 || anchor == 6 || anchor == 8);
+        float ref = useW ? (mx.x - mn.x) : (mx.y - mn.y);
+        if (ref < 1.0f) ref = 1.0f;
+        // Respiro minimo escala com a distancia: 4px longe, ate 15px perto.
+        float minResp = ref * 0.15f;
+        if (minResp < 4.0f) minResp = 4.0f;
+        if (minResp > 15.0f) minResp = 15.0f;
+        (void)minE; // min de tabela absorvido pelo minResp dinamico
+        float extra = prop * ref;
+        if (prop <= 0.0f) extra = 0.0f; // kill switch: prop 0 = sem respiro
+        else { if (extra < minResp) extra = minResp; if (extra > maxE) extra = maxE; }
         int col = anchor % 3, row = anchor / 3;
         float dx = col == 0 ? -1.0f : (col == 2 ? 1.0f : 0.0f);
         float dy = row == 0 ? -1.0f : (row == 2 ? 1.0f : 0.0f);
-        return ImVec2(ap.x + baseX + dx * extra, ap.y + baseY + dy * extra);
+        // Base do usuario contida no envelope seguro.
+        float bx = baseX < -25.0f ? -25.0f : (baseX > 25.0f ? 25.0f : baseX);
+        float by = baseY < -25.0f ? -25.0f : (baseY > 25.0f ? 25.0f : baseY);
+        return ImVec2(ap.x + bx + dx * extra, ap.y + by + dy * extra);
     }
 
     // Pilar 6: base calibrada de fabrica (v2). Zera Nome/% (sem colisao),
@@ -298,6 +307,9 @@ namespace GUI {
         Config::iPctA = 5;  Config::fPctX = 4.0f;  Config::fPctY = 0.0f;   Config::fPropP = 0.06f; // MR
         Config::iCfgVer = 2;
     }
+
+    static void LoadConfig(const char* name); // forward (definida abaixo)
+    static void SaveConfig(const char* name); // forward (definida abaixo)
 
     void Initialize(HWND hWindow, ID3D11Device* pDevice, ID3D11DeviceContext* pContext) {
         if (g_bInit) return;
@@ -315,6 +327,8 @@ namespace GUI {
         ImGui::StyleColorsDark();
         ImGui_ImplWin32_Init(hWindow);
         ImGui_ImplDX11_Init(pDevice, pContext);
+        // Correcao 2: config valida ja na injecao (fabrica v2 se legado/ausente).
+        LoadConfig("default");
         g_bInit = true;
     }
 
