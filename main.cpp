@@ -6,6 +6,9 @@
 // ORIGEM: kiero-dx9-base/main.cpp (EndScene slot 42) -> Present slot 8 D3D11.
 // TESTES: injetar -> menu INSERT abre; Alt+Tab/resize nao crasha; unload limpo.
 // HISTORICO: v0.1.0 troca DX9 por DX11; adiciona cursor fix + render target.
+//   fix v0.2.1: corrige corrida bind-Present antes da janela (DisplaySize 0,0):
+//   descobre g_hWindow ANTES do kiero::init + guarda !g_hWindow no hkPresent.
+//   Diagnostico do operador: menu invisivel + cursor visivel.
 // ============================================================================
 // FASE 1 ITEM 1: Hook D3D11 + ImGui funcional (menu abre e fecha).
 // ============================================================================
@@ -55,6 +58,11 @@ static long __stdcall hkResizeBuffers(IDXGISwapChain* pSwapChain, UINT BufferCou
 
 static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Flags) {
     if (!g_bInit) {
+        // Guarda: sem janela nao ha como inicializar o backend Win32 do ImGui
+        // (HWND nulo => DisplaySize 0,0 => menu invisivel). Pula o frame.
+        if (!g_hWindow) {
+            return oPresent(pSwapChain, SyncInterval, Flags);
+        }
         if (SUCCEEDED(pSwapChain->GetDevice(__uuidof(ID3D11Device), (void**)&g_pDevice)) && g_pDevice) {
             g_pDevice->GetImmediateContext(&g_pContext);
             CreateRenderTarget(pSwapChain);
@@ -130,8 +138,19 @@ static DWORD WINAPI MainThread(LPVOID lpReserved) {
     (void)lpReserved;
     Log::Info("==================================================");
     Log::Infof("Log ativo em: %s", Log::GetPath());
-    Log::Info("MainThread iniciada, aguardando kiero D3D11...");
+    Log::Info("MainThread iniciada.");
 
+    // ETAPA 1: descobrir a janela ANTES de qualquer hook do Present.
+    // Motivo (fix v0.2.1): o bind do Present ativa o hkPresent a cada frame;
+    // se a janela ainda e nullptr, o ImGui inicializa com HWND nulo e o
+    // DisplaySize fica (0,0) -> menu invisivel (so o cursor aparece).
+    do {
+        g_hWindow = GetProcessWindow();
+        if (!g_hWindow) Sleep(50);
+    } while (g_hWindow == nullptr);
+    Log::Infof("Janela encontrada: 0x%p.", g_hWindow);
+
+    // ETAPA 2: com a janela resolvida, instala os hooks.
     bool bAttached = false;
     do {
         if (kiero::init(kiero::RenderType::D3D11) == kiero::Status::Success) {
@@ -144,12 +163,6 @@ static DWORD WINAPI MainThread(LPVOID lpReserved) {
                 Log::Info("Bind OK: ResizeBuffers (slot 13).");
             else
                 Log::Error("Bind FALHOU: ResizeBuffers (slot 13).");
-
-            do {
-                g_hWindow = GetProcessWindow();
-                if (!g_hWindow) Sleep(50);
-            } while (g_hWindow == nullptr);
-            Log::Infof("Janela encontrada: 0x%p.", g_hWindow);
 
             oWndProc = (WNDPROC)SetWindowLongPtr(g_hWindow, GWL_WNDPROC_INDEX, (LONG_PTR)hkWndProc);
             Log::Info("WndProc hookado, menu operacional (INSERT/DELETE).");
