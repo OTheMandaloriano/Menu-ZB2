@@ -1,4 +1,4 @@
-#include "mono.h"
+﻿#include "mono.h"
 #include "log.h"
 #include <Windows.h>
 
@@ -9,7 +9,7 @@
 // ORIGEM: Mono embedding API + auditoria runtime #1 (OFFSETS.md).
 // TESTES: overlay mostra LOCAL HP / ZUMBIS / DAY; log confirma contagens.
 // HISTORICO: v0.5.0 bind+daytime. v0.6.0 entidades List<> + invoke.
-//   Layout List<T> Mono x64: _items@16, _size@24; vetor: length@16, dados@32.
+//   Layout List<T> Mono x64: _items@16, _size@24; vetor: bounds@16, length@24, dados@32.
 //   Validado por cruzamento com ZombieLoader.totalRealZombies@184.
 // ============================================================================
 
@@ -55,7 +55,7 @@ namespace Off {
     constexpr int L_items = 16;
     constexpr int L_size = 24;
     // Vetor Mono (T[])
-    constexpr int A_len = 16;
+    constexpr int A_len = 24;
     constexpr int A_data = 32;
 }
 
@@ -309,3 +309,4 @@ namespace Mono {
         s_dom = nullptr; s_img = nullptr;
     }
 }
+
