@@ -2,6 +2,7 @@
 #include "config.h"
 #include "log.h"
 #include <Windows.h>
+#include <math.h>
 
 // ============================================================================
 // MONO.CPP - Binding dinamico do Mono embedding (Fase 2 itens 5+6)
@@ -383,9 +384,11 @@ namespace Mono {
             if (!eye || !foot) return;
             Vec3 wh, wf, sh, sf;
             if (!GetPos(eye, wh) || !GetPos(foot, wf)) return;
+            float dist = 0;
             if (hasCamW) {
                 float dx = wh.x - camW.x, dy = wh.y - camW.y, dz = wh.z - camW.z;
-                if (dx * dx + dy * dy + dz * dz > maxD2) return;
+                dist = sqrtf(dx * dx + dy * dy + dz * dz);
+                if (dist * dist > maxD2) return;
             }
             wh.y += 0.45f; // cabeca cubo grande: margem maior (print 02:30)
             wf.y -= 0.35f; // footRef alto: margem generosa ate calibrar pelo print (v0.7.1)
@@ -393,6 +396,7 @@ namespace Mono {
             if (n == 0) { s_dbgEyeY = wh.y; s_dbgFootY = wf.y; }
             EspEntry& en = tmp[n++];
             memcpy(en.name, tmpEn.name, sizeof(en.name));
+            en.dist = dist;
             en.headX = sh.x; en.headY = sh.y;
             en.footX = sf.x; en.footY = sf.y;
             en.hp = hp; en.maxHp = mx;
@@ -507,6 +511,8 @@ namespace Mono {
         s_dom = nullptr; s_img = nullptr;
     }
 }
+
+
 
 
 

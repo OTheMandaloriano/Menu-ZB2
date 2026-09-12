@@ -515,10 +515,16 @@ namespace GUI {
                 float hx = es[i].headX, hy = H - es[i].headY;
                 float fx = es[i].footX, fy = H - es[i].footY;
                 float h = fy - hy; // altura head->pes
+                if (h > H * 2.0f) continue; // zumbi colado na camera: box degenerada vira linha
                 if (h < 4.0f) continue;
                 float w = h * 0.6f; // zumbi largo + cabeca grande (print 02:30)
                 float cx = fx; // pes como centro (estavel quando o zumbi inclina)
                 dl->AddRect(ImVec2(cx - w * 0.5f, hy), ImVec2(cx + w * 0.5f, fy), col, 0.0f, 0, 1.5f);
+                if (Config::bZombieDist) {
+                    char db[32]; _snprintf_s(db, _TRUNCATE, "%.0fm", (double)es[i].dist);
+                    ImU32 dcol = ImGui::GetColorU32(ImVec4(Config::colZombieDistVis[0], Config::colZombieDistVis[1], Config::colZombieDistVis[2], Config::colZombieDistVis[3]));
+                    dl->AddText(ImVec2(cx - w * 0.5f + Config::fDistX, fy + Config::fDistY), dcol, db);
+                }
                 if (Config::bZombieName && es[i].name[0]) {
                     ImU32 ncol = ImGui::GetColorU32(ImVec4(Config::colZombieNameVis[0], Config::colZombieNameVis[1], Config::colZombieNameVis[2], Config::colZombieNameVis[3]));
                     dl->AddText(ImVec2(cx - w * 0.5f + Config::fNameX, hy + Config::fNameY), ncol, es[i].name);
@@ -710,6 +716,8 @@ namespace GUI {
         ImGui::End();
     }
 }
+
+
 
 
 

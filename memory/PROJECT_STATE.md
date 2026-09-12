@@ -5,8 +5,8 @@
 
 ## Fase 3 - ESP
 - [x] 7. ESP Zumbis Box 2D - BUILD OK (b8ca9b6f), AGUARDANDO TESTE EM PARTIDA
-- [ ] 8. ESP Zumbis Nome
-- [ ] 9. ESP Zumbis Distancia
+- [x] 8. ESP Zumbis Nome - TESTADO OK (print: boxes justas, nome Zombie)
+- [x] 9. ESP Zumbis Distancia - BUILD OK, AGUARDANDO TESTE
 - [ ] 10. ESP Health Bar (% + cor dinamica)
 - [ ] 11. Box 3D e Corners
 - [ ] 12. Skeleton
@@ -17,4 +17,5 @@
 Metodologia: 1 funcao por ciclo, commit pt-BR, teste in-game antes de avancar.
 
 ## Cursor modo janela - TESTADO OK (clip com menu fechado)
+
 
