@@ -59,6 +59,7 @@ namespace Off {
     // ZombieHealth (instancia)
     constexpr int ZH_max = 16;
     constexpr int ZH_amount = 32;
+    constexpr int ZH_alive = 28; // bool isAlive (anti-fantasma: morte dura ~1s com HP>0)
     // DaytimeController (instancia)
     constexpr int DT_cur = 172;
     constexpr int DT_len = 72;
@@ -90,6 +91,8 @@ namespace Mono {
     static FnFree           pFree = nullptr;
     static MonoMethod* mGetName = nullptr;
     static MonoMethod* mGetBounds = nullptr; // Renderer.get_bounds (Box 3D real)
+    static int s_ghostDead = 0;   // HP>0 mas isAlive=false (animacao de morte)
+    static int s_ghostBad = 0;    // centro nao-finito / absurdo
 
     static MonoDomain* s_dom = nullptr;
     static MonoImage*  s_img = nullptr;
@@ -337,6 +340,8 @@ namespace Mono {
         } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
     }
 
+    static bool Fin(float v) { return v == v && v > -3.4028235e38f && v < 3.4028235e38f; }
+
     // Nome via Object.get_name (GameObject). Fallback "Zumbi".
     static void GetName(void* obj, char* out, size_t cap) {
         strncpy_s(out, cap, "Zumbi", _TRUNCATE);
@@ -397,6 +402,9 @@ namespace Mono {
             float hp = ReadF(h, Off::ZH_amount);
             float mx = ReadF(h, Off::ZH_max);
             if (hp <= 0 || mx <= 0 || hp > mx) return; // so vivos
+            unsigned char alive = 0; // Fix A: isAlive (morte dura ~1s com HP>0 = fantasma)
+            __try { memcpy(&alive, (char*)h + Off::ZH_alive, 1); } __except (EXCEPTION_EXECUTE_HANDLER) {}
+            if (!alive) { s_ghostDead++; return; }
             void* zo = ReadP(e, Off::Z_obj);
             if (!zo) return;
             EspEntry tmpEn; // nome antes dos Transforms (barato, 1 invoke)
@@ -406,8 +414,14 @@ namespace Mono {
             // Box 3D real: AABB de mundo do corpo (sem hardcode de tamanho).
             if (Config::iZombieBox == 1 && mGetBounds) {
                 void* mesh = ReadP(zo, Off::ZO_mesh);
+                // NOTA: sem filtro Renderer.enabled aqui - o LOD desliga renderers
+                // longe e filtrar sumiria com zumbis distantes. Spawn sem mesh cai
+                // no bounds invalido (extents 0/NaN rejeitado no GetBounds).
                 Bnd bb;
                 if (mesh && GetBounds(mesh, bb)) {
+                    if (!Fin(bb.center.x) || !Fin(bb.center.y) || !Fin(bb.center.z)) { s_ghostBad++; return; } // Fix C
+                    float gl = bb.center.x * bb.center.x + bb.center.y * bb.center.y + bb.center.z * bb.center.z;
+                    if (gl > 10000.0f * 10000.0f) { s_ghostBad++; return; }
                     float dist = 0;
                     if (hasCamW) {
                         float dx = bb.center.x - camW.x, dy = bb.center.y - camW.y, dz = bb.center.z - camW.z;
@@ -421,6 +435,9 @@ namespace Mono {
                         Vec3 s3;
                         if (W2S(cam, w, s3)) { tmpEn.px[k] = s3.x; tmpEn.py[k] = s3.y; tmpEn.pv[k] = true; }
                     }
+                    int nv = 0; // Fix B: cantos atras da camera nao desenham (sem fragmentos)
+                    for (int k = 0; k < 8; ++k) if (tmpEn.pv[k]) nv++;
+                    if (nv < 6) return;
             EspEntry& en = tmp[n++];
             memcpy(en.name, tmpEn.name, sizeof(en.name));
             en.has3d = false;
@@ -443,6 +460,7 @@ namespace Mono {
             if (!eye || !foot) return;
             Vec3 wh, wf, sh, sf;
             if (!GetPos(eye, wh) || !GetPos(foot, wf)) return;
+            if (!Fin(wh.x) || !Fin(wh.y) || !Fin(wh.z) || !Fin(wf.x) || !Fin(wf.y) || !Fin(wf.z)) { s_ghostBad++; return; }
             float dist = 0;
             if (hasCamW) {
                 float dx = wh.x - camW.x, dy = wh.y - camW.y, dz = wh.z - camW.z;
@@ -540,7 +558,7 @@ namespace Mono {
     }
 
     void Tick() {
-        // ESP roda em worker thread (20Hz): Present nunca bloqueia em invoke.
+        // ESP roda em worker thread (30Hz): Present nunca bloqueia em invoke.
         // a camera gira. Leituras de texto do overlay seguem a 2Hz (30 frames).
         ++s_tick;
         if (!s.ready && !Init()) return;
@@ -548,8 +566,8 @@ namespace Mono {
         static int n = 0;
         ReadAll();
         if (++n == 1 || n % 20 == 0)
-            Log::Infof("Mono live: localHP=%.0f stam=%.0f players=%d zombies=%d zHp0=%.0f day=%.2fh eyeY=%.2f footY=%.2f",
-                s.localHp, s.localStam, s.players, s.zombies, s.zHp0, s.dayTime, s_dbgEyeY, s_dbgFootY);
+            Log::Infof("Mono live: localHP=%.0f stam=%.0f players=%d zombies=%d zHp0=%.0f day=%.2fh eyeY=%.2f footY=%.2f fantasma(morta=%d ruim=%d)",
+                s.localHp, s.localStam, s.players, s.zombies, s.zHp0, s.dayTime, s_dbgEyeY, s_dbgFootY, s_ghostDead, s_ghostBad);
     }
 
     const State& Get() { return s; }
