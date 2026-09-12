@@ -517,7 +517,7 @@ namespace GUI {
                 float h = fy - hy; // altura head->pes
                 if (h < 4.0f) continue;
                 float w = h * 0.5f;
-                float cx = (hx + fx) * 0.5f;
+                float cx = fx; // pes como centro (estavel quando o zumbi inclina)
                 dl->AddRect(ImVec2(cx - w * 0.5f, hy), ImVec2(cx + w * 0.5f, fy), col, 0.0f, 0, 1.5f);
             }
         }
@@ -705,6 +705,7 @@ namespace GUI {
         ImGui::End();
     }
 }
+
 
 
 
