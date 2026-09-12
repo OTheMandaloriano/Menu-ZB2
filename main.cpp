@@ -30,6 +30,7 @@ static bool            g_bInit = false;
 static ID3D11Device*           g_pDevice = nullptr;
 static ID3D11DeviceContext*    g_pContext = nullptr;
 static ID3D11RenderTargetView* g_pRTV = nullptr;
+static void ApplyGameClip(); // forward (definida antes do hkWndProc)
 
 static void CreateRenderTarget(IDXGISwapChain* pSwapChain) {
     ID3D11Texture2D* pBack = nullptr;
@@ -79,6 +80,8 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
     ImGui::NewFrame();
 
     Mono::Tick();          // reflection (Fase 2 item 5: bind + leitura viva)
+    { static int s_clipTick = 0;
+      if (!Config::bMenuOpen && g_bInit && (++s_clipTick % 120 == 0)) ApplyGameClip(); }
     GUI::Render();         // janela do menu (4 abas)
     GUI::RenderOverlay();  // watermark/debug/FOV fora da janela
 
@@ -95,7 +98,26 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
 // WndProc: INSERT/DELETE alterna; cursor fix devolve controle ao jogo fechado.
 static bool s_cursorHiddenByUs = false; // guarda: par abre/fecha a prova de key-repeat
 
+// Prende o cursor na area cliente da janela (modo janela: sem isso a seta
+// escapa e cliques caem fora do jogo). So com menu fechado e jogo em foco.
+static void ApplyGameClip() {
+    if (!g_hWindow) return;
+    if (GetForegroundWindow() != g_hWindow) return;
+    RECT r;
+    if (!GetClientRect(g_hWindow, &r)) return;
+    POINT ul = { r.left, r.top }, lr = { r.right, r.bottom };
+    ClientToScreen(g_hWindow, &ul);
+    ClientToScreen(g_hWindow, &lr);
+    r.left = ul.x; r.top = ul.y; r.right = lr.x; r.bottom = lr.y;
+    ClipCursor(&r);
+}
+
 static LRESULT CALLBACK hkWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    // Volta de ALT+TAB/foco: re-prende o cursor se o menu estiver fechado.
+    if (uMsg == WM_ACTIVATE && LOWORD(wParam) != WA_INACTIVE && !Config::bMenuOpen && g_bInit) {
+        ApplyGameClip();
+        return CallWindowProc(oWndProc, hWnd, uMsg, wParam, lParam);
+    }
     if (uMsg == WM_KEYDOWN && ((int)wParam == Config::iMenuKey || wParam == VK_DELETE)) {
         Config::bMenuOpen = !Config::bMenuOpen;
         // Cursor (v0.7.1): idempotente por estado + diagnostico no log.
@@ -105,7 +127,7 @@ static LRESULT CALLBACK hkWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         ImGuiIO& io = ImGui::GetIO();
         io.MouseDrawCursor = Config::bMenuOpen;
         if (!Config::bMenuOpen) {
-            ClipCursor(nullptr); // solta a captura p/ o jogo retomar a camera
+            ApplyGameClip(); // re-prende na janela (jogo retoma camera/cursor travado)
             if (s_cursorHiddenByUs) {
                 int c = ShowCursor(TRUE);
                 s_cursorHiddenByUs = false;
@@ -201,6 +223,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved) {
         CreateThread(nullptr, 0, MainThread, hModule, 0, nullptr);
     } else if (dwReason == DLL_PROCESS_DETACH) {
         Log::Info("DLL_PROCESS_DETACH, liberando hooks...");
+        ClipCursor(nullptr);
         if (oWndProc && g_hWindow)
             SetWindowLongPtr(g_hWindow, GWL_WNDPROC_INDEX, (LONG_PTR)oWndProc);
         CleanupRenderTarget();
@@ -213,6 +236,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved) {
     }
     return TRUE;
 }
+
+
 
 
 
