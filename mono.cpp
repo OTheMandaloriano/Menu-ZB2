@@ -96,6 +96,7 @@ namespace Mono {
     static MonoClassField* fZLInst = nullptr;
     static MonoClassField* fPCInst = nullptr;
     static MonoMethod* mHasLocal = nullptr;
+    static DWORD WINAPI EspThread(LPVOID); // forward (definida apos BuildEsp)
     static MonoImage*  s_unity = nullptr;
     static MonoClass*  cCamU = nullptr;
     static MonoClass*  cTrans = nullptr;
@@ -104,6 +105,10 @@ namespace Mono {
     static MonoMethod* mGetTrans = nullptr;
     static EspEntry s_esp[128];
     static int s_espN = 0;
+    static CRITICAL_SECTION s_espCS;
+    static bool s_csInit = false;
+    static HANDLE s_espThread = nullptr;
+    static volatile bool s_espRun = false;
     static float s_dbgEyeY = 0, s_dbgFootY = 0; // medida real p/ calibrar a box
 
     template <typename T>
@@ -260,6 +265,13 @@ namespace Mono {
 
         s.ready = (cDay && cPlayer && cZombie && cZLoader && cPlayers
             && fDayInst && fZLInst && fPCInst && mHasLocal);
+        if (s.ready && !s_csInit) {
+            InitializeCriticalSection(&s_espCS);
+            s_csInit = true;
+            s_espRun = true;
+            s_espThread = CreateThread(nullptr, 0, EspThread, nullptr, 0, nullptr);
+            Log::Infof("Worker ESP %s.", s_espThread ? "criada" : "FALHOU");
+        }
         if (s.ready && !s_logged) {
             s_logged = true;
             Log::Infof("Mono resolve OK: %d classes, %d campos, %d metodos.",
@@ -295,7 +307,8 @@ namespace Mono {
 
     // Monta snapshot do ESP (zumbis). Roda no Tick (2Hz), nao por frame.
     static void BuildEsp() {
-        s_espN = 0;
+        EspEntry tmp[128];
+        int n = 0;
         if (!Config::bZombieEsp || !mGetPos || !mW2S || !mGetTrans) return;
         // MainCamera.instance (static) -> cam@32 (UnityEngine.Camera).
         // Re-resolve aqui (barato, 2Hz) para pegar a Camera viva.
@@ -313,7 +326,7 @@ namespace Mono {
         if (!fZL || !StaticInstance(cZLoader, fZL, zl)) return;
         void* list = ReadP(zl, Off::ZL_zombies);
         WalkList(list, 512, [&](void* e, int) {
-            if (s_espN >= 128) return;
+            if (n >= 128) return;
             void* h = ReadP(e, Off::Z_health);
             if (!h) return;
             float hp = ReadF(h, Off::ZH_amount);
@@ -327,15 +340,31 @@ namespace Mono {
             Vec3 wh, wf, sh, sf;
             if (!GetPos(eye, wh) || !GetPos(foot, wf)) return;
             wh.y += 0.30f; // eyeRef fica nos olhos: sobe ao topo da cabeca (em mundo = escala certa)
-            wf.y -= 0.15f; // footRef fica no tornozelo: desce a planta do pe
+            wf.y -= 0.35f; // footRef alto: margem generosa ate calibrar pelo print (v0.7.1)
             if (!W2S(cam, wh, sh) || !W2S(cam, wf, sf)) return;
-            if (s_espN == 0) { s_dbgEyeY = wh.y; s_dbgFootY = wf.y; }
-            EspEntry& en = s_esp[s_espN++];
+            if (n == 0) { s_dbgEyeY = wh.y; s_dbgFootY = wf.y; }
+            EspEntry& en = tmp[n++];
             en.headX = sh.x; en.headY = sh.y;
             en.footX = sf.x; en.footY = sf.y;
             en.hp = hp; en.maxHp = mx;
             en.onScreen = true; en.isAlly = false;
         });
+        // Publica o snapshot sob lock (render nunca bloqueia em invoke).
+        EnterCriticalSection(&s_espCS);
+        s_espN = n > 128 ? 128 : n;
+        for (int i = 0; i < s_espN; ++i) s_esp[i] = tmp[i];
+        LeaveCriticalSection(&s_espCS);
+    }
+
+    static DWORD WINAPI EspThread(LPVOID) {
+        pAttach(s_dom); // worker precisa do proprio attach no Mono
+        Log::Info("Thread ESP iniciada (20Hz, fora do Present).");
+        while (s_espRun) {
+            if (s.ready && Config::bZombieEsp) BuildEsp();
+            else { EnterCriticalSection(&s_espCS); s_espN = 0; LeaveCriticalSection(&s_espCS); }
+            Sleep(50);
+        }
+        return 0;
     }
 
     static void ReadAll() {
@@ -391,11 +420,10 @@ namespace Mono {
     }
 
     void Tick() {
-        // ESP a ~20Hz (a cada 3 frames): snapshot lento atrasa as boxes quando
+        // ESP roda em worker thread (20Hz): Present nunca bloqueia em invoke.
         // a camera gira. Leituras de texto do overlay seguem a 2Hz (30 frames).
         ++s_tick;
         if (!s.ready && !Init()) return;
-        if (s_tick % 3 == 0) BuildEsp();
         if (s_tick % 30 != 0) return;
         static int n = 0;
         ReadAll();
@@ -407,16 +435,25 @@ namespace Mono {
     const State& Get() { return s; }
     int GetEsp(EspEntry* out, int max) {
         if (!out || max <= 0) return 0;
+        EnterCriticalSection(&s_espCS);
         int n = s_espN < max ? s_espN : max;
         for (int i = 0; i < n; ++i) out[i] = s_esp[i];
+        LeaveCriticalSection(&s_espCS);
         return n;
     }
     void Shutdown() {
+        s_espRun = false;
+        if (s_espThread) { WaitForSingleObject(s_espThread, 1000); CloseHandle(s_espThread); s_espThread = nullptr; }
+        if (s_csInit) { DeleteCriticalSection(&s_espCS); s_csInit = false; }
         s = State();
         s_bound = false; s_logged = false;
         s_dom = nullptr; s_img = nullptr;
     }
 }
+
+
+
+
 
 
 
