@@ -516,7 +516,7 @@ namespace GUI {
                 float fx = es[i].footX, fy = H - es[i].footY;
                 float h = fy - hy; // altura head->pes
                 if (h < 4.0f) continue;
-                float w = h * 0.5f;
+                float w = h * 0.6f; // zumbi largo + cabeca grande (print 02:30)
                 float cx = fx; // pes como centro (estavel quando o zumbi inclina)
                 dl->AddRect(ImVec2(cx - w * 0.5f, hy), ImVec2(cx + w * 0.5f, fy), col, 0.0f, 0, 1.5f);
                 if (Config::bZombieName && es[i].name[0]) {
@@ -710,6 +710,7 @@ namespace GUI {
         ImGui::End();
     }
 }
+
 
 
 

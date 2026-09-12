@@ -323,7 +323,14 @@ namespace Mono {
             MonoObject* ret = pInvoke(mGetName, obj, nullptr, &exc);
             if (exc || !ret) return;
             char* u = pStrUtf8(ret);
-            if (u) { strncpy_s(out, cap, u, _TRUNCATE); pFree(u); }
+            if (u) {
+                strncpy_s(out, cap, u, _TRUNCATE);
+                pFree(u);
+                // "ZombiePrefab(Clone)" -> "Zombie" (legivel no ESP)
+                char* p;
+                while ((p = strstr(out, "(Clone)")) != nullptr) memmove(p, p + 7, strlen(p + 7) + 1);
+                while ((p = strstr(out, "Prefab")) != nullptr) memmove(p, p + 6, strlen(p + 6) + 1);
+            }
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 
@@ -380,7 +387,7 @@ namespace Mono {
                 float dx = wh.x - camW.x, dy = wh.y - camW.y, dz = wh.z - camW.z;
                 if (dx * dx + dy * dy + dz * dz > maxD2) return;
             }
-            wh.y += 0.30f; // eyeRef fica nos olhos: sobe ao topo da cabeca (em mundo = escala certa)
+            wh.y += 0.45f; // cabeca cubo grande: margem maior (print 02:30)
             wf.y -= 0.35f; // footRef alto: margem generosa ate calibrar pelo print (v0.7.1)
             if (!W2S(cam, wh, sh) || !W2S(cam, wf, sf)) return;
             if (n == 0) { s_dbgEyeY = wh.y; s_dbgFootY = wf.y; }
@@ -500,6 +507,7 @@ namespace Mono {
         s_dom = nullptr; s_img = nullptr;
     }
 }
+
 
 
 
