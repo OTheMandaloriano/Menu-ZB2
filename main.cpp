@@ -1,4 +1,4 @@
-#include "includes.h"
+﻿#include "includes.h"
 
 // ============================================================================
 // MAIN.CPP - Ponto de entrada + hook D3D11 Present/ResizeBuffers (ZB2 Menu)
@@ -93,7 +93,7 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
 
 // WndProc: INSERT/DELETE alterna; cursor fix devolve controle ao jogo fechado.
 static LRESULT CALLBACK hkWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    if (uMsg == WM_KEYDOWN && (wParam == VK_INSERT || wParam == VK_DELETE)) {
+    if (uMsg == WM_KEYDOWN && ((int)wParam == Config::iMenuKey || wParam == VK_DELETE)) {
         Config::bMenuOpen = !Config::bMenuOpen;
         // Cursor fix: menu fechado -> jogo volta a capturar o mouse.
         ImGuiIO& io = ImGui::GetIO();
@@ -197,3 +197,4 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved) {
     }
     return TRUE;
 }
+

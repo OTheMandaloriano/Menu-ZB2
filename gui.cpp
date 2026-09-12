@@ -1,4 +1,4 @@
-#include "gui.h"
+﻿#include "gui.h"
 #include "config.h"
 #include "log.h"
 #include "classes.h"
@@ -284,6 +284,72 @@ namespace GUI {
         dl->AddText(ImVec2(origin.x + 8, origin.y + size.y - 18), IM_COL32(150, 150, 160, 255), hpb);
     }
 
+    // ---- Hotkeys com modal (Fase 1 item 3) ----
+    // OBJETIVO: clique no botao -> modal captura a proxima tecla/mouse. ESC cancela.
+    static int* s_capKey = nullptr;
+
+    static void KeyName(int vk, char* out, size_t cap) {
+        const char* mouse = nullptr;
+        switch (vk) {
+        case VK_LBUTTON: mouse = "Mouse Left"; break;
+        case VK_RBUTTON: mouse = "Mouse Right"; break;
+        case VK_MBUTTON: mouse = "Mouse Mid"; break;
+        case VK_XBUTTON1: mouse = "Mouse X1"; break;
+        case VK_XBUTTON2: mouse = "Mouse X2"; break;
+        }
+        if (mouse) { strncpy_s(out, cap, mouse, _TRUNCATE); return; }
+        UINT sc = MapVirtualKeyA((UINT)vk, MAPVK_VK_TO_VSC);
+        if (sc == 0) { _snprintf_s(out, cap, _TRUNCATE, "VK 0x%02X", vk); return; }
+        LONG l = (LONG)(sc << 16);
+        if (vk == VK_INSERT || vk == VK_DELETE || vk == VK_HOME || vk == VK_END ||
+            vk == VK_PRIOR || vk == VK_NEXT || vk == VK_LEFT || vk == VK_UP ||
+            vk == VK_RIGHT || vk == VK_DOWN || vk == VK_NUMLOCK)
+            l |= (1 << 24); // extended bit p/ nomes corretos
+        if (GetKeyNameTextA(l, out, (int)cap) == 0)
+            _snprintf_s(out, cap, _TRUNCATE, "VK 0x%02X", vk);
+    }
+
+    // Botao de hotkey: mostra a tecla atual; clicando abre o modal de captura.
+    static void HotkeyButton(const char* label, int* vk, const char* tip) {
+        ImGui::PushID(label);
+        ImGui::Text("%s", label);
+        ImGui::SameLine(230);
+        char nm[64] = { 0 };
+        KeyName(*vk, nm, sizeof(nm));
+        if (ImGui::Button(nm, ImVec2(150, 0))) {
+            s_capKey = vk;
+            ImGui::OpenPopup("hotkey_modal");
+        }
+        if (tip) Tip(tip);
+        if (ImGui::BeginPopupModal("hotkey_modal", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::Text("Pressione a tecla para: %s", label);
+            ImGui::TextDisabled("ESC cancela. Mouse tambem vale.");
+            // Captura a primeira tecla RECEM-pressionada (borda de subida).
+            static bool prev[256] = { false };
+            bool cur[256] = { false };
+            for (int v = 1; v < 256; ++v)
+                cur[v] = (GetAsyncKeyState(v) & 0x8000) != 0;
+            for (int v = 1; v < 256; ++v) {
+                if (cur[v] && !prev[v]) {
+                    if (v != VK_ESCAPE && s_capKey)
+                        *s_capKey = v;
+                    s_capKey = nullptr;
+                    ImGui::CloseCurrentPopup();
+                    break;
+                }
+            }
+            memcpy(prev, cur, sizeof(prev));
+            if (ImGui::Button("Cancelar")) {
+                s_capKey = nullptr;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        } else if (s_capKey == vk) {
+            s_capKey = nullptr; // modal fechado por fora: solta a captura
+        }
+        ImGui::PopID();
+    }
+
     void RenderOverlay() {
         if (!g_bInit) return;
         ImDrawList* dl = ImGui::GetBackgroundDrawList();
@@ -455,12 +521,16 @@ namespace GUI {
             }
             // ---- 4 SETTINGS ----
             if (ImGui::BeginTabItem("SETTINGS")) {
+                ImGui::Text("HOTKEYS (clique e pressione a tecla)");
+                HotkeyButton("Menu", &Config::iMenuKey, "Abre/fecha o menu (DELETE sempre funciona).");
+                HotkeyButton("Aim Key", &Config::iAimKey, "Tecla do aimbot.");
+                HotkeyButton("Enemy Magnet", &Config::iMagnetKey, "Ativa/posiciona o magnet (H).");
+                HotkeyButton("Item Magnet", &Config::iItemMagnetKey, "Ativa/posiciona o item magnet (J).");
+                ImGui::Separator();
                 ImGui::Checkbox("Watermark", &Config::bWatermark);
                 ImGui::Checkbox("Debug Overlay", &Config::bDebugOverlay);
                 ImGui::Checkbox("Tooltips", &Config::bTooltips);
-                ImGui::Text("Hotkeys: clique e pressione a tecla (Fase 1.3).");
                 ImGui::Text("Configs JSON em Documents\\<DLL> (Fase 1.4).");
-                ImGui::TextDisabled("Menu: INSERT/DELETE. Aim: RBUTTON. Magnet: H. Item: J.");
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();
@@ -468,3 +538,4 @@ namespace GUI {
         ImGui::End();
     }
 }
+

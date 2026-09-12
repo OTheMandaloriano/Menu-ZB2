@@ -1,17 +1,18 @@
 # CHANGELOG.md (ZB2 Menu)
 
+## [v0.3.0] - 2026-09-12
+- feat: sistema de hotkeys com modal (Fase 1 item 3)
+- HotkeyButton(): modal captura proxima tecla/mouse (borda de subida), ESC cancela
+- Nomes via GetKeyNameTextA + labels p/ botoes do mouse; WndProc usa Config::iMenuKey (DELETE de fallback)
+- Hotkeys: Menu, Aim, Enemy Magnet, Item Magnet na aba SETTINGS
+- Build Release|x64 0 erros (DLL SHA a70a5c12)
+
 ## [v0.2.1] - 2026-09-12
-- fix: corrige ordem de inicializacao (janela ANTES do hook Present) + guarda !g_hWindow no hkPresent
-- Causa (diagnostico do operador): bind(8) antes de GetProcessWindow -> ImGui com HWND nulo -> DisplaySize (0,0) -> menu invisivel, cursor visivel
-- Build Release|x64 0 erros (DLL SHA d48ff275)
-- Incidente: eject remoto via FreeLibrary com hook ativo derrubou o jogo -> updates exigem restart do jogo
+- fix: ordem janela-antes-do-hook + guarda !g_hWindow (menu invisivel) - TESTADO OK
+- Incidente: eject remoto com hook ativo derrubou o jogo -> updates exigem restart
 
 ## [v0.2.0] - 2026-09-12
-- feat: injetor C++ automatico (injector/injector.cpp + injector.vcxproj)
-- Auto-localizacao da DLL, deteccao de update, LoadLibrary remoto, validacoes
-- Teste in-game: PID 25388, HMODULE remoto OK, hook + GUI + WndProc no log
+- feat: injetor C++ automatico (LoadLibrary remoto, validacoes) - TESTADO OK
 
 ## [v0.1.0] - 2026-09-12
-- feat: base D3D11 a partir de kiero-dx9-base (GitHub) adaptada p/ Unity 6 Mono x64
-- Hook Present (8) + ResizeBuffers (13), ImGui 1.89.9 DX11, menu 4 abas
-- Preview interativo drag-and-drop + health bar auto-orientada + cor por HP
+- feat: base D3D11 adaptada p/ Unity 6 Mono x64, menu 4 abas, preview drag-and-drop
