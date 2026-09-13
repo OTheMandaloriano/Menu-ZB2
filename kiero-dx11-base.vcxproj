@@ -61,6 +61,7 @@
       <ConformanceMode>false</ConformanceMode>
       <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)kiero;$(ProjectDir)kiero\minhook\include;$(ProjectDir)imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -79,6 +80,7 @@
       <ConformanceMode>false</ConformanceMode>
       <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)kiero;$(ProjectDir)kiero\minhook\include;$(ProjectDir)imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -97,6 +99,8 @@
     <ClInclude Include="offsets.h" />
     <ClInclude Include="classes.h" />
     <ClInclude Include="gui.h" />
+    <ClInclude Include="esp_layout.h" />
+    <ClInclude Include="config_json.h" />
     <ClInclude Include="kiero\kiero.h" />
     <ClInclude Include="kiero\minhook\include\MinHook.h" />
     <ClInclude Include="imgui\imconfig.h" />
@@ -111,6 +115,7 @@
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="gui.cpp" />
+    <ClCompile Include="esp_layout.cpp" />
     <ClCompile Include="log.cpp" />
     <ClCompile Include="mono.cpp" />
     <ClCompile Include="kiero\kiero.cpp" />

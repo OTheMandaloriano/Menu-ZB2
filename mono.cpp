@@ -418,7 +418,7 @@ namespace Mono {
 
     // Monta snapshot do ESP (zumbis). Roda na worker 30Hz, nao por frame.
     static void BuildEsp() {
-        EspEntry tmp[128];
+        EspEntry tmp[128] = {};
         int n = 0;
         if (!Config::bZombieEsp || !mGetPos || !mW2S || !mGetTrans) return;
         // MainCamera.instance (static) -> cam@32 (UnityEngine.Camera).
@@ -470,7 +470,7 @@ namespace Mono {
             if (!alive) { s_ghostDead++; return; }
             void* zo = ReadP(e, Off::Z_obj);
             if (!zo) return;
-            EspEntry tmpEn; // nome antes dos Transforms (barato, 1 invoke)
+            EspEntry tmpEn = {}; // nome antes dos Transforms (barato, 1 invoke)
             GetName(zo, tmpEn.name, sizeof(tmpEn.name));
             for (int k = 0; k < 8; ++k) { tmpEn.pv[k] = false; tmpEn.px[k] = tmpEn.py[k] = 0; }
             tmpEn.has3d = false;

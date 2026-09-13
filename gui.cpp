@@ -1,4 +1,7 @@
-﻿#include "gui.h"
+﻿#include "esp_layout.h"
+#include "config_json.h"
+#include <cmath>
+#include "gui.h"
 #include "config.h"
 #include "log.h"
 #include "classes.h"
@@ -119,19 +122,23 @@ namespace Config {
     int   iNameA = 1, iDistA = 7, iHpA = 0, iPctA = 5; // legado v2 (migracao)
     int   iSideN = 0, iSideD = 1, iSideH = 2, iSideP = 3; // topo, base, esq, dir
     int   iAlinN = 1, iAlinD = 1, iAlinH = 1, iAlinP = 1; // centro
-    int   iCfgVer = 2;
+    int   iCfgVer = 4;
     float fPropN = 0.05f, fPropD = 0.05f, fPropH = 0.06f, fPropP = 0.06f; // Pilar 2
     int   iLayoutMode = 0;
     int   iLayoutSide = 0;
-    float fLayoutOffset = 5.0f;
-    float fLayoutSpacing = 2.0f;
+    float fLayoutOffset = 4.0f;
+    float fLayoutSpacing = 3.0f;
     bool  bSnapGrid = true;
-    float fSnapSize = 5.0f;
+    float fSnapSize = 1.0f;
     bool  bShowGuides = true;
-    bool  bAlignList = false;
+    bool  bAlignList = true;
     int   iListDir = 0;
     float fListSpacing = 2.0f;
     float fPreviewHp = 87.0f;
+    float fAlongN = 0.5f, fAlongD = 0.5f, fAlongH = 0.5f, fAlongP = 0.5f;
+    float fGapN = 0.0f, fGapD = 0.0f, fGapH = 0.0f, fGapP = 0.0f;
+    int iOrderN = 0, iOrderD = 2, iOrderH = 0, iOrderP = 1;
+    float fBarLength = 1.0f, fBarThickness = 3.0f;
 
     bool  bEnemyMagnet = false;
     int   iMagnetKey = 0x48; // H
@@ -172,228 +179,303 @@ namespace GUI {
     static const char* kBoxType[3] = { "2D", "3D", "Corners" };
     static const char* kBossName[3] = { "Riot", "Queen", "Reaper" };
     static const char* kMagType[5] = { "Armas", "Municao", "Loot", "Caixas", "Todos" };
-    static const char* kLayout[3] = { "Personalizado", "Classico Esquerda", "Classico Direita" };
+    static char s_cfgName[64] = "default";
+    static char s_cfgStatus[128] = { 0 };
+    static EspLayout::Editor s_editor;
+    static bool s_editorReady = false;
+    static bool s_editorVisible = false;
+    static float s_previewBoxHeight = 112.0f;
+    static char s_previewName[96] = "Zombie";
+    static float s_previewDistance = 34.0f;
+    static EspLayout::Rect s_previewViewport;
+    static EspLayout::Rect s_previewBox;
+    static EspLayout::Result s_previewResult;
+    static void LoadConfig(const char* name);
+    static bool SaveConfig(const char* name);
 
-    // A07: presets preenchem o MESMO modelo do arraste (lado/alin/nudge/prop).
-    static void ApplyPreset(int p) {
-        if (p == 1) { // Classico Esquerda: barra esq, nome topo, dist base, % dir
-            Config::iSideN = 0; Config::iAlinN = 1; Config::fNameX = 0; Config::fNameY = -16;
-            Config::iSideD = 1; Config::iAlinD = 1; Config::fDistX = 0; Config::fDistY = 4;
-            Config::iSideH = 2; Config::iAlinH = 1; Config::fHpX = -6; Config::fHpY = 0;
-            Config::iSideP = 3; Config::iAlinP = 1; Config::fPctX = 4; Config::fPctY = 0;
-        } else if (p == 2) { // Classico Direita: espelho
-            Config::iSideN = 0; Config::iAlinN = 1; Config::fNameX = 0; Config::fNameY = -16;
-            Config::iSideD = 1; Config::iAlinD = 1; Config::fDistX = 0; Config::fDistY = 4;
-            Config::iSideH = 3; Config::iAlinH = 1; Config::fHpX = 6; Config::fHpY = 0;
-            Config::iSideP = 2; Config::iAlinP = 1; Config::fPctX = -4; Config::fPctY = 0;
+
+    static bool ValidConfigPath(const char* directory, const char* name) {
+        if (!directory || !directory[0] || !name || !name[0]) return false;
+        if (std::strlen(name) >= sizeof(s_cfgName) || std::strlen(directory) + std::strlen(name) + 32 >= MAX_PATH) return false;
+        for (const unsigned char* p = reinterpret_cast<const unsigned char*>(name); *p; ++p) {
+            if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || *p == '_' || *p == '-')) return false;
         }
-        Config::iLayoutMode = p;
+        return true;
     }
 
-    // P3: offsets do preview sao relativos ao box; clamp evita perder o elemento.
-    static void ClampOff(float& v) {
-        // Trava de respiro: nenhum elemento se afasta mais que 25px da entidade.
-        if (v < -25.0f) v = -25.0f;
-        if (v >  25.0f) v =  25.0f;
+
+    static EspLayout::Model ReadLayout() {
+        using namespace Config;
+        EspLayout::Model model;
+        const int sides[4] = { iSideN, iSideD, iSideH, iSideP };
+        const float along[4] = { fAlongN, fAlongD, fAlongH, fAlongP };
+        const float gaps[4] = { fGapN, fGapD, fGapH, fGapP };
+        const int order[4] = { iOrderN, iOrderD, iOrderH, iOrderP };
+        const bool enabled[4] = { bZombieName, bZombieDist, bZombieHp, bZombiePct };
+        for (int i = 0; i < 4; ++i) model.items[i] = { sides[i], along[i], gaps[i], order[i], enabled[i] };
+        model.gap = fLayoutOffset;
+        model.spacing = fLayoutSpacing;
+        model.barLength = fBarLength;
+        model.barThickness = fBarThickness;
+        model.grid = bSnapGrid;
+        model.gridSize = fSnapSize;
+        model.stack = bAlignList;
+        model.horizontalText = iListDir == 1;
+        model.guides = bShowGuides;
+        model.skeleton = bZombieSkeleton;
+        model.headDot = bZombieHeadDot;
+        model.snapline = bZombieSnap;
+        model.boxStyle = iZombieBox;
+        model.preset = iLayoutMode;
+        EspLayout::Normalize(model);
+        return model;
     }
 
-    static float SnapF(float v, float grid) {
-        // A08: arredondamento simetrico e idempotente (snap(snap(x))==snap(x)).
-        if (!Config::bSnapGrid || grid <= 0.01f) return v;
-        float q = v / grid;
-        float r = (q >= 0.0f) ? floorf(q + 0.5f) : -floorf(-q + 0.5f);
-        return r * grid;
-    }
 
-    // Drop: lado pela borda mais proxima do centro (lado atual vence empates em 6px),
-    // alinhamento por t, nudge = sobra clampada em ±60. Sem salto: posicao preservada.
-    static ImVec2 PlaceEl(int side, int align, float ew, float eh, float gap, ImVec2 mn, ImVec2 mx);
-    static float ElGap(int side, float prop, float bw, float bh);
-    static void DropEl(int& side, int& al, float& nx, float& ny, float prop, float ew, float eh, float bw, float bh, ImVec2 dropTL) {
-        float cx = dropTL.x + ew * 0.5f, cy = dropTL.y + eh * 0.5f;
-        float d[4] = { fabsf(cy - 0.0f), fabsf(cy - bh), fabsf(cx - 0.0f), fabsf(cx - bw) };
-        if (side >= 0 && side < 4) d[side] -= 6.0f; // histerese
-        int ns = 0;
-        for (int i = 1; i < 4; ++i) if (d[i] < d[ns]) ns = i;
-        float t = 0.5f;
-        if (ns == 0 || ns == 1) t = bw > 0.01f ? cx / bw : 0.5f;
-        else t = bh > 0.01f ? cy / bh : 0.5f;
-        if (t < 0) t = 0; if (t > 1) t = 1;
-        int na = t < 0.33f ? 0 : (t > 0.66f ? 2 : 1);
-        ImVec2 mn = ImVec2(0, 0), mx = ImVec2(bw, bh);
-        float gap = ElGap(ns, prop, bw, bh);
-        ImVec2 base = PlaceEl(ns, na, ew, eh, gap, mn, mx);
-        side = ns; al = na;
-        nx = dropTL.x - base.x; ny = dropTL.y - base.y;
-        if (nx < -60) nx = -60; if (nx > 60) nx = 60;
-        if (ny < -60) ny = -60; if (ny > 60) ny = 60;
-    }
-
-    // Ancoras do ESP (0=TL 1=TC 2=TR 3=ML 4=MC 5=MR 6=BL 7=BC 8=BR).
-    static ImVec2 AnchorPt(int a, ImVec2 mn, ImVec2 mx) {
-        float cx = (mn.x + mx.x) * 0.5f, cy = (mn.y + mx.y) * 0.5f;
-        switch (a) {
-        case 0: return mn;
-        case 1: return ImVec2(cx, mn.y);
-        case 2: return ImVec2(mx.x, mn.y);
-        case 3: return ImVec2(mn.x, cy);
-        case 4: return ImVec2(cx, cy);
-        case 5: return ImVec2(mx.x, cy);
-        case 6: return ImVec2(mn.x, mx.y);
-        case 7: return ImVec2(cx, mx.y);
-        default: return ImVec2(mx.x, mx.y);
+    static void WriteLayout(EspLayout::Model model) {
+        using namespace Config;
+        EspLayout::Normalize(model);
+        int* sides[4] = { &iSideN, &iSideD, &iSideH, &iSideP };
+        int* align[4] = { &iAlinN, &iAlinD, &iAlinH, &iAlinP };
+        float* along[4] = { &fAlongN, &fAlongD, &fAlongH, &fAlongP };
+        float* gaps[4] = { &fGapN, &fGapD, &fGapH, &fGapP };
+        int* order[4] = { &iOrderN, &iOrderD, &iOrderH, &iOrderP };
+        bool* enabled[4] = { &bZombieName, &bZombieDist, &bZombieHp, &bZombiePct };
+        for (int i = 0; i < 4; ++i) {
+            *sides[i] = model.items[i].side;
+            *along[i] = model.items[i].position;
+            *align[i] = static_cast<int>(model.items[i].position * 2.0f + 0.5f);
+            *gaps[i] = model.items[i].extraGap;
+            *order[i] = model.items[i].order;
+            *enabled[i] = model.items[i].enabled;
         }
-    }
-    static const char* AnchorName(int a) {
-        static const char* n[9] = { "TL","TC","TR","ML","MC","MR","BL","BC","BR" };
-        return (a >= 0 && a < 9) ? n[a] : "?";
-    }
-    // Ao soltar: ancora mais proxima + offset (posicao relativa ao box, qualquer tamanho).
-    static void SnapEl(int& anchor, float& ox, float& oy, float bw, float bh) {
-        if (bw < 0.01f || bh < 0.01f) return;
-        ImVec2 oldP = AnchorPt(anchor, ImVec2(0, 0), ImVec2(bw, bh));
-        float posX = oldP.x + ox, posY = oldP.y + oy; // posicao absoluta atual
-        float rx = posX / bw, ry = posY / bh;
-        int col = rx < 0.33f ? 0 : (rx > 0.66f ? 2 : 1);
-        int row = ry < 0.33f ? 0 : (ry > 0.66f ? 2 : 1);
-        int na = row * 3 + col;
-        ImVec2 np = AnchorPt(na, ImVec2(0, 0), ImVec2(bw, bh));
-        anchor = na;
-        ox = posX - np.x; // mantem o visual: offset = pos - novaAncora
-        oy = posY - np.y;
-        ClampOff(ox); ClampOff(oy); // drop fora nao perde o elemento
+        fLayoutOffset = model.gap;
+        fLayoutSpacing = model.spacing;
+        fBarLength = model.barLength;
+        fBarThickness = model.barThickness;
+        bSnapGrid = model.grid;
+        fSnapSize = model.gridSize;
+        bAlignList = model.stack;
+        iListDir = model.horizontalText ? 1 : 0;
+        bShowGuides = model.guides;
+        bZombieSkeleton = model.skeleton;
+        bZombieHeadDot = model.headDot;
+        bZombieSnap = model.snapline;
+        iZombieBox = model.boxStyle;
+        iLayoutMode = model.preset;
+        fNameX = fNameY = fDistX = fDistY = fHpX = fHpY = fPctX = fPctY = 0.0f;
+        fPropN = fPropD = fPropH = fPropP = 0.0f;
+        iCfgVer = 4;
     }
 
-    // P3: drag pelo cursor do Windows (GetCursorPos) - funciona mesmo se o
-    // MouseDelta do ImGui estiver zerado (Raw Input do jogo) ou instavel.
-    struct DragCap { bool active = false; bool released = false; POINT start; float ox = 0, oy = 0; };
-    static DragCap s_capName, s_capDist, s_capHp, s_capPct;
 
-    // P3: durante o drag, prende o cursor na janela (soltar fora = drop invalido).
-    static void DragClip(bool on) {
-        if (!s_hWnd) return;
-        if (on) {
-            RECT r;
-            if (!GetClientRect(s_hWnd, &r)) return;
-            POINT ul = { r.left, r.top }, lr = { r.right, r.bottom };
-            ClientToScreen(s_hWnd, &ul);
-            ClientToScreen(s_hWnd, &lr);
-            r.left = ul.x; r.top = ul.y; r.right = lr.x; r.bottom = lr.y;
-            ClipCursor(&r);
-        } else {
-            if (!s_capName.active && !s_capDist.active && !s_capHp.active && !s_capPct.active)
-                ClipCursor(nullptr);
-        }
-    }
-
-    static DragCap* s_dragOwner = nullptr; // A09: captura unica (sobreposicao resolve por ordem)
-
-    static void DragWin(const char* id, ImVec2 r0, ImVec2 r1, float* px, float* py, DragCap& cap, const char* tag = nullptr) {
-        bool hov = ImGui::IsMouseHoveringRect(r0, r1);
-        if (hov && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !cap.active && !s_dragOwner) {
-            cap.active = true;
-            s_dragOwner = &cap;
-            GetCursorPos(&cap.start);
-            cap.ox = *px; cap.oy = *py;
-            DragClip(true);
-        }
-        if (cap.active) {
-            if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-                cap.active = false;
-                cap.released = true; // chamador faz SnapEl
-                if (s_dragOwner == &cap) s_dragOwner = nullptr;
-                DragClip(false);
-            } else if (s_dragOwner != &cap) {
-                cap.active = false; // outro dono assumiu: solta sem confirmar
-                if (s_dragOwner == &cap) s_dragOwner = nullptr;
-            } else {
-                POINT c;
-                GetCursorPos(&c);
-                *px = SnapF(cap.ox + (float)(c.x - cap.start.x), Config::fSnapSize);
-                *py = SnapF(cap.oy + (float)(c.y - cap.start.y), Config::fSnapSize);
-                ClampOff(*px); ClampOff(*py); // P3: clamp com auto-ajuste
-            }
-        }
-        if (hov) {
-            if (tag) ImGui::SetTooltip("%s [%s] (arraste)", id, tag);
-            else ImGui::SetTooltip("%s (arraste)", id);
-        }
-    }
-
-    static bool HpHorizAnchor(int a) {
-        // Legado: orientacao agora vem do LADO (PlaceEl). Mantido p/ compat.
-        return (a == 1 || a == 7);
-    }
-
-    // Layout lado+alinhamento (SSOT preview+jogo). side:0=topo 1=base 2=esq 3=dir.
-    // align: 0=inicio 1=centro 2=fim. Retorna o CANTO SUPERIOR ESQUERDO do
-    // retangulo do elemento (ew,eh medidos), totalmente fora do box + gap.
-    static ImVec2 PlaceEl(int side, int align, float ew, float eh, float gap, ImVec2 mn, ImVec2 mx) {
-        if (side < 0 || side > 3) side = 0;
-        if (align < 0 || align > 2) align = 1;
-        float x, y;
-        if (side == 0) {
-            y = mn.y - gap - eh;
-            x = align == 0 ? mn.x : (align == 1 ? (mn.x + mx.x) * 0.5f - ew * 0.5f : mx.x - ew);
-        } else if (side == 1) {
-            y = mx.y + gap;
-            x = align == 0 ? mn.x : (align == 1 ? (mn.x + mx.x) * 0.5f - ew * 0.5f : mx.x - ew);
-        } else if (side == 2) {
-            x = mn.x - gap - ew;
-            y = align == 0 ? mn.y : (align == 1 ? (mn.y + mx.y) * 0.5f - eh * 0.5f : mx.y - eh);
-        } else {
-            x = mx.x + gap;
-            y = align == 0 ? mn.y : (align == 1 ? (mn.y + mx.y) * 0.5f - eh * 0.5f : mx.y - eh);
-        }
-        return ImVec2(x, y);
-    }
-    // Gap = 8px minimos + extra proporcional (lado esq/dir usa largura, resto altura).
-    static float ElGap(int side, float prop, float bw, float bh) {
-        float ref = (side == 2 || side == 3) ? bw : bh;
-        if (ref < 1.0f) ref = 1.0f;
-        float g = 8.0f + (prop > 0.0f ? prop * ref : 0.0f);
-        if (g > 68.0f) g = 68.0f;
-        return g;
-    }
-    static bool BarHorizSide(int side) { return side == 0 || side == 1; }
-
-    // Pilar 2: offset hibrido = base (usuario) + extra proporcional clampado.
-    // ref = largura (ancoras laterais) ou altura (demais). extra=0 se prop=0.
-    static ImVec2 HybridPos(int anchor, float baseX, float baseY, float prop, float minE, float maxE, ImVec2 mn, ImVec2 mx) {
-        ImVec2 ap = AnchorPt(anchor, mn, mx);
-        // Laterais E cantos usam largura; topo/base/centro usam altura.
-        bool useW = (anchor == 3 || anchor == 5 || anchor == 0 || anchor == 2 || anchor == 6 || anchor == 8);
-        float ref = useW ? (mx.x - mn.x) : (mx.y - mn.y);
-        if (ref < 1.0f) ref = 1.0f;
-        // Respiro minimo escala com a distancia: 4px longe, ate 15px perto.
-        float minResp = ref * 0.15f;
-        if (minResp < 4.0f) minResp = 4.0f;
-        if (minResp > 15.0f) minResp = 15.0f;
-        (void)minE; // min de tabela absorvido pelo minResp dinamico
-        float extra = prop * ref;
-        if (prop <= 0.0f) extra = 0.0f; // kill switch: prop 0 = sem respiro
-        else { if (extra < minResp) extra = minResp; if (extra > maxE) extra = maxE; }
-        int col = anchor % 3, row = anchor / 3;
-        float dx = col == 0 ? -1.0f : (col == 2 ? 1.0f : 0.0f);
-        float dy = row == 0 ? -1.0f : (row == 2 ? 1.0f : 0.0f);
-        // Base do usuario contida no envelope seguro.
-        float bx = baseX < -25.0f ? -25.0f : (baseX > 25.0f ? 25.0f : baseX);
-        float by = baseY < -25.0f ? -25.0f : (baseY > 25.0f ? 25.0f : baseY);
-        return ImVec2(ap.x + bx + dx * extra, ap.y + by + dy * extra);
-    }
-
-    // Pilar 6: base calibrada de fabrica (v2). Zera Nome/% (sem colisao),
-    // barra no TOPO da lateral (acompanha qualquer altura), % independente.
     static void ApplyFactoryDefaults() {
-        Config::iNameA = 1; Config::fNameX = 0.0f; Config::fNameY = -16.0f; Config::fPropN = 0.05f; // TC
-        Config::iDistA = 7; Config::fDistX = 0.0f; Config::fDistY = 4.0f;   Config::fPropD = 0.05f; // BC
-        Config::iHpA = 0;   Config::fHpX = -6.0f;  Config::fHpY = 0.0f;    Config::fPropH = 0.06f; // TL: topo com topo
-        Config::iPctA = 5;  Config::fPctX = 4.0f;  Config::fPctY = 0.0f;   Config::fPropP = 0.06f; // MR
-        Config::iCfgVer = 2;
+        WriteLayout(EspLayout::Preset(1));
     }
 
-    static void LoadConfig(const char* name); // forward (definida abaixo)
-    static bool SaveConfig(const char* name); // forward (definida abaixo)
+
+    static void CloseLayoutEditor() {
+        EspLayout::CancelDrag(s_editor);
+        s_editorReady = false;
+        s_editorVisible = false;
+    }
+
+
+    static bool SaveLayoutDraft() {
+        EspLayout::CancelDrag(s_editor);
+        EspLayout::Model before = ReadLayout();
+        WriteLayout(s_editor.draft);
+        if (SaveConfig(s_cfgName)) { s_editor.dirty = false; return true; }
+        WriteLayout(before);
+        return false;
+    }
+
+
+    static EspLayout::Model VisibleLayout() {
+        if (s_editorVisible && s_editorReady) {
+            if (s_editor.active >= 0 && s_editor.moved && s_editor.candidateValid) return s_editor.candidate;
+            return s_editor.draft;
+        }
+        return ReadLayout();
+    }
+
+
+    static EspLayout::Content LayoutContent(const char* name, float distance, float hp, float maxHp) {
+        EspLayout::Content content;
+        char buffer[64];
+        content.text[EspLayout::Name] = name ? name : "";
+        _snprintf_s(buffer, _TRUNCATE, "%.0fm", static_cast<double>(EspLayout::Clamp(distance, 0.0f, 999999.0f, 0.0f)));
+        content.text[EspLayout::Distance] = buffer;
+        content.healthAvailable = std::isfinite(maxHp) && maxHp > 0.0f && std::isfinite(hp);
+        content.health = content.healthAvailable ? EspLayout::Clamp(hp / maxHp, 0.0f, 1.0f, 0.0f) : 0.0f;
+        _snprintf_s(buffer, _TRUNCATE, "%.0f%%", static_cast<double>(content.health * 100.0f));
+        content.text[EspLayout::Percent] = buffer;
+        return content;
+    }
+
+
+    static EspLayout::Style LayoutStyle(float health) {
+        EspLayout::Style style;
+        style.font = ImGui::GetFont();
+        style.fontSize = style.font->FontSize * ImGui::GetIO().FontGlobalScale;
+        style.color[EspLayout::Name] = ImGui::GetColorU32(ImVec4(Config::colZombieNameVis[0], Config::colZombieNameVis[1], Config::colZombieNameVis[2], Config::colZombieNameVis[3]));
+        style.color[EspLayout::Distance] = ImGui::GetColorU32(ImVec4(Config::colZombieDistVis[0], Config::colZombieDistVis[1], Config::colZombieDistVis[2], Config::colZombieDistVis[3]));
+        style.boxColor = ImGui::GetColorU32(ImVec4(Config::colZombieVis[0], Config::colZombieVis[1], Config::colZombieVis[2], Config::colZombieVis[3]));
+        float color[4];
+        HpColor(health * 100.0f, color);
+        style.color[EspLayout::Health] = ImGui::GetColorU32(ImVec4(color[0], color[1], color[2], color[3]));
+        return style;
+    }
+
+
+    void DrawEspPreview(ImVec2 origin, ImVec2 size) {
+        if (!s_editorReady) { EspLayout::Reset(s_editor, ReadLayout()); s_editorReady = true; }
+        float h = s_previewBoxHeight;
+        ImVec2 center(origin.x + size.x * 0.5f, origin.y + size.y * 0.5f);
+        s_previewViewport = { ImVec2(origin.x + 5.0f, origin.y + 5.0f), ImVec2(origin.x + size.x - 5.0f, origin.y + size.y - 5.0f) };
+        s_previewBox = { ImVec2(center.x - h * 0.3f, center.y - h * 0.5f), ImVec2(center.x + h * 0.3f, center.y + h * 0.5f) };
+        auto content = LayoutContent(s_previewName, s_previewDistance, Config::fPreviewHp, 100.0f);
+        auto style = LayoutStyle(content.health);
+        EspLayout::Input input;
+        input.mouse = ImGui::GetIO().MousePos;
+        input.pressed = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+        input.down = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+        input.released = ImGui::IsMouseReleased(ImGuiMouseButton_Left);
+        input.hovered = ImGui::IsItemHovered();
+        input.cancel = ImGui::GetIO().AppFocusLost || ImGui::IsKeyPressed(ImGuiKey_Escape, false);
+        s_previewResult = EspLayout::Update(s_editor, s_previewBox, s_previewViewport, content, style, input);
+        ImDrawList* draw = ImGui::GetWindowDrawList();
+        EspLayout::Model model = s_editor.active >= 0 && s_editor.moved && s_editor.candidateValid ? s_editor.candidate : s_editor.draft;
+        EspLayout::DrawPreview(draw, { origin, ImVec2(origin.x + size.x, origin.y + size.y) }, s_previewResult, model, style, s_editor.selected, s_editor.active >= 0, s_editor.candidateValid);
+        draw->PushClipRect(s_previewViewport.min, s_previewViewport.max, true);
+        EspLayout::Draw(draw, s_previewResult, content, style);
+        draw->PopClipRect();
+        if (input.hovered && s_editor.active < 0) {
+            int hit = EspLayout::HitTest(s_previewResult, input.mouse, s_editor.selected);
+            if (hit >= 0) ImGui::SetTooltip("%s: arraste para uma das quatro bordas.", EspLayout::ElementName(hit));
+        }
+    }
+
+
+    static void DrawLayoutEditor() {
+        s_editorVisible = true;
+        if (!s_editorReady) { EspLayout::Reset(s_editor, ReadLayout()); s_editorReady = true; }
+        auto& model = s_editor.draft;
+        ImGui::Checkbox("ESP Zumbis", &Config::bZombieEsp);
+        ImGui::SameLine();
+        ImGui::TextDisabled("Organize os elementos ao redor do box");
+        static const char* presets[] = { "Personalizado", "Classico esquerda", "Classico direita", "Vida acima", "Vida abaixo", "Tudo a esquerda", "Tudo a direita", "Tudo acima", "Tudo abaixo", "Cantos esquerda", "Cantos direita" };
+        int preset = model.preset;
+        ImGui::SetNextItemWidth(220.0f);
+        if (ImGui::Combo("Layout", &preset, presets, 11)) {
+            EspLayout::CancelDrag(s_editor);
+            if (preset > 0) {
+                EspLayout::Model replacement = EspLayout::Preset(preset);
+                for (int i = 0; i < EspLayout::Count; ++i) replacement.items[i].enabled = model.items[i].enabled;
+                replacement.guides = model.guides;
+                replacement.boxStyle = model.boxStyle;
+                replacement.skeleton = model.skeleton;
+                replacement.headDot = model.headDot;
+                replacement.snapline = model.snapline;
+                model = replacement;
+            } else model.preset = 0;
+            s_editor.dirty = true;
+        }
+        if (ImGui::GetContentRegionAvail().x >= 540.0f) ImGui::SameLine();
+        if (ImGui::Button("Salvar layout")) {
+            SaveLayoutDraft();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancelar")) EspLayout::Reset(s_editor, ReadLayout());
+        ImGui::TextDisabled("%s", s_editor.dirty ? "Rascunho: alteracoes ainda nao salvas" : "Layout salvo");
+        if (s_cfgStatus[0]) ImGui::TextWrapped("%s", s_cfgStatus);
+
+        float maxExtra = 0.0f;
+        for (const auto& item : model.items) if (item.extraGap > maxExtra) maxExtra = item.extraGap;
+        float reserve = model.gap + maxExtra + model.barThickness + model.spacing * 3.0f + LayoutStyle(1.0f).fontSize * 3.0f + 16.0f;
+        float canvasHeight = s_previewBoxHeight + reserve * 2.0f;
+        if (canvasHeight < 260.0f) canvasHeight = 260.0f;
+        float available = ImGui::GetContentRegionAvail().x;
+        bool columns = available >= 730.0f && ImGui::BeginTable("layout_columns", 2, ImGuiTableFlags_SizingFixedFit);
+        if (columns) { ImGui::TableSetupColumn("preview", ImGuiTableColumnFlags_WidthFixed, 420.0f); ImGui::TableSetupColumn("inspector", ImGuiTableColumnFlags_WidthStretch); ImGui::TableNextColumn(); }
+        ImVec2 size(available < 420.0f ? available : 420.0f, canvasHeight);
+        ImVec2 origin = ImGui::GetCursorScreenPos();
+        ImGui::InvisibleButton("esp_preview_canvas", size);
+        DrawEspPreview(origin, size);
+        ImGui::TextDisabled("Arraste ao redor do box. Esc cancela o arraste.");
+        if (s_editor.active >= 0 && s_editor.moved && !s_editor.candidateValid) ImGui::TextColored(ImVec4(1, 0.6f, 0.4f, 1), "Destino invalido: solte para voltar.");
+        if (!s_previewResult.valid) ImGui::TextWrapped("Amplie a janela ou reduza o tamanho do box para editar este layout.");
+        if (columns) ImGui::TableNextColumn();
+        EspLayout::Model beforeControls = model;
+        bool changed = false;
+        ImGui::Text("ELEMENTO SELECIONADO");
+        static const char* elements[] = { "Nome", "Distancia", "Barra de vida", "Porcentagem" };
+        ImGui::SetNextItemWidth(190.0f);
+        ImGui::Combo("Elemento", &s_editor.selected, elements, 4);
+        auto& item = model.items[s_editor.selected];
+        changed |= ImGui::Checkbox("Exibir elemento", &item.enabled);
+        static const char* sides[] = { "Acima", "Abaixo", "Esquerda", "Direita" };
+        ImGui::SetNextItemWidth(160.0f);
+        changed |= ImGui::Combo("Lado", &item.side, sides, 4);
+        int align = std::fabs(item.position) < 0.01f ? 0 : std::fabs(item.position - 0.5f) < 0.01f ? 1 : std::fabs(item.position - 1.0f) < 0.01f ? 2 : 3;
+        const char* horizontal[] = { "Esquerda", "Centro", "Direita", "Livre" };
+        const char* vertical[] = { "Topo", "Centro", "Base", "Livre" };
+        ImGui::SetNextItemWidth(160.0f);
+        if (ImGui::Combo("Alinhamento", &align, EspLayout::IsHorizontal(item.side) ? horizontal : vertical, 4) && align < 3) { item.position = align * 0.5f; changed = true; }
+        ImGui::SetNextItemWidth(160.0f);
+        changed |= ImGui::SliderFloat("Posicao na borda", &item.position, 0.0f, 1.0f, "%.2f");
+        ImGui::SetNextItemWidth(160.0f);
+        changed |= ImGui::SliderFloat("Afastamento extra", &item.extraGap, 0.0f, 12.0f, "%.0fpx");
+        if (s_editor.selected == EspLayout::Health) {
+            ImGui::SetNextItemWidth(160.0f);
+            changed |= ImGui::SliderFloat("Comprimento", &model.barLength, 0.25f, 1.0f, "%.2f");
+            ImGui::SetNextItemWidth(160.0f);
+            changed |= ImGui::SliderFloat("Espessura", &model.barThickness, 2.0f, 6.0f, "%.0fpx");
+            if (model.barLength > 0.99f) ImGui::TextWrapped("Com 100%%, inicio, centro e fim ocupam a borda inteira.");
+        } else {
+            ImGui::SetNextItemWidth(160.0f);
+            changed |= ImGui::SliderInt("Ordem no grupo", &item.order, 0, 3);
+        }
+        ImGui::Separator();
+        ImGui::SetNextItemWidth(160.0f);
+        changed |= ImGui::SliderFloat("Distancia do box", &model.gap, 2.0f, 12.0f, "%.0fpx");
+        ImGui::SetNextItemWidth(160.0f);
+        changed |= ImGui::SliderFloat("Espaco entre itens", &model.spacing, 2.0f, 8.0f, "%.0fpx");
+        changed |= ImGui::Checkbox("Agrupar textos alinhados", &model.stack);
+        changed |= ImGui::Checkbox("Linha no topo/base", &model.horizontalText);
+        changed |= ImGui::Checkbox("Encaixar na grade", &model.grid);
+        if (model.grid) {
+            ImGui::SetNextItemWidth(160.0f);
+            changed |= ImGui::SliderFloat("Passo da grade", &model.gridSize, 1.0f, 10.0f, "%.0fpx");
+        }
+        changed |= ImGui::Checkbox("Guias", &model.guides);
+        if (changed) {
+            EspLayout::CancelDrag(s_editor);
+            EspLayout::Normalize(model);
+            auto content = LayoutContent(s_previewName, s_previewDistance, Config::fPreviewHp, 100.0f);
+            auto candidate = EspLayout::Resolve(model, s_previewBox, s_previewViewport, content, LayoutStyle(content.health));
+            if (candidate.valid) { s_editor.dirty = true; model.preset = 0; }
+            else { model = beforeControls; _snprintf_s(s_cfgStatus, _TRUNCATE, "Sem espaco nessa combinacao. Amplie o canvas ou reduza o afastamento."); }
+        }
+        if (columns) ImGui::EndTable();
+        if (ImGui::CollapsingHeader("Simulacao e aparencia do preview")) {
+            ImGui::SetNextItemWidth(180.0f);
+            ImGui::InputText("Nome de exemplo", s_previewName, sizeof(s_previewName));
+            ImGui::SetNextItemWidth(180.0f);
+            ImGui::SliderFloat("Altura do box", &s_previewBoxHeight, 32.0f, 180.0f, "%.0fpx");
+            ImGui::SetNextItemWidth(180.0f);
+            ImGui::SliderFloat("HP simulado", &Config::fPreviewHp, 0.0f, 100.0f, "%.0f%%");
+            ImGui::SetNextItemWidth(180.0f);
+            ImGui::SliderFloat("Distancia simulada", &s_previewDistance, 1.0f, 9999.0f, "%.0fm");
+            if (ImGui::Combo("Tipo de box", &model.boxStyle, kBoxType, 3)) s_editor.dirty = true;
+            if (ImGui::Checkbox("Skeleton", &model.skeleton)) s_editor.dirty = true;
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Head Dot", &model.headDot)) s_editor.dirty = true;
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Snapline", &model.snapline)) s_editor.dirty = true;
+        }
+    }
+
 
     void Initialize(HWND hWindow, ID3D11Device* pDevice, ID3D11DeviceContext* pContext) {
         if (g_bInit) return;
@@ -411,13 +493,13 @@ namespace GUI {
         ImGui::StyleColorsDark();
         ImGui_ImplWin32_Init(hWindow);
         ImGui_ImplDX11_Init(pDevice, pContext);
-        // Correcao 2: config valida ja na injecao (fabrica v2 se legado/ausente).
         LoadConfig("default");
         g_bInit = true;
     }
 
     void Shutdown() {
         if (!g_bInit) return;
+        CloseLayoutEditor();
         ImGui_ImplDX11_Shutdown();
         ImGui_ImplWin32_Shutdown();
         ImGui::DestroyContext();
@@ -428,125 +510,6 @@ namespace GUI {
         if (!Config::bTooltips || !t) return;
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
             ImGui::SetTooltip("%s", t);
-    }
-
-    // Preview interativo: box fixo no centro; Nome/Dist/Vida arrastaveis.
-    // Barra orienta sozinha: lados = vertical, topo/base = horizontal.
-    void DrawEspPreview(ImVec2 origin, ImVec2 size) {
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        ImVec2 c = ImVec2(origin.x + size.x * 0.5f, origin.y + size.y * 0.5f);
-        float bw = 110.0f, bh = 170.0f;
-        ImVec2 b0 = ImVec2(c.x - bw * 0.5f, c.y - bh * 0.5f);
-        ImVec2 b1 = ImVec2(c.x + bw * 0.5f, c.y + bh * 0.5f);
-
-        dl->AddRectFilled(origin, ImVec2(origin.x + size.x, origin.y + size.y),
-            IM_COL32(12, 14, 18, 255));
-        ImGui::PushClipRect(origin, ImVec2(origin.x + size.x, origin.y + size.y), true); // A11: clip do canvas
-        if (Config::bShowGuides) {
-            dl->AddLine(ImVec2(c.x, origin.y), ImVec2(c.x, origin.y + size.y), IM_COL32(60, 60, 70, 255));
-            dl->AddLine(ImVec2(origin.x, c.y), ImVec2(origin.x + size.x, c.y), IM_COL32(60, 60, 70, 255));
-        }
-        // Box fixo + skeleton fake + head dot
-        dl->AddRect(b0, b1, IM_COL32(255, 40, 40, 255), 0.0f, 0, 1.5f);
-        ImVec2 head = ImVec2(c.x, b0.y - 6);
-        dl->AddCircleFilled(head, 4.0f, IM_COL32(255, 40, 40, 255));
-        dl->AddLine(ImVec2(c.x, b0.y + 18), ImVec2(c.x, b1.y - 30), IM_COL32(255, 120, 120, 255), 1.5f);
-        dl->AddLine(ImVec2(origin.x + size.x * 0.5f, origin.y + size.y), ImVec2(c.x, b1.y), IM_COL32(120, 200, 255, 200), 1.0f);
-
-        // Modelo lado+alinhamento (SSOT com o jogo). idx: 0=nome 1=dist 2=vida 3=pct.
-        int* pSide[4] = { &Config::iSideN, &Config::iSideD, &Config::iSideH, &Config::iSideP };
-        int* pAl[4] = { &Config::iAlinN, &Config::iAlinD, &Config::iAlinH, &Config::iAlinP };
-        float* pNx[4] = { &Config::fNameX, &Config::fDistX, &Config::fHpX, &Config::fPctX };
-        float* pNy[4] = { &Config::fNameY, &Config::fDistY, &Config::fHpY, &Config::fPctY };
-        float* pPr[4] = { &Config::fPropN, &Config::fPropD, &Config::fPropH, &Config::fPropP };
-        bool* pEn[4] = { &Config::bZombieName, &Config::bZombieDist, &Config::bZombieHp, &Config::bZombiePct };
-        DragCap* pCap[4] = { &s_capName, &s_capDist, &s_capHp, &s_capPct };
-        const char* pId[4] = { "Nome", "Distancia", "Barra Vida", "% Vida" };
-        const char* sideNm[4] = { "TOPO", "BASE", "ESQ", "DIR" };
-        const char* alNm[3] = { "INI", "CENTRO", "FIM" };
-
-        // Texto lado+alinhamento com retangulo medido (fora do box, com gap).
-        auto dragEl = [&](int e, const char* txt, ImU32 col) {
-            ImVec2 tsz = ImGui::CalcTextSize(txt);
-            ImVec2 tp = PlaceEl(*pSide[e], *pAl[e], tsz.x, tsz.y, ElGap(*pSide[e], *pPr[e], bw, bh), ImVec2(0, 0), ImVec2(bw, bh));
-            tp.x += *pNx[e]; tp.y += *pNy[e];
-            ImVec2 gp = ImVec2(b0.x + tp.x, b0.y + tp.y);
-            ImVec2 r0 = ImVec2(gp.x - 4, gp.y - 3), r1 = ImVec2(gp.x + tsz.x + 4, gp.y + tsz.y + 3);
-            dl->AddRectFilled(r0, r1, ImGui::IsMouseHoveringRect(r0, r1) ? IM_COL32(50, 90, 140, 160) : IM_COL32(30, 34, 42, 160));
-            dl->AddText(gp, col, txt);
-            char tag[32]; _snprintf_s(tag, _TRUNCATE, "%s %s", sideNm[*pSide[e] < 0 || *pSide[e] > 3 ? 0 : *pSide[e]], alNm[*pAl[e] < 0 || *pAl[e] > 2 ? 1 : *pAl[e]]);
-            DragWin(pId[e], r0, r1, pNx[e], pNy[e], *pCap[e], tag);
-            if (pCap[e]->released) {
-                pCap[e]->released = false;
-                DropEl(*pSide[e], *pAl[e], *pNx[e], *pNy[e], *pPr[e], tsz.x, tsz.y, bw, bh, ImVec2(tp.x - b0.x, tp.y - b0.y));
-                Config::iLayoutMode = 0; // arraste manual = Personalizado (A07)
-            }
-        };
-
-        if (*pEn[0])
-            dragEl(0, "zumbi_01", IM_COL32_WHITE);
-        if (*pEn[1]) {
-            char b[32]; _snprintf_s(b, _TRUNCATE, "%.0fm", 45.0f);
-            dragEl(1, b, IM_COL32(200, 220, 255, 255));
-        }
-        if (*pEn[2]) {
-            // Barra pelo LADO (esq/dir = vertical 5xH; topo/base = horizontal Wx5).
-            bool horiz = BarHorizSide(*pSide[2]);
-            float pct = Config::fPreviewHp / 100.0f;
-            if (pct < 0) pct = 0; if (pct > 1) pct = 1;
-            float hc[4]; HpColor(Config::fPreviewHp, hc);
-            ImU32 fill = IM_COL32((int)(hc[0]*255), (int)(hc[1]*255), (int)(hc[2]*255), 255);
-            float blen = horiz ? bw : bh;
-            ImVec2 bp = PlaceEl(*pSide[2], *pAl[2], horiz ? blen : 5.0f, horiz ? 5.0f : blen,
-                ElGap(*pSide[2], *pPr[2], bw, bh), ImVec2(0, 0), ImVec2(bw, bh));
-            ImVec2 p0 = ImVec2(b0.x + bp.x + *pNx[2], b0.y + bp.y + *pNy[2]);
-            ImVec2 p1 = horiz ? ImVec2(p0.x + blen, p0.y + 5) : ImVec2(p0.x + 5, p0.y + blen);
-            dl->AddRectFilled(p0, p1, IM_COL32(40, 40, 44, 255));
-            if (horiz) dl->AddRectFilled(p0, ImVec2(p0.x + blen * pct, p1.y), fill);
-            else dl->AddRectFilled(ImVec2(p0.x, p0.y + blen * (1 - pct)), p1, fill);
-            ImVec2 r0 = ImVec2(p0.x - 4, p0.y - 4), r1 = ImVec2(p1.x + 4, p1.y + 4);
-            char tag[32]; _snprintf_s(tag, _TRUNCATE, "lado %s", sideNm[*pSide[2] < 0 || *pSide[2] > 3 ? 2 : *pSide[2]]);
-            DragWin(pId[2], r0, r1, pNx[2], pNy[2], *pCap[2], tag);
-            if (pCap[2]->released) {
-                pCap[2]->released = false;
-                DropEl(*pSide[2], *pAl[2], *pNx[2], *pNy[2], *pPr[2], p1.x - p0.x, p1.y - p0.y, bw, bh,
-                    ImVec2(p0.x - b0.x, p0.y - b0.y));
-                Config::iLayoutMode = 0;
-            }
-        }
-        // Pilar 4: % independente da barra grafica.
-        if (*pEn[3]) {
-            char pb[16]; _snprintf_s(pb, _TRUNCATE, "%.0f%%", (double)Config::fPreviewHp);
-            dragEl(3, pb, IM_COL32_WHITE);
-        }
-        char hpb[64]; _snprintf_s(hpb, _TRUNCATE, "HP preview: %.0f%%", (double)Config::fPreviewHp);
-        dl->AddText(ImVec2(origin.x + 8, origin.y + size.y - 18), IM_COL32(150, 150, 160, 255), hpb);
-        ImGui::PopClipRect(); // A11
-    }
-
-    static bool g_bEditMode = false; // P3: modo edicao de layout
-    // A06: snapshot COMPLETO do layout (lados, alinhamentos, nudges, props, toggles).
-    struct LayoutSnap { int side[4], al[4]; float nx[4], ny[4], pr[4]; bool en[4]; };
-    static LayoutSnap s_snap;
-    static void SnapshotLayout() {
-        s_snap.side[0] = Config::iSideN; s_snap.al[0] = Config::iAlinN;
-        s_snap.nx[0] = Config::fNameX; s_snap.ny[0] = Config::fNameY; s_snap.pr[0] = Config::fPropN; s_snap.en[0] = Config::bZombieName;
-        s_snap.side[1] = Config::iSideD; s_snap.al[1] = Config::iAlinD;
-        s_snap.nx[1] = Config::fDistX; s_snap.ny[1] = Config::fDistY; s_snap.pr[1] = Config::fPropD; s_snap.en[1] = Config::bZombieDist;
-        s_snap.side[2] = Config::iSideH; s_snap.al[2] = Config::iAlinH;
-        s_snap.nx[2] = Config::fHpX; s_snap.ny[2] = Config::fHpY; s_snap.pr[2] = Config::fPropH; s_snap.en[2] = Config::bZombieHp;
-        s_snap.side[3] = Config::iSideP; s_snap.al[3] = Config::iAlinP;
-        s_snap.nx[3] = Config::fPctX; s_snap.ny[3] = Config::fPctY; s_snap.pr[3] = Config::fPropP; s_snap.en[3] = Config::bZombiePct;
-    }
-    static void RestoreLayout() {
-        Config::iSideN = s_snap.side[0]; Config::iAlinN = s_snap.al[0];
-        Config::fNameX = s_snap.nx[0]; Config::fNameY = s_snap.ny[0]; Config::fPropN = s_snap.pr[0]; Config::bZombieName = s_snap.en[0];
-        Config::iSideD = s_snap.side[1]; Config::iAlinD = s_snap.al[1];
-        Config::fDistX = s_snap.nx[1]; Config::fDistY = s_snap.ny[1]; Config::fPropD = s_snap.pr[1]; Config::bZombieDist = s_snap.en[1];
-        Config::iSideH = s_snap.side[2]; Config::iAlinH = s_snap.al[2];
-        Config::fHpX = s_snap.nx[2]; Config::fHpY = s_snap.ny[2]; Config::fPropH = s_snap.pr[2]; Config::bZombieHp = s_snap.en[2];
-        Config::iSideP = s_snap.side[3]; Config::iAlinP = s_snap.al[3];
-        Config::fPctX = s_snap.nx[3]; Config::fPctY = s_snap.ny[3]; Config::fPropP = s_snap.pr[3]; Config::bZombiePct = s_snap.en[3];
     }
 
     // ---- Hotkeys com modal (Fase 1 item 3) ----
@@ -618,8 +581,6 @@ namespace GUI {
     // ---- Configs JSON (Fase 1 item 4) ----
     // OBJETIVO: salvar/carregar todo o estado do menu em Documents\<DLL>\configs\<preset>.json.
     // Sem libs externas: writer fprintf + parser por busca de chaves (tipos: bool/int/float/vec4/str).
-    static char s_cfgName[64] = "default";
-    static char s_cfgStatus[128] = { 0 };
 
     static void CfgDir(char* out, size_t cap) {
         out[0] = 0;
@@ -629,9 +590,10 @@ namespace GUI {
 
     static bool SaveConfig(const char* name) {
         using namespace Config;
+        iCfgVer = 4;
         char dir[MAX_PATH] = { 0 }, path[MAX_PATH] = { 0 }, tmp[MAX_PATH] = { 0 };
         CfgDir(dir, sizeof(dir));
-        if (!dir[0]) { strncpy_s(s_cfgStatus, "Sem pasta de documentos.", _TRUNCATE); return false; }
+        if (!ValidConfigPath(dir, name)) { strncpy_s(s_cfgStatus, "Nome invalido ou caminho longo. Use letras, numeros, _ e -.", _TRUNCATE); return false; }
         CreateDirectoryA(dir, nullptr);
         _snprintf_s(path, _TRUNCATE, "%s\\%s.json", dir, name);
         _snprintf_s(tmp, _TRUNCATE, "%s\\%s.json.tmp", dir, name);
@@ -642,7 +604,7 @@ namespace GUI {
 #define JI(v) fprintf(f, "\"" #v "\":%d,\n", (int)(v))
 #define JF(v) fprintf(f, "\"" #v "\":%f,\n", (double)(float)(v))
 #define JV(v) fprintf(f, "\"" #v "\":[%f,%f,%f,%f],\n", (double)(v)[0], (double)(v)[1], (double)(v)[2], (double)(v)[3])
-#define JS(v) fprintf(f, "\"" #v "\":\"%s\",\n", (v))
+#define JS(v) fprintf(f, "\"" #v "\":\"%s\",\n", ConfigJson::Escape(v).c_str())
         JB(bMenuOpen); JI(iMenuKey); JB(bWatermark); JB(bDebugOverlay); JB(bTooltips);
         JB(bAimbot); JI(iAimKey); JI(iAimMode); JB(bAutoAim); JB(bSilentAim); JB(bAutoFire);
         JB(bTriggerbot); JB(bVisibleCheck); JI(iAimBone); JI(iAimPriority); JF(fSmoothing);
@@ -656,6 +618,8 @@ namespace GUI {
         JB(bRollSpeed); JF(fRollMult);
         JB(bZombieEsp); JI(iZombieBox); JB(bZombieName); JB(bZombieDist); JB(bZombieHp); JB(bZombiePct); JF(fPctX); JF(fPctY); JI(iNameA); JI(iDistA); JI(iHpA); JI(iPctA); JF(fPropN); JF(fPropD); JF(fPropH); JF(fPropP);
         JI(iSideN); JI(iSideD); JI(iSideH); JI(iSideP); JI(iAlinN); JI(iAlinD); JI(iAlinH); JI(iAlinP);
+        JF(fAlongN); JF(fAlongD); JF(fAlongH); JF(fAlongP); JF(fGapN); JF(fGapD); JF(fGapH); JF(fGapP);
+        JI(iOrderN); JI(iOrderD); JI(iOrderH); JI(iOrderP); JF(fBarLength); JF(fBarThickness);
         JB(bZombieSkeleton); JB(bZombieSnap); JB(bZombieHeadDot);
         JV(colZombieVis); JV(colZombieInv); JV(colZombieNameVis); JV(colZombieNameInv);
         JV(colZombieDistVis); JV(colZombieDistInv); JV(colZombieHpVis); JV(colZombieHpInv);
@@ -679,9 +643,13 @@ namespace GUI {
 #undef JF
 #undef JV
 #undef JS
-        fprintf(f, "\"_v\":3\n}\n");
-        fclose(f);
-        // A12: publicacao atomica (tmp + rename); sem .bak espalhado no sucesso.
+        fprintf(f, "\"_v\":4\n}\n");
+        bool writeOk = fflush(f) == 0 && ferror(f) == 0;
+        if (fclose(f) != 0) writeOk = false;
+        if (!writeOk) {
+            _snprintf_s(s_cfgStatus, _TRUNCATE, "Falha na gravacao. Configuracao anterior preservada.");
+            return false;
+        }
         if (!MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
             _snprintf_s(s_cfgStatus, _TRUNCATE, "Falha ao publicar (tmp mantido).");
             return false;
@@ -691,86 +659,38 @@ namespace GUI {
         return true;
     }
 
-    static const char* CfgFind(const std::string& s, const char* k) {
-        std::string q = std::string("\"") + k + "\"";
-        size_t p = s.find(q);
-        if (p == std::string::npos) return nullptr;
-        p = s.find(':', p);
-        if (p == std::string::npos) return nullptr;
-        return s.c_str() + p + 1;
-    }
-
-    // A13: valida o modelo de layout apos carregar/migrar/resetar.
-    static void ValidateLayout() {
-        using namespace Config;
-        int* sides[4] = { &iSideN, &iSideD, &iSideH, &iSideP };
-        int* als[4] = { &iAlinN, &iAlinD, &iAlinH, &iAlinP };
-        float* nxs[4] = { &fNameX, &fDistX, &fHpX, &fPctX };
-        float* nys[4] = { &fNameY, &fDistY, &fHpY, &fPctY };
-        float* prs[4] = { &fPropN, &fPropD, &fPropH, &fPropP };
-        const int ds[4] = { 0, 1, 2, 3 }, da[4] = { 1, 1, 2, 1 };
-        for (int i = 0; i < 4; ++i) {
-            if (*sides[i] < 0 || *sides[i] > 3) *sides[i] = ds[i];
-            if (*als[i] < 0 || *als[i] > 2) *als[i] = da[i];
-            if (!(*nxs[i] == *nxs[i]) || *nxs[i] < -300 || *nxs[i] > 300) *nxs[i] = 0;
-            if (!(*nys[i] == *nys[i]) || *nys[i] < -300 || *nys[i] > 300) *nys[i] = 0;
-            if (!(*prs[i] == *prs[i]) || *prs[i] < 0 || *prs[i] > 1) *prs[i] = 0.05f;
-        }
-        if (!(fSnapSize == fSnapSize) || fSnapSize < 1 || fSnapSize > 20) fSnapSize = 5;
-        if (!(fPreviewHp == fPreviewHp) || fPreviewHp < 0 || fPreviewHp > 100) fPreviewHp = 87;
-        if (iLayoutMode < 0 || iLayoutMode > 2) iLayoutMode = 0;
-    }
-
-    // Migracao ancora(9) -> lado+alinhamento (v2 -> v3). Cantos: lado vence.
-    static void MigrateAnchors() {
-        using namespace Config;
-        int* sides[4] = { &iSideN, &iSideD, &iSideH, &iSideP };
-        int* als[4] = { &iAlinN, &iAlinD, &iAlinH, &iAlinP };
-        int olds[4] = { iNameA, iDistA, iHpA, iPctA };
-        for (int i = 0; i < 4; ++i) {
-            int a = olds[i];
-            if (a < 0 || a > 8) continue;
-            int row = a / 3, col = a % 3;
-            // TL/TR/BL/BR: lado pela fileira/coluna dominante (doc: lado vence empates).
-            if (a == 0) { *sides[i] = 0; *als[i] = 0; }
-            else if (a == 2) { *sides[i] = 0; *als[i] = 2; }
-            else if (a == 6) { *sides[i] = 1; *als[i] = 0; }
-            else if (a == 8) { *sides[i] = 1; *als[i] = 2; }
-            else if (row == 0) { *sides[i] = 0; *als[i] = col; }
-            else if (row == 2) { *sides[i] = 1; *als[i] = col; }
-            else { *sides[i] = (col == 2) ? 3 : 2; *als[i] = 1; }
-            (void)row; (void)col;
-        }
-    }
-
     static void LoadConfig(const char* name) {
         using namespace Config;
-        char dir[MAX_PATH] = { 0 }, path[MAX_PATH] = { 0 }, bak[MAX_PATH] = { 0 };
+        char dir[MAX_PATH] = { 0 }, path[MAX_PATH] = { 0 };
         CfgDir(dir, sizeof(dir));
-        if (!dir[0]) { strncpy_s(s_cfgStatus, "Sem pasta de documentos.", _TRUNCATE); return; }
+        if (!ValidConfigPath(dir, name)) { strncpy_s(s_cfgStatus, "Nome invalido ou caminho longo. Use letras, numeros, _ e -.", _TRUNCATE); return; }
         _snprintf_s(path, _TRUNCATE, "%s\\%s.json", dir, name);
-        _snprintf_s(bak, _TRUNCATE, "%s\\%s.json.bak", dir, name);
-        FILE* f = nullptr;
-        if (fopen_s(&f, path, "r") != 0 || !f) { ApplyFactoryDefaults(); SaveConfig(name); _snprintf_s(s_cfgStatus, _TRUNCATE, "Preset novo (fabrica v3): %s.", name); return; }
-        std::string s;
-        char chunk[1024];
-        size_t n;
-        while ((n = fread(chunk, 1, sizeof(chunk), f)) > 0) s.append(chunk, n);
-        fclose(f);
-        { // A12: schema < v3 -> backup unico + parse legado + fabrica de layout + salva.
-            const char* w = CfgFind(s, "_v");
-            int ver = w ? atoi(w) : 0;
-            if (ver < 3) {
-                Log::Infof("[CONFIG] Legado v%d: backup + migracao p/ v3.", ver);
-                CopyFileA(path, bak, FALSE);
-                iCfgVer = ver; // marca: pos-parse migra
-            } else iCfgVer = ver;
+        FILE* file = nullptr;
+        if (fopen_s(&file, path, "rb") != 0 || !file) {
+            if (GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES) { strncpy_s(s_cfgStatus, "Falha ao ler o preset existente.", _TRUNCATE); return; }
+            ApplyFactoryDefaults();
+            SaveConfig(name);
+            CloseLayoutEditor();
+            return;
         }
-#define LB(v) do { const char* w = CfgFind(s, #v); if (w) (v) = (strncmp(w, "true", 4) == 0); } while (0)
-#define LI(v) do { const char* w = CfgFind(s, #v); if (w) (v) = atoi(w); } while (0)
-#define LF(v) do { const char* w = CfgFind(s, #v); if (w) (v) = (float)atof(w); } while (0)
-#define LV(v) do { const char* w = CfgFind(s, #v); if (w && *w == '[') sscanf_s(w, "[%f,%f,%f,%f]", &(v)[0], &(v)[1], &(v)[2], &(v)[3]); } while (0)
-#define LS(v) do { const char* w = CfgFind(s, #v); if (w) { while (*w == ' ' || *w == '\t') ++w; if (*w == '\"') { ++w; size_t i = 0; while (w[i] && w[i] != '\"' && i + 1 < sizeof(v)) { (v)[i] = w[i]; ++i; } (v)[i] = 0; } } } while (0)
+        std::string input;
+        char chunk[4096];
+        size_t length;
+        while ((length = fread(chunk, 1, sizeof(chunk), file)) > 0 && input.size() <= 2 * 1024 * 1024) input.append(chunk, length);
+        bool readOk = ferror(file) == 0 && input.size() <= 2 * 1024 * 1024;
+        fclose(file);
+        ConfigJson::Document document;
+        if (!readOk || !document.Parse(input) || document.Version() < 0 || document.Version() > 4) {
+            strncpy_s(s_cfgStatus, "Preset invalido ou de uma versao futura. Estado anterior preservado.", _TRUNCATE);
+            return;
+        }
+        int sourceVersion = document.Version();
+        std::vector<ConfigJson::Field> fields;
+#define LB(v) fields.push_back({ #v, ConfigJson::BoolField, &(v) })
+#define LI(v) fields.push_back({ #v, ConfigJson::IntField, &(v) })
+#define LF(v) fields.push_back({ #v, ConfigJson::FloatField, &(v) })
+#define LV(v) fields.push_back({ #v, ConfigJson::ColorField, (v) })
+#define LS(v) fields.push_back({ #v, ConfigJson::StringField, (v), sizeof(v) })
         LB(bMenuOpen); LI(iMenuKey); LB(bWatermark); LB(bDebugOverlay); LB(bTooltips);
         LB(bAimbot); LI(iAimKey); LI(iAimMode); LB(bAutoAim); LB(bSilentAim); LB(bAutoFire);
         LB(bTriggerbot); LB(bVisibleCheck); LI(iAimBone); LI(iAimPriority); LF(fSmoothing);
@@ -801,24 +721,62 @@ namespace GUI {
         LF(fSaveX); LF(fSaveY); LF(fSaveZ);
         LF(fDayHour); LF(fDaySpeed); LI(iSpawnCount); LI(iSpawnBoss);
         LF(fCamFov); LB(bThirdPerson); LF(fThirdDist); LB(bAntiAfk); LB(bNoClip);
-        LF(fNoClipSpeed); LB(bNoFall); LI(iCfgVer);
+        LF(fNoClipSpeed); LB(bNoFall);
+        LF(fAlongN); LF(fAlongD); LF(fAlongH); LF(fAlongP); LF(fGapN); LF(fGapD); LF(fGapH); LF(fGapP);
+        LI(iOrderN); LI(iOrderD); LI(iOrderH); LI(iOrderP); LF(fBarLength); LF(fBarThickness);
 #undef LB
 #undef LI
 #undef LF
 #undef LV
 #undef LS
-        if (iCfgVer < 3) { // pos-parse: v2 tem ancoras (migra), v0/v1 nao (fabrica).
-            const char* w = CfgFind(s, "iNameA");
-            if (w) MigrateAnchors();
-            else ApplyFactoryDefaults();
-            iCfgVer = 3;
-            ValidateLayout();
-            SaveConfig(name);
-            _snprintf_s(s_cfgStatus, _TRUNCATE, "Migrado p/ v3 (backup .bak).");
+        if (!document.Apply(fields)) {
+            strncpy_s(s_cfgStatus, "Tipos invalidos no preset. Estado anterior preservado.", _TRUNCATE);
+            return;
+        }
+        if (sourceVersion < 4) {
+            EspLayout::Model model = ReadLayout();
+            const int anchors[4] = { iNameA, iDistA, iHpA, iPctA };
+            const int alignments[4] = { iAlinN, iAlinD, iAlinH, iAlinP };
+            for (int id = 0; id < 4; ++id) {
+                model.items[id].position = EspLayout::Clamp(alignments[id] * 0.5f, 0.0f, 1.0f, 0.5f);
+                model.items[id].extraGap = 0.0f;
+                if (sourceVersion < 3 && document.Has("iNameA")) {
+                    int anchor = anchors[id];
+                    if (anchor >= 0 && anchor <= 8 && anchor != 4) {
+                        int row = anchor / 3, col = anchor % 3;
+                        if ((id == EspLayout::Health && col != 1) || row == 1) {
+                            model.items[id].side = col == 2 ? EspLayout::Right : EspLayout::Left;
+                            model.items[id].position = row * 0.5f;
+                        } else {
+                            model.items[id].side = row == 2 ? EspLayout::Bottom : EspLayout::Top;
+                            model.items[id].position = col * 0.5f;
+                        }
+                    }
+                }
+            }
+            model.gap = 4.0f; model.spacing = 3.0f;
+            model.barThickness = 3.0f; model.barLength = 1.0f;
+            model.stack = true; model.preset = 0;
+            model.items[EspLayout::Name].order = 0;
+            model.items[EspLayout::Percent].order = 1;
+            model.items[EspLayout::Distance].order = 2;
+            WriteLayout(model);
+            bool backedUp = false;
+            char backup[MAX_PATH];
+            for (int index = 0; index < 100 && !backedUp; ++index) {
+                _snprintf_s(backup, _TRUNCATE, "%s.layout-v4-%03d.bak", path, index);
+                if (GetFileAttributesA(backup) != INVALID_FILE_ATTRIBUTES) continue;
+                backedUp = CopyFileA(path, backup, TRUE) != FALSE;
+                if (!backedUp) break;
+            }
+            if (!backedUp) strncpy_s(s_cfgStatus, "Layout migrado em memoria. Backup falhou; arquivo original preservado.", _TRUNCATE);
+            else if (SaveConfig(name)) strncpy_s(s_cfgStatus, "Layout migrado para v4. Backup do preset anterior preservado.", _TRUNCATE);
         } else {
-            ValidateLayout();
+            WriteLayout(ReadLayout());
             _snprintf_s(s_cfgStatus, _TRUNCATE, "Carregado: %s.json", name);
         }
+        fPreviewHp = EspLayout::Clamp(fPreviewHp, 0.0f, 100.0f, 87.0f);
+        CloseLayoutEditor();
         Log::Infof("Config carregada: %s", path);
     }
 
@@ -826,6 +784,7 @@ namespace GUI {
         if (!g_bInit) return;
         ImDrawList* dl = ImGui::GetBackgroundDrawList();
         ImGuiIO& io = ImGui::GetIO();
+        const EspLayout::Model layout = VisibleLayout();
         if (Config::bWatermark)
             dl->AddText(ImVec2(10, 10), IM_COL32(120, 200, 255, 220), "ZB2 Menu | D3D11 | INSERT");
         // Debug overlay (Fase 2 item 6): dados VIVOS via reflection C++.
@@ -849,7 +808,7 @@ namespace GUI {
             for (int i = 0; i < n; ++i) {
                 float h = 0, w = 0, cx = 0, hy = 0, fy = 0;
                 ImVec2 r0, r1;
-                bool is3d = (Config::iZombieBox == 1 && es[i].has3d);
+                bool is3d = (layout.boxStyle == 1 && es[i].has3d);
                 if (is3d) {
                     // 3D real: bbox dos 8 cantos da AABB (labels ancoram nela).
                     float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
@@ -889,11 +848,14 @@ namespace GUI {
                         if (r1.x - r0.x < 4 || r1.y - r0.y < 4) continue;
                     }
                 }
-                if (Config::iZombieBox == 0) {
+                if (!std::isfinite(r0.x) || !std::isfinite(r0.y) || !std::isfinite(r1.x) || !std::isfinite(r1.y)) continue;
+                w = r1.x - r0.x; h = r1.y - r0.y;
+                if (w < 2.0f || h < 2.0f) continue;
+                if (layout.boxStyle == 0) {
                     if (r0.x < -10000 || r0.x > 10000 || r0.y < -10000 || r0.y > 10000) continue; // P1 render
                     if (r1.x < -10000 || r1.x > 10000 || r1.y < -10000 || r1.y > 10000) continue;
                     dl->AddRect(r0, r1, col, 0.0f, 0, 1.5f);
-                } else if (Config::iZombieBox == 2) {
+                } else if (layout.boxStyle == 2) {
                     // Corners: 8 segmentos nos cantos (item 11).
                     float cl = h * 0.22f; if (cl > w * 0.45f) cl = w * 0.45f;
                     dl->AddLine(r0, ImVec2(r0.x + cl, r0.y), col, 1.5f);
@@ -904,7 +866,7 @@ namespace GUI {
                     dl->AddLine(ImVec2(r0.x, r1.y), ImVec2(r0.x, r1.y - cl), col, 1.5f);
                     dl->AddLine(r1, ImVec2(r1.x - cl, r1.y), col, 1.5f);
                     dl->AddLine(r1, ImVec2(r1.x, r1.y - cl), col, 1.5f);
-                } else if (Config::iZombieBox == 1 && es[i].has3d) {
+                } else if (layout.boxStyle == 1 && es[i].has3d) {
                     // 3D real: 12 arestas da AABB (frente 4 + fundo 4 + profundidade 4).
                     static const int E[12][2] = { {0,1},{1,3},{3,2},{2,0},{4,5},{5,7},{7,6},{6,4},{0,4},{1,5},{2,6},{3,7} };
                     for (int e = 0; e < 12; ++e) {
@@ -924,48 +886,15 @@ namespace GUI {
                     dl->AddLine(r0, b0, col, 1.0f); dl->AddLine(ImVec2(r1.x, r0.y), ImVec2(b1.x, b0.y), col, 1.0f);
                     dl->AddLine(ImVec2(r0.x, r1.y), ImVec2(b0.x, b1.y), col, 1.0f); dl->AddLine(r1, b1, col, 1.0f);
                 }
-                float bw2 = r1.x - r0.x, bh2 = r1.y - r0.y; // ref p/ gap proporcional
-                if (Config::bZombieDist) {
-                    char db[32]; _snprintf_s(db, _TRUNCATE, "%.0fm", (double)es[i].dist);
-                    ImU32 dcol = ImGui::GetColorU32(ImVec4(Config::colZombieDistVis[0], Config::colZombieDistVis[1], Config::colZombieDistVis[2], Config::colZombieDistVis[3]));
-                    ImVec2 dsz = ImGui::CalcTextSize(db);
-                    ImVec2 dp = PlaceEl(Config::iSideD, Config::iAlinD, dsz.x, dsz.y, ElGap(Config::iSideD, Config::fPropD, bw2, bh2), r0, r1);
-                    dl->AddText(ImVec2(dp.x + Config::fDistX, dp.y + Config::fDistY), dcol, db);
+                EspLayout::Rect envelope = { r0, r1 };
+                if (layout.boxStyle == 1 && !es[i].has3d) {
+                    envelope.min.y -= h * 0.10f;
+                    envelope.max.x += w * 0.28f;
                 }
-                if (Config::bZombieHp && es[i].maxHp > 0) {
-                    // Barra pelo LADO (esq/dir = vertical 5xH; topo/base = horizontal Wx5).
-                    float pct = es[i].hp / es[i].maxHp;
-                    if (pct < 0) pct = 0; if (pct > 1) pct = 1;
-                    float hc[4]; HpColor(pct * 100.0f, hc);
-                    ImU32 hfill = ImGui::GetColorU32(ImVec4(hc[0], hc[1], hc[2], hc[3]));
-                    bool horiz = BarHorizSide(Config::iSideH);
-                    float blen = horiz ? bw2 : bh2;
-                    ImVec2 bp = PlaceEl(Config::iSideH, Config::iAlinH, horiz ? blen : 5.0f, horiz ? 5.0f : blen,
-                        ElGap(Config::iSideH, Config::fPropH, bw2, bh2), r0, r1);
-                    float bx = bp.x + Config::fHpX, by = bp.y + Config::fHpY;
-                    if (horiz) {
-                        dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + blen, by + 5), IM_COL32(40, 40, 44, 255));
-                        dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + blen * pct, by + 5), hfill);
-                    } else {
-                        dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + 5, by + blen), IM_COL32(40, 40, 44, 255));
-                        dl->AddRectFilled(ImVec2(bx, by + blen * (1 - pct)), ImVec2(bx + 5, by + blen), hfill);
-                    }
-                }
-                // Pilar 4: % independente da barra grafica.
-                if (Config::bZombiePct && es[i].maxHp > 0) {
-                    float pct2 = es[i].hp / es[i].maxHp;
-                    if (pct2 < 0) pct2 = 0; if (pct2 > 1) pct2 = 1;
-                    char pb[16]; _snprintf_s(pb, _TRUNCATE, "%.0f%%", (double)(pct2 * 100.0));
-                    ImVec2 psz = ImGui::CalcTextSize(pb);
-                    ImVec2 pp = PlaceEl(Config::iSideP, Config::iAlinP, psz.x, psz.y, ElGap(Config::iSideP, Config::fPropP, bw2, bh2), r0, r1);
-                    dl->AddText(ImVec2(pp.x + Config::fPctX, pp.y + Config::fPctY), IM_COL32_WHITE, pb);
-                }
-                if (Config::bZombieName && es[i].name[0]) {
-                    ImU32 ncol = ImGui::GetColorU32(ImVec4(Config::colZombieNameVis[0], Config::colZombieNameVis[1], Config::colZombieNameVis[2], Config::colZombieNameVis[3]));
-                    ImVec2 nsz = ImGui::CalcTextSize(es[i].name);
-                    ImVec2 np = PlaceEl(Config::iSideN, Config::iAlinN, nsz.x, nsz.y, ElGap(Config::iSideN, Config::fPropN, bw2, bh2), r0, r1);
-                    dl->AddText(ImVec2(np.x + Config::fNameX, np.y + Config::fNameY), ncol, es[i].name);
-                }
+                auto content = LayoutContent(es[i].name, es[i].dist, es[i].hp, es[i].maxHp);
+                auto style = LayoutStyle(content.health);
+                auto geometry = EspLayout::Resolve(layout, envelope, { ImVec2(2.0f, 2.0f), ImVec2(io.DisplaySize.x - 2.0f, io.DisplaySize.y - 2.0f) }, content, style, true);
+                EspLayout::Draw(dl, geometry, content, style);
             }
         }
         if (Config::bDrawFov && Config::bAimbot && Config::bLimitFov && !Config::b360Mode) {
@@ -976,27 +905,14 @@ namespace GUI {
     }
 
     void Render() {
-        ImGui::GetIO().MouseDrawCursor = Config::bMenuOpen; // sync por frame (nada desenha cursor com menu fechado)
-        if (!Config::bMenuOpen || !g_bInit) {
-            // Fecha gesto sem soltar o clamp: ele equivale ao clamp do jogo
-            // (mesma janela/mesmo rect) e o toggle reaplica o do jogo.
-            s_capName.active = s_capDist.active = s_capHp.active = s_capPct.active = false;
-            s_dragOwner = nullptr;
-            return;
-        }
-        { // P3 diagnostico: delta zerado = Raw Input (Hipótese 1); pos parada = foco/input (H2/H3)
-            static int s_mlog = 0;
-            if (++s_mlog % 600 == 0) {
-                ImGuiIO& dio = ImGui::GetIO();
-                POINT wp;
-                GetCursorPos(&wp);
-                Log::Infof("[MOUSE] delta=(%.1f,%.1f) imgui=(%.0f,%.0f) win=(%ld,%ld)",
-                    (double)dio.MouseDelta.x, (double)dio.MouseDelta.y,
-                    (double)dio.MousePos.x, (double)dio.MousePos.y, wp.x, wp.y);
-            }
-        }
-        ImGui::SetNextWindowSize(ImVec2(860, 560), ImGuiCond_FirstUseEver);
-        if (!ImGui::Begin("ZB2 Menu - Zumbi Blocks 2 (D3D11)", &Config::bMenuOpen)) { ImGui::End(); return; }
+        if (!g_bInit) return;
+        ImGui::GetIO().MouseDrawCursor = Config::bMenuOpen;
+        if (!Config::bMenuOpen) { CloseLayoutEditor(); return; }
+        s_editorVisible = false;
+        if (ImGui::GetIO().AppFocusLost) EspLayout::CancelDrag(s_editor);
+        ImGui::SetNextWindowSize(ImVec2(860, 620), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSizeConstraints(ImVec2(440, 400), ImVec2(4096, 4096));
+        if (!ImGui::Begin("ZB2 Menu - Zumbi Blocks 2 (D3D11)", &Config::bMenuOpen)) { ImGui::End(); CloseLayoutEditor(); return; }
 
         if (ImGui::BeginTabBar("ZB2Tabs")) {
             // ---- 1 PLAYER ----
@@ -1056,38 +972,8 @@ namespace GUI {
             // ---- 2 VISUAL ----
             // A05: UM EndTabItem incondicional por BeginTabItem (transicao nao controla pareamento).
             if (ImGui::BeginTabItem("VISUAL")) {
-                if (!g_bEditMode) {
-                    if (ImGui::Button("Editar Layout do ESP")) {
-                        SnapshotLayout();
-                        g_bEditMode = true;
-                    }
-                    Tip("Abre o editor de layout (arrasto pelo cursor do Windows).");
-                } else {
-                    ImGui::Text("MODO EDICAO - arraste Nome, Dist, Vida, %% (lado+alinhamento auto)");
-                    ImVec2 epv = ImGui::GetCursorScreenPos();
-                    ImVec2 epsz = ImVec2(ImGui::GetContentRegionAvail().x, 420);
-                    ImGui::InvisibleButton("pv_edit_zone", epsz);
-                    DrawEspPreview(epv, epsz);
-                    if (ImGui::Button("Salvar Layout")) {
-                        if (SaveConfig(s_cfgName)) g_bEditMode = false;
-                        else _snprintf_s(s_cfgStatus, _TRUNCATE, "FALHA ao salvar (rascunho mantido).");
-                    }
-                    ImGui::SameLine();
-                    if (ImGui::Button("Cancelar")) {
-                        RestoreLayout();
-                        g_bEditMode = false;
-                    }
-                }
-                if (!g_bEditMode) {
-                ImGui::Checkbox("ESP Zumbis", &Config::bZombieEsp);
-                ImGui::Combo("Box Zumbi", &Config::iZombieBox, kBoxType, 3);
-                ImGui::Checkbox("Nome", &Config::bZombieName); ImGui::SameLine();
-                ImGui::Checkbox("Distancia", &Config::bZombieDist); ImGui::SameLine();
-                ImGui::Checkbox("Vida", &Config::bZombieHp); ImGui::SameLine();
-                ImGui::Checkbox("%", &Config::bZombiePct); Tip("Porcentagem arrastavel no preview.");
-                ImGui::Checkbox("Skeleton", &Config::bZombieSkeleton); ImGui::SameLine();
-                ImGui::Checkbox("Snapline", &Config::bZombieSnap); ImGui::SameLine();
-                ImGui::Checkbox("Head Dot", &Config::bZombieHeadDot);
+                DrawLayoutEditor();
+                if (ImGui::CollapsingHeader("Cores, aliados e itens")) {
                 ImGui::ColorEdit4("Cor Visivel", Config::colZombieVis);
                 ImGui::ColorEdit4("Cor Invisivel", Config::colZombieInv);
                 ImGui::Separator();
@@ -1110,30 +996,9 @@ namespace GUI {
                 ImGui::Checkbox("Pontos (heli/chefe/missao)", &Config::bPoiEsp);
                 ImGui::ColorEdit4("Cor Item", Config::colItem);
                 ImGui::SliderFloat("Raio Item", &Config::fItemRadius, 10, 500, "%.0fm");
-                ImGui::Separator();
-                ImGui::Text("PREVIEW INTERATIVO (arraste Nome/Dist/Vida)");
-                ImVec2 pv = ImGui::GetCursorScreenPos();
-                ImVec2 psz = ImVec2(ImGui::GetContentRegionAvail().x, 300);
-                ImGui::InvisibleButton("pv_zone", psz);
-                DrawEspPreview(pv, psz);
-                ImGui::Combo("Layout", &Config::iLayoutMode, kLayout, 3);
-                if (Config::iLayoutMode == 1 || Config::iLayoutMode == 2) ApplyPreset(Config::iLayoutMode);
-                ImGui::SliderFloat("HP simulado", &Config::fPreviewHp, 0, 100, "%.0f%%");
-                if (ImGui::Button("Resetar Posicoes")) {
-                    ApplyFactoryDefaults();
+
                 }
-                ImGui::TextDisabled("Lados: Nome[%d/%d] Dist[%d/%d] Vida[%d/%d] %%[%d/%d] (lado/alin)",
-                    Config::iSideN, Config::iAlinN, Config::iSideD, Config::iAlinD,
-                    Config::iSideH, Config::iAlinH, Config::iSideP, Config::iAlinP);
-                ImGui::SliderFloat("Prop Nome", &Config::fPropN, 0.0f, 0.2f, "%.2f"); Tip("Extra proporcional do Nome.");
-                ImGui::SliderFloat("Prop Dist", &Config::fPropD, 0.0f, 0.2f, "%.2f");
-                ImGui::SliderFloat("Prop Vida", &Config::fPropH, 0.0f, 0.2f, "%.2f");
-                ImGui::SliderFloat("Prop %%", &Config::fPropP, 0.0f, 0.2f, "%.2f");
-                ImGui::Checkbox("Snap to Grid", &Config::bSnapGrid);
-                ImGui::SliderFloat("Grid", &Config::fSnapSize, 1, 20, "%.0fpx");
-                ImGui::Checkbox("Guias", &Config::bShowGuides);
-                } // fim conteudo normal (modo edicao mostra so o preview)
-                ImGui::EndTabItem(); // A05: unico e incondicional
+                ImGui::EndTabItem();
             }
             // ---- 3 MISC (sempre 3a aba) ----
             if (ImGui::BeginTabItem("MISC")) {
@@ -1199,6 +1064,7 @@ namespace GUI {
             }
             ImGui::EndTabBar();
         }
+        if (!s_editorVisible) CloseLayoutEditor();
         ImGui::End();
     }
 }

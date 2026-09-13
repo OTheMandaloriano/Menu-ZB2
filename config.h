@@ -133,6 +133,10 @@ namespace Config {
     extern bool  bAlignList;
     extern int   iListDir;          // 0=Coluna 1=Linha
     extern float fListSpacing;
+    extern float fAlongN, fAlongD, fAlongH, fAlongP;
+    extern float fGapN, fGapD, fGapH, fGapP;
+    extern int iOrderN, iOrderD, iOrderH, iOrderP;
+    extern float fBarLength, fBarThickness;
     extern float fPreviewHp;        // 0-100 simulado no preview
 
     // ---- MISC / Magnet ----
