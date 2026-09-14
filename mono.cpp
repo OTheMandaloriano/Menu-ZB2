@@ -118,6 +118,7 @@ namespace Mono {
     static MonoMethod* mGetGO = nullptr; // Component.get_gameObject (auditoria ossos)
     static bool s_boneLogged = false;
     static bool s_jointLogged = false; // auditoria juntas (1x por sessao)
+    static bool s_skelLogged = false; // diagnostico SKEL (1x: mascara + tela dos bracos)
     static DWORD WINAPI EspThread(LPVOID); // forward (definida apos BuildEsp)
     static MonoImage*  s_unity = nullptr;
     static MonoClass*  cCamU = nullptr;
@@ -682,6 +683,16 @@ namespace Mono {
             en.dist = dist;
             en.headX = sh.x; en.headY = sh.y;
             en.footX = sf.x; en.footY = sf.y;
+            // Diagnostico SKEL (1x/sessao, 1a entidade): mascara de juntas + tela.
+            if (!s_skelLogged && tmpEn.skN == SkJoint::SK_COUNT) {
+                s_skelLogged = true;
+                unsigned m = 0;
+                for (int k = 0; k < SkJoint::SK_COUNT; ++k) if (tmpEn.skV[k]) m |= (1u << k);
+                Log::Infof("[SKEL] mask=0x%05X dist=%.1f", m, (double)dist);
+                static const char* JN[SkJoint::SK_COUNT] = { "HEAD","NECK","SP3","SP2","SP1","HL","L1L","L2L","FL","L1R","L2R","FR","SL","A1L","A2L","SR","A1R","A2R","HL2L","HL2R" };
+                for (int k = 0; k < SkJoint::SK_COUNT; ++k)
+                    Log::Infof("[SKEL] %s v=%d scr=(%.0f,%.0f)", JN[k], tmpEn.skV[k] ? 1 : 0, (double)tmpEn.skX[k], (double)tmpEn.skY[k]);
+            }
             en.skN = tmpEn.skN;
             memcpy(en.skX, tmpEn.skX, sizeof(en.skX));
             memcpy(en.skY, tmpEn.skY, sizeof(en.skY));
