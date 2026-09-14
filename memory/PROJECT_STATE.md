@@ -10,7 +10,7 @@
 - [x] 10. ESP Health Bar - TESTADO OK (% sem colidir)
 - [x] 11. Box 3D (AABB real) e Corners - TESTADO OK (prints 5m/20m/50m + corners, 14/09)
 - [x] 12. Skeleton — TESTADO OK (quat real + eixo travado, bracos ate a mao, 14/09)
-- [x] 13. Snapline e Head Dot — BUILD OK, AGUARDANDO TESTE EM PARTIDA
+- [x] 13. Snapline e Head Dot — TESTADO OK (prints: linhas base->pe + ponto na HEAD, 14/09)
 - [ ] 14. Cores Visivel/Invisivel (raycast)
 - [ ] 15. ESP Aliados (azul)
 
