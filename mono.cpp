@@ -119,6 +119,7 @@ namespace Mono {
     static bool s_boneLogged = false;
     static bool s_jointLogged = false; // auditoria juntas (1x por sessao)
     static bool s_skelLogged = false; // diagnostico SKEL (1x: mascara + tela dos bracos)
+    static bool s_handLogged = false; // diagnostico HAND (1x: ponta da mao em mundo)
     static DWORD WINAPI EspThread(LPVOID); // forward (definida apos BuildEsp)
     static MonoImage*  s_unity = nullptr;
     static MonoClass*  cCamU = nullptr;
@@ -623,8 +624,21 @@ namespace Mono {
                             Vec3 w, s3;
                             if (okL) {
                                 w.x = exL[0]; w.y = exL[1]; w.z = exL[2];
+                                Vec3 pa1, pa2;
+                                void* bLa1 = nullptr, *bLa2 = nullptr;
+                                __try {
+                                    memcpy(&bLa1, (char*)arr + Off::A_data + (size_t)14 * 8, 8);
+                                    memcpy(&bLa2, (char*)arr + Off::A_data + (size_t)15 * 8, 8);
+                                } __except (EXCEPTION_EXECUTE_HANDLER) { bLa1 = bLa2 = nullptr; }
+                                bool g1 = bLa1 && GetPos(bLa1, pa1), g2 = bLa2 && GetPos(bLa2, pa2);
                                 if (W2S(cam, w, s3) && Sane2(s3.x, s3.y)) {
                                     tmpEn.skX[SkJoint::SK_HL2L] = s3.x; tmpEn.skY[SkJoint::SK_HL2L] = s3.y; tmpEn.skV[SkJoint::SK_HL2L] = true;
+                                    if (!s_handLogged) Log::Infof("[HAND] L a1=(%.1f,%.1f,%.1f)%d a2=(%.1f,%.1f,%.1f)%d mao=(%.1f,%.1f,%.1f) scr=(%.0f,%.0f)",
+                                        (double)pa1.x, (double)pa1.y, (double)pa1.z, g1 ? 1 : 0,
+                                        (double)pa2.x, (double)pa2.y, (double)pa2.z, g2 ? 1 : 0,
+                                        (double)exL[0], (double)exL[1], (double)exL[2], (double)s3.x, (double)s3.y);
+                                } else if (!s_handLogged) {
+                                    Log::Infof("[HAND] L FALHOU a1=%d a2=%d mao=(%.1f,%.1f,%.1f)", g1 ? 1 : 0, g2 ? 1 : 0, (double)exL[0], (double)exL[1], (double)exL[2]);
                                 }
                             }
                             if (okR) {
@@ -633,6 +647,8 @@ namespace Mono {
                                     tmpEn.skX[SkJoint::SK_HL2R] = s3.x; tmpEn.skY[SkJoint::SK_HL2R] = s3.y; tmpEn.skV[SkJoint::SK_HL2R] = true;
                                 }
                             }
+                            if ((okL && tmpEn.skV[SkJoint::SK_HL2L]) || (okR && tmpEn.skV[SkJoint::SK_HL2R]))
+                                s_handLogged = true;
                         }
                     }
             EspEntry& en = tmp[n++];
