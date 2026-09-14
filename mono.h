@@ -11,6 +11,16 @@
 namespace Mono {
     struct Vec3 { float x, y, z; };
 
+    // Juntas do rig (auditoria [BONE] 14/09, armature len=19):
+    // hl=hip L, l1/l2=thigh/shin, f=foot, sp1-3=spine, sl/sr=shoulder, a1/a2=arm/fore.
+    enum SkJoint {
+        SK_HEAD = 0, SK_NECK, SK_SP3, SK_SP2, SK_SP1,
+        SK_HL, SK_L1L, SK_L2L, SK_FL,
+        SK_L1R, SK_L2R, SK_FR,
+        SK_SL, SK_A1L, SK_A2L, SK_SR, SK_A1R, SK_A2R,
+        SK_COUNT = 18
+    };
+
     // Entrada de ESP (Fase 3): coordenadas JA em pixels ImGui (y para baixo).
     struct EspEntry {
         float headX, headY;  // cabeca (tela)
@@ -22,9 +32,9 @@ namespace Mono {
         bool  has3d;        // AABB valida (Box 3D real; senao fallback 2D)
         void* ent;          // ponteiro da entidade (log diagnostico P1)
         float ex, ey, ez;   // extents da AABB (log diagnostico P1)
-        int   skN;          // ossos projetados (item 12 Skeleton, max 16)
-        float skX[16], skY[16]; // pixels Unity (y p/ cima, igual px/py)
-        bool  skV[16];      // osso na frente da camera
+        int   skN;          // juntas validas (item 12 Skeleton real)
+        float skX[20], skY[20]; // pixels Unity (y p/ cima, igual px/py)
+        bool  skV[20];      // junta na frente da camera
         char  name[64];
         bool  onScreen;
         bool  isAlly;        // item 15 (sempre false no item 7)

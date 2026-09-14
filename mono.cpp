@@ -52,8 +52,7 @@ namespace Off {
     // ZombieObject (instancia)
     constexpr int ZO_eye = 88;
     constexpr int ZO_foot = 96;
-    constexpr int ZO_armature = 72; // Transform[] (item 12 Skeleton)
-    constexpr int SK_MAX = 16;
+    constexpr int ZO_armature = 72; // Transform[] (item 12 Skeleton real)
     constexpr int ZO_mesh = 56; // SkinnedMeshRenderer do corpo (bounds p/ Box 3D)
     constexpr int Z_obj = 16;
     // MainCamera (instancia)
@@ -421,9 +420,36 @@ namespace Mono {
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 
-    // Item 12 Skeleton: desenhado no overlay a partir do box (proporcoes do corpo).
-    // armatureBone (+72) tem ordem desconhecida — ligar em sequencia colapsava
-    // tudo no centro (print 14/09). Mapeamento real dos indices fica p/ diagnostico futuro.
+    // Item 12 Skeleton real: juntas pelos indices auditados ([BONE] 14/09).
+    // Ordem SkJoint: head12 neck11 sp3-10 sp2-9 sp1-8 | perna L: hl1 l1l2 l2l3 fl4
+    // perna R: l1r5 l2r6 fr7 (topo = sp1) | braco L: sl13 a1l14 a2l15 | R: sr16 a1r17 a2r18.
+    static const int kBoneIdx[SkJoint::SK_COUNT] = {
+        12, 11, 10, 9, 8, 1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 16, 17, 18
+    };
+    static void CollectJoints(void* zo, void* cam, EspEntry& out) {
+        out.skN = SkJoint::SK_COUNT;
+        for (int k = 0; k < SkJoint::SK_COUNT; ++k) { out.skV[k] = false; out.skX[k] = out.skY[k] = 0; }
+        if (!Config::bZombieSkeleton) { out.skN = 0; return; }
+        void* arr = ReadP(zo, Off::ZO_armature);
+        if (!arr) { out.skN = 0; return; }
+        long long len = 0;
+        __try { memcpy(&len, (char*)arr + Off::A_len, sizeof(len)); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { out.skN = 0; return; }
+        if (len < 19) { out.skN = 0; return; } // rig incompleto: sem skeleton
+        for (int k = 0; k < SkJoint::SK_COUNT; ++k) {
+            void* bone = nullptr;
+            __try { memcpy(&bone, (char*)arr + Off::A_data + (size_t)kBoneIdx[k] * 8, 8); }
+            __except (EXCEPTION_EXECUTE_HANDLER) { continue; }
+            if (!bone) continue;
+            Vec3 w, s3;
+            if (!GetPos(bone, w)) continue;
+            if (!Fin(w.x) || !Fin(w.y) || !Fin(w.z)) continue;
+            if (!W2S(cam, w, s3)) continue;
+            if (!Sane2(s3.x, s3.y)) continue;
+            out.skX[k] = s3.x; out.skY[k] = s3.y; out.skV[k] = true;
+        }
+    }
+
     // Monta snapshot do ESP (zumbis). Roda na worker 30Hz, nao por frame.
     static void BuildEsp() {
         EspEntry tmp[128] = {};
@@ -517,6 +543,7 @@ namespace Mono {
                     int nv = 0; // Fix B: cantos atras da camera nao desenham (sem fragmentos)
                     for (int k = 0; k < 8; ++k) if (tmpEn.pv[k]) nv++;
                     if (nv < 6) return;
+                    CollectJoints(zo, cam, tmpEn);
             EspEntry& en = tmp[n++];
             memcpy(en.name, tmpEn.name, sizeof(en.name));
             en.has3d = false;
@@ -524,6 +551,10 @@ namespace Mono {
                     memcpy(en.px, tmpEn.px, sizeof(en.px));
                     memcpy(en.py, tmpEn.py, sizeof(en.py));
                     memcpy(en.pv, tmpEn.pv, sizeof(en.pv));
+                    en.skN = tmpEn.skN;
+                    memcpy(en.skX, tmpEn.skX, sizeof(en.skX));
+                    memcpy(en.skY, tmpEn.skY, sizeof(en.skY));
+                    memcpy(en.skV, tmpEn.skV, sizeof(en.skV));
                     en.has3d = true;
                     en.ent = e; en.ex = bb.extents.x; en.ey = bb.extents.y; en.ez = bb.extents.z;
                     en.headX = en.headY = en.footX = en.footY = 0;
@@ -555,11 +586,16 @@ namespace Mono {
                 return;
             }
             if (n == 0) { s_dbgEyeY = wh.y; s_dbgFootY = wf.y; }
+            CollectJoints(zo, cam, tmpEn);
             EspEntry& en = tmp[n++];
             memcpy(en.name, tmpEn.name, sizeof(en.name));
             en.dist = dist;
             en.headX = sh.x; en.headY = sh.y;
             en.footX = sf.x; en.footY = sf.y;
+            en.skN = tmpEn.skN;
+            memcpy(en.skX, tmpEn.skX, sizeof(en.skX));
+            memcpy(en.skY, tmpEn.skY, sizeof(en.skY));
+            memcpy(en.skV, tmpEn.skV, sizeof(en.skV));
             en.ent = e; en.ex = en.ey = en.ez = 0;
             en.hp = hp; en.maxHp = mx;
             en.onScreen = true; en.isAlly = false;

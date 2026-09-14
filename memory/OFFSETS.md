@@ -30,6 +30,14 @@
 | Zombie.state | +220 (0xDC) | ZombieState | dump Zombie | - | OK-struct |
 | ZombieObject.meshRenderer | +56 (0x38) | SkinnedMeshRenderer* (CORPO p/ chams) | dump ZombieObject | - | OK-struct |
 | ZombieObject.armatureBone | +72 (0x48) | Transform[] (skeleton) | dump ZombieObject | - | OK-struct |
+| armature[0] | - | null | [BONE] 14/09 | - | OK |
+| armature[1]=hl hipL | - | Transform | [BONE] 14/09 | - | OK |
+| armature[2,3,4] | - | l1l thighL, l2l shinL, fl footL | [BONE] 14/09 | - | OK |
+| armature[5,6,7] | - | l1r thighR, l2r shinR, fr footR | [BONE] 14/09 | - | OK |
+| armature[8,9,10] | - | sp1,sp2,sp3 spine | [BONE] 14/09 | - | OK |
+| armature[11,12] | - | neck, head | [BONE] 14/09 | - | OK |
+| armature[13,14,15] | - | sl shoulderL, a1l armL, a2l foreL | [BONE] 14/09 | - | OK |
+| armature[16,17,18] | - | sr shoulderR, a1r armR, a2r foreR | [BONE] 14/09 | - | OK |
 | ZombieObject.zombieEyeRef | +88 (0x58) | Transform (head) | dump ZombieObject | - | OK-struct |
 | ZombieObject.zombieFootRef | +96 (0x60) | Transform (feet) | dump ZombieObject | - | OK-struct |
 | PlayerMovement.walkSpeed | +252 (0xFC) | float | dump PlayerMovement | - | OK-struct |

@@ -886,42 +886,36 @@ namespace GUI {
                     dl->AddLine(r0, b0, col, 1.0f); dl->AddLine(ImVec2(r1.x, r0.y), ImVec2(b1.x, b0.y), col, 1.0f);
                     dl->AddLine(ImVec2(r0.x, r1.y), ImVec2(b0.x, b1.y), col, 1.0f); dl->AddLine(r1, b1, col, 1.0f);
                 }
-                // Item 12 Skeleton: boneco proporcional ao box (cabeca, bracos, pernas).
-                // armatureBone tem ordem desconhecida — sequencia colapsava no centro.
-                // Trava: junta fora do box (+15%) nao desenha — flutuante impossivel.
-                if (layout.skeleton && w > 4.0f && h > 8.0f) {
-                    float inX0 = r0.x - w * 0.15f, inX1 = r1.x + w * 0.15f;
-                    float inY0 = r0.y - h * 0.15f, inY1 = r1.y + h * 0.15f;
-                    auto inSk = [&](ImVec2 p) { return p.x >= inX0 && p.x <= inX1 && p.y >= inY0 && p.y <= inY1; };
-                    float bcx = (r0.x + r1.x) * 0.5f;
-                    float t = r0.y; // topo
-                    ImVec2 headC = ImVec2(bcx, t + h * 0.10f);
-                    float headR = h * 0.07f; if (headR < 1.5f) headR = 1.5f;
-                    ImVec2 neck = ImVec2(bcx, t + h * 0.18f);
-                    ImVec2 shL = ImVec2(bcx - w * 0.22f, t + h * 0.24f);
-                    ImVec2 shR = ImVec2(bcx + w * 0.22f, t + h * 0.24f);
-                    ImVec2 elL = ImVec2(bcx - w * 0.26f, t + h * 0.38f);
-                    ImVec2 elR = ImVec2(bcx + w * 0.26f, t + h * 0.38f);
-                    ImVec2 haL = ImVec2(bcx - w * 0.30f, t + h * 0.50f);
-                    ImVec2 haR = ImVec2(bcx + w * 0.30f, t + h * 0.50f);
-                    ImVec2 hipC = ImVec2(bcx, t + h * 0.52f);
-                    ImVec2 hipL = ImVec2(bcx - w * 0.12f, t + h * 0.52f);
-                    ImVec2 hipR = ImVec2(bcx + w * 0.12f, t + h * 0.52f);
-                    ImVec2 knL = ImVec2(bcx - w * 0.13f, t + h * 0.75f);
-                    ImVec2 knR = ImVec2(bcx + w * 0.13f, t + h * 0.75f);
-                    ImVec2 ftL = ImVec2(bcx - w * 0.14f, t + h);
-                    ImVec2 ftR = ImVec2(bcx + w * 0.14f, t + h);
-                    ImVec2 midSh = ImVec2(bcx, t + h * 0.24f);
-                    auto segSk = [&](ImVec2 a, ImVec2 b) { if (inSk(a) && inSk(b)) dl->AddLine(a, b, col, 1.5f); };
-                    if (inSk(headC)) dl->AddCircle(headC, headR, col, 12, 1.5f);
-                    segSk(neck, midSh);
-                    segSk(shL, shR);
-                    segSk(shL, elL); segSk(elL, haL);
-                    segSk(shR, elR); segSk(elR, haR);
-                    segSk(midSh, hipC);
-                    segSk(hipL, hipR);
-                    segSk(hipL, knL); segSk(knL, ftL);
-                    segSk(hipR, knR); segSk(knR, ftR);
+                // Item 12 Skeleton real: juntas auditadas ([BONE] 14/09), articulado.
+                // Segmentos: coluna, pernas (quadril->pe), bracos (ombro->mao).
+                if (layout.skeleton && es[i].skN == Mono::SK_COUNT) {
+                    using MJ = Mono::SkJoint;
+                    static const int SEG[][2] = {
+                        { MJ::SK_HEAD, MJ::SK_NECK }, { MJ::SK_NECK, MJ::SK_SP3 },
+                        { MJ::SK_SP3, MJ::SK_SP2 }, { MJ::SK_SP2, MJ::SK_SP1 },
+                        { MJ::SK_SP1, MJ::SK_HL }, { MJ::SK_HL, MJ::SK_L1L },
+                        { MJ::SK_L1L, MJ::SK_L2L }, { MJ::SK_L2L, MJ::SK_FL },
+                        { MJ::SK_SP1, MJ::SK_L1R }, { MJ::SK_L1R, MJ::SK_L2R },
+                        { MJ::SK_L2R, MJ::SK_FR },
+                        { MJ::SK_SP3, MJ::SK_SL }, { MJ::SK_SL, MJ::SK_A1L },
+                        { MJ::SK_A1L, MJ::SK_A2L },
+                        { MJ::SK_SP3, MJ::SK_SR }, { MJ::SK_SR, MJ::SK_A1R },
+                        { MJ::SK_A1R, MJ::SK_A2R }
+                    };
+                    for (int s = 0; s < 17; ++s) {
+                        int a = SEG[s][0], b = SEG[s][1];
+                        if (!es[i].skV[a] || !es[i].skV[b]) continue;
+                        ImVec2 pa = ImVec2(es[i].skX[a], H - es[i].skY[a]);
+                        ImVec2 pb = ImVec2(es[i].skX[b], H - es[i].skY[b]);
+                        if (pa.x < -10000 || pa.x > 10000 || pa.y < -10000 || pa.y > 10000) continue;
+                        if (pb.x < -10000 || pb.x > 10000 || pb.y < -10000 || pb.y > 10000) continue;
+                        dl->AddLine(pa, pb, col, 1.5f);
+                    }
+                    if (es[i].skV[MJ::SK_HEAD]) {
+                        ImVec2 hp = ImVec2(es[i].skX[MJ::SK_HEAD], H - es[i].skY[MJ::SK_HEAD]);
+                        float hr = h * 0.07f; if (hr < 1.5f) hr = 1.5f; if (hr > 14.0f) hr = 14.0f;
+                        dl->AddCircle(hp, hr, col, 12, 1.5f);
+                    }
                 }
                 EspLayout::Rect envelope = { r0, r1 };
                 if (layout.boxStyle == 1 && !es[i].has3d) {
