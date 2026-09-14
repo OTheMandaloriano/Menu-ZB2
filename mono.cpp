@@ -556,6 +556,8 @@ namespace Mono {
         return true;
     }
     static int s_depthOk = 0, s_depthMiss = 0; // diagnostico depth (amostragem)
+    static Vec3 s_depthProbe[5]; // pontos do ultimo ciclo p/ diagnostico DEPTH-ROW
+    static bool s_depthProbeOn = false;
     // Ponto exposto? Compara NDC do osso com a cena. Epsilon 0.001 + margem de
     // 0.5m em profundidade (converte: margem relativa a distancia do osso).
     static bool DepthExposed(const Vec3& w, float distToBone) {
@@ -574,6 +576,24 @@ namespace Mono {
         // aproxima com 0.5m convertido via derivada: eps = 0.5 / dist^2 * k.
         float eps = 0.5f / (distToBone * distToBone + 1.0f) + 0.001f;
         return ndc <= scene + eps;
+    }
+    // Diagnostico DEPTH-ROW (1x/sessao): NDC do osso vs cena amostrada.
+    // Se osso< cena mas marca verde => o sample esta lendo a textura errada.
+    static void DepthDiagRow(const Vec3 pts[5], float dist) {
+        static bool done = false;
+        if (done) return;
+        done = true;
+        for (int i = 0; i < 5; ++i) {
+            float ndc = 0, u = 0, v = 0;
+            if (!BoneNdc(pts[i], ndc, u, v)) {
+                Log::Infof("[DEPTH-ROW] pt=%d sem NDC.", i);
+                continue;
+            }
+            float scene = 0;
+            bool ok = DepthVisShim::Sample(u, v, scene);
+            Log::Infof("[DEPTH-ROW] pt=%d osso=%.4f cena=%.4f u=%.3f v=%.3f sample=%d dist=%.1f.",
+                i, (double)ndc, (double)scene, (double)u, (double)v, ok ? 1 : 0, (double)dist);
+        }
     }
 
     // Le matriz 4x4 da camera (64 bytes, column-major Unity).
@@ -1039,8 +1059,10 @@ namespace Mono {
                 int h = 0; bool he = false;
                 for (int pi = 0; pi < 5; ++pi) {
                     if (DepthExposed(pts[pi], dist)) { h++; if (pi == 0) he = true; }
-                    tmpEn.losDepth[pi] = 0; // (debug futuro: guardar NDC por ponto)
+                    float ndc = 0, uu = 0, vv = 0;
+                    tmpEn.losDepth[pi] = BoneNdc(pts[pi], ndc, uu, vv) ? ndc : -1.0f;
                 }
+                DepthDiagRow(pts, dist);
                 tmpEn.losHits = h;
                 tmpEn.losVis = (h >= 2) || he;
             }

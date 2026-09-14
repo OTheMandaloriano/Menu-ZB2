@@ -811,6 +811,7 @@ namespace GUI {
             ImU32 colInv = ImGui::GetColorU32(ImVec4(Config::colZombieInv[0], Config::colZombieInv[1], Config::colZombieInv[2], Config::colZombieInv[3]));
             for (int i = 0; i < n; ++i) {
                 // Item 14: cor por LOS (desliga = tudo visivel).
+                // DIAG: losVis agora vem do depth buffer ponto a ponto (Passo 5).
                 bool vis = !Config::bVisibleCheck || es[i].losVis;
                 ImU32 col = vis ? colVis : colInv;
                 float h = 0, w = 0, cx = 0, hy = 0, fy = 0;
