@@ -117,6 +117,7 @@ namespace Mono {
     static MonoMethod* mHasLocal = nullptr;
     static MonoMethod* mGetGO = nullptr; // Component.get_gameObject (auditoria ossos)
     static bool s_boneLogged = false;
+    static bool s_jointLogged = false; // auditoria juntas (1x por sessao)
     static DWORD WINAPI EspThread(LPVOID); // forward (definida apos BuildEsp)
     static MonoImage*  s_unity = nullptr;
     static MonoClass*  cCamU = nullptr;
@@ -447,6 +448,42 @@ namespace Mono {
             if (!W2S(cam, w, s3)) continue;
             if (!Sane2(s3.x, s3.y)) continue;
             out.skX[k] = s3.x; out.skY[k] = s3.y; out.skV[k] = true;
+        }
+        // Auditoria juntas (1x/sessao): posicao de mundo + direcao ate o pai.
+        // Diagnostica braco curto (hierarquia + rotacao local, nao-bug visual).
+        if (!s_jointLogged) {
+            Vec3 wp[SkJoint::SK_COUNT];
+            bool okp[SkJoint::SK_COUNT] = { false };
+            for (int k = 0; k < SkJoint::SK_COUNT; ++k) {
+                void* bone = nullptr;
+                __try { memcpy(&bone, (char*)arr + Off::A_data + (size_t)kBoneIdx[k] * 8, 8); }
+                __except (EXCEPTION_EXECUTE_HANDLER) { continue; }
+                if (bone && GetPos(bone, wp[k]) && Fin(wp[k].x)) okp[k] = true;
+            }
+            static const char* JN[SkJoint::SK_COUNT] = { "HEAD","NECK","SP3","SP2","SP1","HL","L1L","L2L","FL","L1R","L2R","FR","SL","A1L","A2L","SR","A1R","A2R" };
+            using MJ = SkJoint;
+            static const int SEGJ[][2] = {
+                { MJ::SK_SP3, MJ::SK_SL }, { MJ::SK_SL, MJ::SK_A1L }, { MJ::SK_A1L, MJ::SK_A2L },
+                { MJ::SK_SP3, MJ::SK_SR }, { MJ::SK_SR, MJ::SK_A1R }, { MJ::SK_A1R, MJ::SK_A2R }
+            };
+            for (int s = 0; s < 6; ++s) {
+                int a = SEGJ[s][0], b = SEGJ[s][1];
+                if (!okp[a] || !okp[b]) { Log::Infof("[JOINT] %s-%s: leitura falhou", JN[a], JN[b]); continue; }
+                float dx = wp[b].x - wp[a].x, dy = wp[b].y - wp[a].y, dz = wp[b].z - wp[a].z;
+                float d = sqrtf(dx * dx + dy * dy + dz * dz);
+                Log::Infof("[JOINT] %s->%s len=%.2fm dir=(%.2f,%.2f,%.2f) paio=(%.1f,%.1f,%.1f) filho=(%.1f,%.1f,%.1f)",
+                    JN[a], JN[b], (double)d, (double)(d > 0 ? dx / d : 0), (double)(d > 0 ? dy / d : 0), (double)(d > 0 ? dz / d : 0),
+                    (double)wp[a].x, (double)wp[a].y, (double)wp[a].z, (double)wp[b].x, (double)wp[b].y, (double)wp[b].z);
+            }
+            // Referencia: distancia pescoco->quadril (escala do corpo na cena).
+            if (okp[MJ::SK_NECK] && okp[MJ::SK_HL]) {
+                float dx = wp[MJ::SK_HL].x - wp[MJ::SK_NECK].x;
+                float dy = wp[MJ::SK_HL].y - wp[MJ::SK_NECK].y;
+                float dz = wp[MJ::SK_HL].z - wp[MJ::SK_NECK].z;
+                Log::Infof("[JOINT] NECK->HL (tronco) len=%.2fm", (double)sqrtf(dx * dx + dy * dy + dz * dz));
+            }
+            s_jointLogged = true;
+            Log::Info("[JOINT] auditoria juntas concluida.");
         }
     }
 
