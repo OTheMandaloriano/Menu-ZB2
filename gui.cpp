@@ -900,18 +900,10 @@ namespace GUI {
                         { MJ::SK_SP3, MJ::SK_SL }, { MJ::SK_SL, MJ::SK_A1L },
                         { MJ::SK_A1L, MJ::SK_A2L },
                         { MJ::SK_SP3, MJ::SK_SR }, { MJ::SK_SR, MJ::SK_A1R },
-                        { MJ::SK_A1R, MJ::SK_A2R }
+                        { MJ::SK_A1R, MJ::SK_A2R },
+                        { MJ::SK_A2L, MJ::SK_HL2L }, { MJ::SK_A2R, MJ::SK_HL2R } // mao estimada
                     };
-                    // Mao = ponta (sem falange no rig): estende do antebraco na mesma direcao.
-                    auto handSk = [&](int a2, int a1) {
-                        ImVec2 p2 = ImVec2(es[i].skX[a2], H - es[i].skY[a2]);
-                        ImVec2 p1 = ImVec2(es[i].skX[a1], H - es[i].skY[a1]);
-                        ImVec2 d = ImVec2(p2.x - p1.x, p2.y - p1.y);
-                        float l = sqrtf(d.x * d.x + d.y * d.y);
-                        if (l < 0.5f) return p2;
-                        return ImVec2(p2.x + d.x / l * h * 0.08f, p2.y + d.y / l * h * 0.08f);
-                    };
-                    for (int s = 0; s < 17; ++s) {
+                    for (int s = 0; s < 19; ++s) {
                         int a = SEG[s][0], b = SEG[s][1];
                         if (!es[i].skV[a] || !es[i].skV[b]) continue;
                         ImVec2 pa = ImVec2(es[i].skX[a], H - es[i].skY[a]);
@@ -919,17 +911,6 @@ namespace GUI {
                         if (pa.x < -10000 || pa.x > 10000 || pa.y < -10000 || pa.y > 10000) continue;
                         if (pb.x < -10000 || pb.x > 10000 || pb.y < -10000 || pb.y > 10000) continue;
                         dl->AddLine(pa, pb, col, 1.5f);
-                        // Braco: ultimo segmento vai ate a mao estimada (print 14/09).
-                        if (b == MJ::SK_A2L && es[i].skV[MJ::SK_A1L]) {
-                            ImVec2 mh = handSk(MJ::SK_A2L, MJ::SK_A1L);
-                            if (mh.x > -10000 && mh.x < 10000 && mh.y > -10000 && mh.y < 10000)
-                                dl->AddLine(pb, mh, col, 1.5f);
-                        }
-                        if (b == MJ::SK_A2R && es[i].skV[MJ::SK_A1R]) {
-                            ImVec2 mh = handSk(MJ::SK_A2R, MJ::SK_A1R);
-                            if (mh.x > -10000 && mh.x < 10000 && mh.y > -10000 && mh.y < 10000)
-                                dl->AddLine(pb, mh, col, 1.5f);
-                        }
                     }
                     // Sem circulo na cabeca: Head Dot (item 13) e funcao separada do menu.
                 }

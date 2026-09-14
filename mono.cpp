@@ -450,7 +450,8 @@ namespace Mono {
             out.skX[k] = s3.x; out.skY[k] = s3.y; out.skV[k] = true;
         }
         // Auditoria juntas (1x/sessao): posicao de mundo + direcao ate o pai.
-        // Diagnostica braco curto (hierarquia + rotacao local, nao-bug visual).
+        // Resultado 14/09: braco real = ombro(12)+antebraco(0.21m); sem mao no rig.
+        // Mao estimada = ponta do antebraco (padrao grandes cheats p/ rig sem falange).
         if (!s_jointLogged) {
             Vec3 wp[SkJoint::SK_COUNT];
             bool okp[SkJoint::SK_COUNT] = { false };
@@ -580,7 +581,59 @@ namespace Mono {
                     int nv = 0; // Fix B: cantos atras da camera nao desenham (sem fragmentos)
                     for (int k = 0; k < 8; ++k) if (tmpEn.pv[k]) nv++;
                     if (nv < 6) return;
+                    // Mao: ponta do antebraco em MUNDO (antes da projecao = escala certa).
+                    // v = a2 + (a2-a1).norm * 0.22m (antebraco mede 0.21m na auditoria).
                     CollectJoints(zo, cam, tmpEn);
+                    {
+                        float exL[3] = { 0 }, exR[3] = { 0 };
+                        bool okL = false, okR = false;
+                        void* arr = ReadP(zo, Off::ZO_armature);
+                        if (arr) {
+                            Vec3 p1, p2;
+                            void* b1 = nullptr, *b2 = nullptr;
+                            __try {
+                                memcpy(&b1, (char*)arr + Off::A_data + (size_t)14 * 8, 8);
+                                memcpy(&b2, (char*)arr + Off::A_data + (size_t)15 * 8, 8);
+                            } __except (EXCEPTION_EXECUTE_HANDLER) { b1 = b2 = nullptr; }
+                            if (b1 && b2 && GetPos(b1, p1) && GetPos(b2, p2)) {
+                                float dx = p2.x - p1.x, dy = p2.y - p1.y, dz = p2.z - p1.z;
+                                float l = sqrtf(dx * dx + dy * dy + dz * dz);
+                                if (l > 0.01f) {
+                                    exL[0] = p2.x + dx / l * 0.22f; exL[1] = p2.y + dy / l * 0.22f; exL[2] = p2.z + dz / l * 0.22f;
+                                    okL = true;
+                                }
+                            }
+                            b1 = b2 = nullptr;
+                            __try {
+                                memcpy(&b1, (char*)arr + Off::A_data + (size_t)17 * 8, 8);
+                                memcpy(&b2, (char*)arr + Off::A_data + (size_t)18 * 8, 8);
+                            } __except (EXCEPTION_EXECUTE_HANDLER) { b1 = b2 = nullptr; }
+                            if (b1 && b2 && GetPos(b1, p1) && GetPos(b2, p2)) {
+                                float dx = p2.x - p1.x, dy = p2.y - p1.y, dz = p2.z - p1.z;
+                                float l = sqrtf(dx * dx + dy * dy + dz * dz);
+                                if (l > 0.01f) {
+                                    exR[0] = p2.x + dx / l * 0.22f; exR[1] = p2.y + dy / l * 0.22f; exR[2] = p2.z + dz / l * 0.22f;
+                                    okR = true;
+                                }
+                            }
+                        }
+                        if (okL || okR) {
+                            if (tmpEn.skN < SkJoint::SK_COUNT) tmpEn.skN = SkJoint::SK_COUNT;
+                            Vec3 w, s3;
+                            if (okL) {
+                                w.x = exL[0]; w.y = exL[1]; w.z = exL[2];
+                                if (W2S(cam, w, s3) && Sane2(s3.x, s3.y)) {
+                                    tmpEn.skX[SkJoint::SK_HL2L] = s3.x; tmpEn.skY[SkJoint::SK_HL2L] = s3.y; tmpEn.skV[SkJoint::SK_HL2L] = true;
+                                }
+                            }
+                            if (okR) {
+                                w.x = exR[0]; w.y = exR[1]; w.z = exR[2];
+                                if (W2S(cam, w, s3) && Sane2(s3.x, s3.y)) {
+                                    tmpEn.skX[SkJoint::SK_HL2R] = s3.x; tmpEn.skY[SkJoint::SK_HL2R] = s3.y; tmpEn.skV[SkJoint::SK_HL2R] = true;
+                                }
+                            }
+                        }
+                    }
             EspEntry& en = tmp[n++];
             memcpy(en.name, tmpEn.name, sizeof(en.name));
             en.has3d = false;
