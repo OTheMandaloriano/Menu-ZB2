@@ -341,6 +341,10 @@ namespace Mono {
                 if (t) { mGetLayer = t; s.resolvedMethods++; }
             }
             // Offset REAL do campo via mono_field_get_offset (fix: +20 era chute).
+            // NOTA runtime 14/09: GetProcAddress(mono-2.0-bdwgc, mono_field_get_offset)
+            // retorna NULL — a exportacao nao existe nessa build do Mono. Workaround:
+            // calibra o offset comparando o buffer do hit com a distancia conhecida
+            // (primeiro OCC com dist conhecida revela o slot; ver LosCalibrate).
             {
                 HMODULE mm = GetModuleHandleW(L"mono-2.0-bdwgc.dll");
                 if (mm) pFieldOff = (FnFieldOffset)GetProcAddress(mm, "mono_field_get_offset");
@@ -374,6 +378,31 @@ namespace Mono {
     // Item 14 LOS multi-bone: 1 ponto por osso (cabeca/peito/quadril/coxas).
     // maxDist = ate o osso - 0.15m (nao acerta o proprio zumbi). Hit = ocluido.
     // Retorna true=ponto exposto. Fail-open: falha = exposto (nunca some ESP).
+    // DIAG 16/09: Physics.Raycast/5 NAO resolveu nesta build (s_losOk=false desde
+    // o init) — todo LosPoint retorna true pelo gate acima. Quando resolver,
+    // a calibracao do offset de distance sai do proprio [LOS-CAL] abaixo.
+    static int s_calDone = 0; // calibracao RaycastHit.distance (1x, ver LosCalibrate)
+    static void LosCalibrate(const unsigned char* hitBuf, float knownDist) {
+        if (s_calDone || !(knownDist > 1.0f)) return;
+        // Procura o slot float cujo valor ~= knownDist (hit confirmado pelo bool).
+        for (int off = 0; off + 4 <= 128; off += 4) {
+            float v = 0;
+            __try { memcpy(&v, hitBuf + off, sizeof(v)); }
+            __except (EXCEPTION_EXECUTE_HANDLER) { return; }
+            if (v == v && v > 0.5f && v < knownDist && (knownDist - v) < knownDist * 0.5f + 1.0f) {
+                // Candidato: hit antes do alvo. Exige estabilidade 2x antes de travar.
+                static int candOff = -1, candHits = 0;
+                if (off == candOff) {
+                    if (++candHits >= 2) {
+                        s_hitDistOff = off;
+                        s_calDone = 1;
+                        Log::Infof("[LOS-CAL] distance offset=%d (hit=%.1f alvo=%.1f).", off, (double)v, (double)knownDist);
+                    }
+                } else { candOff = off; candHits = 1; }
+                return;
+            }
+        }
+    }
     static bool LosPoint(const Vec3& from, const Vec3& to, float* outHit, int* outLayer) {
         if (outHit) *outHit = 0;
         if (outLayer) *outLayer = -1;
@@ -396,6 +425,7 @@ namespace Mono {
             MonoObject* ret = pInvoke(mRaycast, nullptr, args, &exc);
             if (exc || !ret) return true;
             if (!(*(unsigned char*)pUnbox(ret))) return true; // sem hit = exposto
+            if (!s_calDone) LosCalibrate(hitBuf, dist);
             float hd = 0;
             __try { memcpy(&hd, hitBuf + s_hitDistOff, sizeof(hd)); }
             __except (EXCEPTION_EXECUTE_HANDLER) { return true; }
