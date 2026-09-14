@@ -888,7 +888,11 @@ namespace GUI {
                 }
                 // Item 12 Skeleton: boneco proporcional ao box (cabeca, bracos, pernas).
                 // armatureBone tem ordem desconhecida — sequencia colapsava no centro.
+                // Trava: junta fora do box (+15%) nao desenha — flutuante impossivel.
                 if (layout.skeleton && w > 4.0f && h > 8.0f) {
+                    float inX0 = r0.x - w * 0.15f, inX1 = r1.x + w * 0.15f;
+                    float inY0 = r0.y - h * 0.15f, inY1 = r1.y + h * 0.15f;
+                    auto inSk = [&](ImVec2 p) { return p.x >= inX0 && p.x <= inX1 && p.y >= inY0 && p.y <= inY1; };
                     float bcx = (r0.x + r1.x) * 0.5f;
                     float t = r0.y; // topo
                     ImVec2 headC = ImVec2(bcx, t + h * 0.10f);
@@ -908,15 +912,16 @@ namespace GUI {
                     ImVec2 ftL = ImVec2(bcx - w * 0.14f, t + h);
                     ImVec2 ftR = ImVec2(bcx + w * 0.14f, t + h);
                     ImVec2 midSh = ImVec2(bcx, t + h * 0.24f);
-                    dl->AddCircle(headC, headR, col, 12, 1.5f);
-                    dl->AddLine(neck, midSh, col, 1.5f);
-                    dl->AddLine(shL, shR, col, 1.5f);
-                    dl->AddLine(shL, elL, col, 1.5f); dl->AddLine(elL, haL, col, 1.5f);
-                    dl->AddLine(shR, elR, col, 1.5f); dl->AddLine(elR, haR, col, 1.5f);
-                    dl->AddLine(midSh, hipC, col, 1.5f);
-                    dl->AddLine(hipL, hipR, col, 1.5f);
-                    dl->AddLine(hipL, knL, col, 1.5f); dl->AddLine(knL, ftL, col, 1.5f);
-                    dl->AddLine(hipR, knR, col, 1.5f); dl->AddLine(knR, ftR, col, 1.5f);
+                    auto segSk = [&](ImVec2 a, ImVec2 b) { if (inSk(a) && inSk(b)) dl->AddLine(a, b, col, 1.5f); };
+                    if (inSk(headC)) dl->AddCircle(headC, headR, col, 12, 1.5f);
+                    segSk(neck, midSh);
+                    segSk(shL, shR);
+                    segSk(shL, elL); segSk(elL, haL);
+                    segSk(shR, elR); segSk(elR, haR);
+                    segSk(midSh, hipC);
+                    segSk(hipL, hipR);
+                    segSk(hipL, knL); segSk(knL, ftL);
+                    segSk(hipR, knR); segSk(knR, ftR);
                 }
                 EspLayout::Rect envelope = { r0, r1 };
                 if (layout.boxStyle == 1 && !es[i].has3d) {
