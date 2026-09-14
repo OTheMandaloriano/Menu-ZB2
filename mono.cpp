@@ -143,6 +143,7 @@ namespace Mono {
     static int s_losLogN = 0; // log [LOS] por entidade (1x cada, sem spam)
     static int s_geomMask = -1; // layer mask (auditoria Passo 2; default = tudo)
     static bool      s_losOk = false; // Physics.Raycast resolvido e funcional
+    static int       s_rayArgs = 0; // aridade resolvida (2-5)
     static EspEntry s_esp[128];
     static int s_espN = 0;
     static CRITICAL_SECTION s_espCS;
@@ -312,12 +313,27 @@ namespace Mono {
             MonoClass* cRend = pClassFrom(s_unity, "UnityEngine", "Renderer");
             if (cRend) { s.resolvedClasses++; ResolveMethod(cRend, "Renderer", "get_bounds", 0, mGetBounds); }
             // Item 14: Physics.Raycast p/ LOS camera->peito (visivel/invisivel).
+            // 16/09: tenta /5, /4, /3, /2 (ordens mais simples primeiro = mais
+            // provavel de existir). Registra qual resolveu no log (LOS-SIG).
             MonoClass* cPhys = pClassFrom(s_unity, "UnityEngine", "Physics");
             if (cPhys) {
                 s.resolvedClasses++;
                 MonoMethod* t = pMethodFrom(cPhys, "Raycast", 5);
-                if (t) { mRaycast = t; s.resolvedMethods++; }
-                else Log::Warn("Metodo nao resolvido: Physics.Raycast/5");
+                if (t) { mRaycast = t; s_rayArgs = 5; s.resolvedMethods++; }
+                else {
+                    t = pMethodFrom(cPhys, "Raycast", 4);
+                    if (t) { mRaycast = t; s_rayArgs = 4; s.resolvedMethods++; }
+                    else {
+                        t = pMethodFrom(cPhys, "Raycast", 3);
+                        if (t) { mRaycast = t; s_rayArgs = 3; s.resolvedMethods++; }
+                        else {
+                            t = pMethodFrom(cPhys, "Raycast", 2);
+                            if (t) { mRaycast = t; s_rayArgs = 2; s.resolvedMethods++; }
+                        }
+                    }
+                }
+                if (mRaycast) Log::Infof("LOS-SIG Physics.Raycast/%d resolvido.", s_rayArgs);
+                else Log::Warn("Metodo nao resolvido: Physics.Raycast (2-5)");
             }
             cRayHit = pClassFrom(s_unity, "UnityEngine", "RaycastHit");
             if (cRayHit) {
@@ -415,16 +431,44 @@ namespace Mono {
         void* args[5];
         args[0] = (void*)&from;
         args[1] = (void*)&dir;
-        args[2] = (void*)hitBuf;
         __try {
+            // Assinaturas Unity (ordens testadas no init: s_rayArgs):
+            // /2: (ray, maxDistance) | /3: +layerMask | /4: +hitInfo | /5: +hitInfo+mask.
             float maxD = dist - 0.15f;
             int mask = s_geomMask;
-            args[3] = (void*)&maxD;
-            args[4] = (void*)&mask;
             MonoObject* exc = nullptr;
-            MonoObject* ret = pInvoke(mRaycast, nullptr, args, &exc);
-            if (exc || !ret) return true;
-            if (!(*(unsigned char*)pUnbox(ret))) return true; // sem hit = exposto
+            MonoObject* ret = nullptr;
+            bool hit = false;
+            if (s_rayArgs == 5) {
+                args[2] = (void*)hitBuf;
+                args[3] = (void*)&maxD;
+                args[4] = (void*)&mask;
+                ret = pInvoke(mRaycast, nullptr, args, &exc);
+                if (exc || !ret) return true;
+                hit = (*(unsigned char*)pUnbox(ret)) != 0;
+            } else if (s_rayArgs == 4) {
+                args[2] = (void*)hitBuf;
+                args[3] = (void*)&maxD;
+                ret = pInvoke(mRaycast, nullptr, args, &exc);
+                if (exc || !ret) return true;
+                hit = (*(unsigned char*)pUnbox(ret)) != 0;
+            } else if (s_rayArgs == 3) {
+                args[2] = (void*)&maxD;
+                args[3] = (void*)&mask;
+                ret = pInvoke(mRaycast, nullptr, args, &exc);
+                if (exc || !ret) return true;
+                hit = (*(unsigned char*)pUnbox(ret)) != 0;
+                if (hit) { if (outHit) *outHit = maxD; return false; }
+                return true;
+            } else if (s_rayArgs == 2) {
+                args[2] = (void*)&maxD;
+                ret = pInvoke(mRaycast, nullptr, args, &exc);
+                if (exc || !ret) return true;
+                hit = (*(unsigned char*)pUnbox(ret)) != 0;
+                if (hit) { if (outHit) *outHit = maxD; return false; }
+                return true;
+            } else return true;
+            if (!hit) return true; // sem hit = exposto
             if (!s_calDone) LosCalibrate(hitBuf, dist);
             float hd = 0;
             __try { memcpy(&hd, hitBuf + s_hitDistOff, sizeof(hd)); }
