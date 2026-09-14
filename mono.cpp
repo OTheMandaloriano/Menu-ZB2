@@ -434,43 +434,71 @@ namespace Mono {
     static const int kBoneIdx[SkJoint::SK_PHYS] = {
         12, 11, 10, 9, 8, 1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 16, 17, 18
     };
-    // Rotacao do Transform -> matriz 3x3 (colunas = eixos X/Y/Z em mundo).
-    // FIX Bug 4: mao = A2 + (eixo do antebraco x 0.25m), acompanha animacao.
-    static bool GetRot(void* trans, float R[9]) {
+    // Rotacao do Transform: get_rotation retorna QUATERNION (x,y,z,w — 16 bytes),
+    // nao matriz. FIX Bug 4 (causa raiz): copiar 36 bytes do quat lia lixo alem
+    // do objeto e a mao ia para dentro do peito. Converte quat->matriz 3x3 aqui.
+    static bool GetQuat(void* trans, float q[4]) {
         if (!mGetRot || !trans) return false;
         __try {
             MonoObject* exc = nullptr;
             MonoObject* ret = pInvoke(mGetRot, trans, nullptr, &exc);
             if (exc || !ret) return false;
-            memcpy(R, pUnbox(ret), sizeof(float) * 9);
-            for (int i = 0; i < 9; ++i) if (!(R[i] == R[i])) return false;
+            memcpy(q, pUnbox(ret), sizeof(float) * 4);
+            for (int i = 0; i < 4; ++i) if (!(q[i] == q[i])) return false;
+            float n = sqrtf(q[0]*q[0]+q[1]*q[1]+q[2]*q[2]+q[3]*q[3]);
+            if (n < 0.001f) return false;
             return true;
         } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
     }
-    // Direcao do antebraco: eixo local de maior projecao no vetor ( Ombro->Cotovelo ).
-    // Coluna dominante do R do cotovelo decide X/Y/Z; fallback = eixo Y local.
-    static bool ForearmFwd(void* elbowBone, const Vec3& shoulderW, const Vec3& elbowW, Vec3& out) {
+    static void QuatToMat3(const float q[4], float R[9]) {
+        float x=q[0], y=q[1], z=q[2], w=q[3];
+        float n = sqrtf(x*x+y*y+z*z+w*w);
+        if (n > 0.001f) { x/=n; y/=n; z/=n; w/=n; }
+        float xx=x*x, yy=y*y, zz=z*z, xy=x*y, xz=x*z, yz=y*z, wx=w*x, wy=w*y, wz=w*z;
+        R[0]=1-2*(yy+zz); R[1]=2*(xy-wz);   R[2]=2*(xz+wy);
+        R[3]=2*(xy+wz);   R[4]=1-2*(xx+zz); R[5]=2*(yz-wx);
+        R[6]=2*(xz-wy);   R[7]=2*(yz+wx);   R[8]=1-2*(xx+yy);
+    }
+    static int s_axisL = -1, s_axisR = -1; // eixo longitudinal travado 1x por lado
+    static bool s_rotWarned = false;
+    // Direcao do antebraco: eixo LONGITUDINAL do osso (segmento biceps), lido da
+    // rotacao real do cotovelo. Eixo travado 1x por lado: o que mais alinha com
+    // (Ombro->Cotovelo) no momento da trava. FIX: sem re-escolha por frame
+    // (era ela que fazia a mao "curvar para o peito").
+    static bool GetRot(void* trans, float R[9]) {
+        float q[4] = { 0 };
+        if (!GetQuat(trans, q)) return false;
+        QuatToMat3(q, R);
+        return true;
+    }
+    static bool ForearmFwd(void* elbowBone, const Vec3& shoulderW, const Vec3& elbowW, Vec3& out, int side /*0=L,1=R*/) {
         float R[9] = { 0 };
         if (GetRot(elbowBone, R)) {
             float ax = elbowW.x - shoulderW.x, ay = elbowW.y - shoulderW.y, az = elbowW.z - shoulderW.z;
             float al = sqrtf(ax * ax + ay * ay + az * az);
             if (al > 0.001f) { ax /= al; ay /= al; az /= al; }
             else { ax = 0; ay = -1; az = 0; }
-            // colunas: X=(R0,R3,R6) Y=(R1,R4,R7) Z=(R2,R5,R8) — Unity column-major
-            float dx[3] = { R[0] * ax + R[3] * ay + R[6] * az,
-                            R[1] * ax + R[4] * ay + R[7] * az,
-                            R[2] * ax + R[5] * ay + R[8] * az };
-            int best = 0;
-            float ba = dx[0] < 0 ? -dx[0] : dx[0];
-            for (int i = 1; i < 3; ++i) { float a = dx[i] < 0 ? -dx[i] : dx[i]; if (a > ba) { ba = a; best = i; } }
+            int* locked = (side == 0) ? &s_axisL : &s_axisR;
+            if (*locked < 0 || *locked > 2) {
+                float dx[3] = { R[0]*ax + R[3]*ay + R[6]*az,
+                                R[1]*ax + R[4]*ay + R[7]*az,
+                                R[2]*ax + R[5]*ay + R[8]*az };
+                int best = 0;
+                float ba = dx[0] < 0 ? -dx[0] : dx[0];
+                for (int i = 1; i < 3; ++i) { float a = dx[i] < 0 ? -dx[i] : dx[i]; if (a > ba) { ba = a; best = i; } }
+                *locked = best;
+                float sx = R[best], sy = R[3 + best], sz = R[6 + best];
+                Log::Infof("[AXIS] lado=%s eixo=%d (fixo daqui em diante)", side == 0 ? "L" : "R", best);
+            }
+            int best = *locked;
             float sx = R[best], sy = R[3 + best], sz = R[6 + best];
-            // antebraco aponta p/ baixo/frente: se o eixo escolhido apontar p/ cima, inverte
             if (sy > 0.3f) { sx = -sx; sy = -sy; sz = -sz; }
             float l = sqrtf(sx * sx + sy * sy + sz * sz);
             if (l < 0.001f) return false;
             out.x = sx / l; out.y = sy / l; out.z = sz / l;
             return true;
         }
+        if (!s_rotWarned) { s_rotWarned = true; Log::Warn("get_rotation falhou; mao usa fallback colinear."); }
         // fallback sem rotacao: mantem (Cotovelo - Ombro) como antes
         Vec3 d = { elbowW.x - shoulderW.x, elbowW.y - shoulderW.y, elbowW.z - shoulderW.z };
         float l = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
@@ -509,7 +537,7 @@ namespace Mono {
         {
             Vec3 fwd;
             if (wok[SkJoint::SK_A1L] && wok[SkJoint::SK_A2L] &&
-                ForearmFwd(bones[SkJoint::SK_A2L], wp[SkJoint::SK_A1L], wp[SkJoint::SK_A2L], fwd)) {
+                ForearmFwd(bones[SkJoint::SK_A2L], wp[SkJoint::SK_A1L], wp[SkJoint::SK_A2L], fwd, 0)) {
                 Vec3 hw = { wp[SkJoint::SK_A2L].x + fwd.x * 0.25f,
                             wp[SkJoint::SK_A2L].y + fwd.y * 0.25f,
                             wp[SkJoint::SK_A2L].z + fwd.z * 0.25f };
@@ -520,7 +548,7 @@ namespace Mono {
                 }
             }
             if (wok[SkJoint::SK_A1R] && wok[SkJoint::SK_A2R] &&
-                ForearmFwd(bones[SkJoint::SK_A2R], wp[SkJoint::SK_A1R], wp[SkJoint::SK_A2R], fwd)) {
+                ForearmFwd(bones[SkJoint::SK_A2R], wp[SkJoint::SK_A1R], wp[SkJoint::SK_A2R], fwd, 1)) {
                 Vec3 hw = { wp[SkJoint::SK_A2R].x + fwd.x * 0.25f,
                             wp[SkJoint::SK_A2R].y + fwd.y * 0.25f,
                             wp[SkJoint::SK_A2R].z + fwd.z * 0.25f };
