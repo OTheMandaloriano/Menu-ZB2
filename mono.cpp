@@ -3,6 +3,7 @@
 #include "log.h"
 #include <Windows.h>
 #include <math.h>
+#include <string.h>
 
 // ============================================================================
 // MONO.CPP - Binding dinamico do Mono embedding (Fase 2 itens 5+6)
@@ -32,6 +33,15 @@ typedef MonoClassField* (__cdecl* FnFieldFromName)(MonoClass*, const char*);
 typedef MonoVTable* (__cdecl* FnClassVTable)(MonoDomain*, MonoClass*);
 typedef void        (__cdecl* FnStaticGetValue)(MonoVTable*, MonoClassField*, void*);
 typedef MonoMethod* (__cdecl* FnMethodFromName)(MonoClass*, const char*, int);
+typedef void* (__cdecl* FnMethodDescNew)(const char*, int);
+typedef void* (__cdecl* FnMethodDescSearch)(void*, void*); // (desc, klass) — correto
+typedef void (__cdecl* FnMethodDescFree)(void*);
+typedef void* (__cdecl* FnClassGetMethods)(void*, void**);
+typedef void* (__cdecl* FnMethodSig)(void*);
+typedef const char* (__cdecl* FnMethodName)(void*);
+typedef int (__cdecl* FnSigParamCount)(void*);
+typedef void* (__cdecl* FnSigGetParam)(void*, int);
+typedef int (__cdecl* FnTypeGetType)(void*);
 typedef MonoObject* (__cdecl* FnRuntimeInvoke)(MonoMethod*, void*, void**, MonoObject**);
 typedef void*       (__cdecl* FnObjectUnbox)(MonoObject*);
 typedef char*       (__cdecl* FnStringUtf8)(MonoObject*);
@@ -86,6 +96,15 @@ namespace Mono {
     static FnClassVTable    pVTable = nullptr;
     static FnStaticGetValue pStaticGet = nullptr;
     static FnMethodFromName pMethodFrom = nullptr;
+    static FnMethodDescNew pDescNew = nullptr;
+    static FnMethodDescSearch pDescSearch = nullptr;
+    static FnMethodDescFree pDescFree = nullptr;
+    static FnClassGetMethods pClassMethods = nullptr;
+    static FnMethodSig pSigOf = nullptr;
+    static FnSigParamCount pSigCount = nullptr;
+    static FnSigGetParam pSigParam = nullptr;
+    static FnTypeGetType pTypeKind = nullptr;
+    static FnMethodName pMethodGetName = nullptr;
     static FnRuntimeInvoke  pInvoke = nullptr;
     static FnObjectUnbox    pUnbox = nullptr;
     static FnStringUtf8     pStrUtf8 = nullptr;
@@ -117,6 +136,8 @@ namespace Mono {
     static MonoMethod* mHasLocal = nullptr;
     static MonoMethod* mGetGO = nullptr; // Component.get_gameObject (auditoria ossos)
     static MonoMethod* mGetRot = nullptr; // Transform.get_rotation -> Matrix4x4 (fix bug 4)
+    static MonoMethod* mLinecast = nullptr; // Physics.Linecast alternativa (sem ambiguidade Ray)
+    static int s_lineArgs = 0;
     static bool s_boneLogged = false;
     static bool s_jointLogged = false; // auditoria juntas (1x por sessao)
     static bool s_skelLogged = false; // diagnostico SKEL (1x: mascara + tela dos bracos)
@@ -269,6 +290,16 @@ namespace Mono {
             ok &= Bind(m, "mono_class_vtable", pVTable);
             ok &= Bind(m, "mono_field_static_get_value", pStaticGet);
             ok &= Bind(m, "mono_class_get_method_from_name", pMethodFrom);
+            // Auditoria overloads: enumeracao + assinatura (nao-fatal se ausente).
+            Bind(m, "mono_method_desc_new", pDescNew);
+            Bind(m, "mono_method_desc_search_in_class", pDescSearch);
+            Bind(m, "mono_method_desc_free", pDescFree);
+            Bind(m, "mono_class_get_methods", pClassMethods);
+            Bind(m, "mono_method_signature", pSigOf);
+            Bind(m, "mono_signature_get_param_count", pSigCount);
+            Bind(m, "mono_signature_get_params", pSigParam);
+            Bind(m, "mono_type_get_type", pTypeKind);
+            Bind(m, "mono_method_get_name", pMethodGetName);
             ok &= Bind(m, "mono_runtime_invoke", pInvoke);
             ok &= Bind(m, "mono_object_unbox", pUnbox);
             ok &= Bind(m, "mono_string_to_utf8", pStrUtf8);
@@ -313,27 +344,82 @@ namespace Mono {
             MonoClass* cRend = pClassFrom(s_unity, "UnityEngine", "Renderer");
             if (cRend) { s.resolvedClasses++; ResolveMethod(cRend, "Renderer", "get_bounds", 0, mGetBounds); }
             // Item 14: Physics.Raycast p/ LOS camera->peito (visivel/invisivel).
-            // 16/09: tenta /5, /4, /3, /2 (ordens mais simples primeiro = mais
-            // provavel de existir). Registra qual resolveu no log (LOS-SIG).
+            // AUDITORIA: mono_class_get_method_from_name("Raycast",N) retorna o
+            // PRIMEIRO overload com N params — sem checar assinatura. Com 6+
+            // overloads de Raycast, /5 pode devolver (Ray,...) em vez de
+            // (origin,dir,hit,...). Por isso: enumera TODOS os Raycast via
+            // mono_class_get_methods + assinatura, e casa por TIPOS. Fallback:
+            // Linecast (start,end[,mask]) e descritor ":Raycast(...)".
+            // NOTA: mLinecast/s_lineArgs sao statics de namespace (visiveis em BuildEsp).
             MonoClass* cPhys = pClassFrom(s_unity, "UnityEngine", "Physics");
             if (cPhys) {
                 s.resolvedClasses++;
-                MonoMethod* t = pMethodFrom(cPhys, "Raycast", 5);
-                if (t) { mRaycast = t; s_rayArgs = 5; s.resolvedMethods++; }
-                else {
-                    t = pMethodFrom(cPhys, "Raycast", 4);
-                    if (t) { mRaycast = t; s_rayArgs = 4; s.resolvedMethods++; }
+                // 1) Auditoria: enumera TODOS os metodos declarados e loga a
+                // aridade de cada overload chamado "Raycast" (e "Linecast").
+                // Objetivo: saber se /5 casa com (Vector3,Vector3,RaycastHit&,Single,Int32)
+                // ou se o runtime so tem (Ray,out,...) — causa do LOS-COMBO-VERDE.
+                if (pClassMethods && pSigOf && pSigCount && pMethodGetName) {
+                    void* iter = nullptr;
+                    int nTotal = 0, nRay = 0, nLine = 0;
+                    while (true) {
+                        MonoMethod* mm = (MonoMethod*)pClassMethods(cPhys, &iter);
+                        if (!mm) break;
+                        if (++nTotal > 256) break;
+                        const char* nm = pMethodGetName(mm);
+                        if (!nm) continue;
+                        void* sg = pSigOf(mm);
+                        if (!sg) continue;
+                        int ac = pSigCount(sg);
+                        if (!strcmp(nm, "Raycast")) { nRay++; Log::Infof("[LOS-AUDIT] Physics.Raycast overload argc=%d", ac); }
+                        else if (!strcmp(nm, "Linecast")) { nLine++; Log::Infof("[LOS-AUDIT] Physics.Linecast overload argc=%d", ac); }
+                    }
+                    Log::Infof("[LOS-AUDIT] Physics declarados=%d Raycast=%d Linecast=%d.", nTotal, nRay, nLine);
+                } else Log::Warn("LOS-AUDIT sem API de enumeracao (pClassMethods/pSigOf/pSigCount/pMethodGetName).");
+                // 2) Tenta por descritor exato (origin,dir,hit,maxDist,mask).
+                if (pDescNew && pDescSearch && pDescFree) {
+                    void* dd = pDescNew(":Raycast(UnityEngine.Vector3,UnityEngine.Vector3,UnityEngine.RaycastHit&,System.Single,System.Int32)", 0);
+                    if (dd) {
+                        MonoMethod* t = (MonoMethod*)pDescSearch(cPhys, (void*)dd);
+                        // ATENCAO: pDescSearch espera (desc, namespace) em algumas builds;
+                        // se retornar null, cai para o fallback por aridade abaixo.
+                        if (t) { mRaycast = t; s_rayArgs = 5; s.resolvedMethods++; Log::Info("LOS-SIG Raycast/5 via descritor exato."); }
+                        pDescFree(dd);
+                    }
+                }
+                // 3) Fallback por aridade (comportamento anterior).
+                if (!mRaycast) {
+                    MonoMethod* t = pMethodFrom(cPhys, "Raycast", 5);
+                    if (t) { mRaycast = t; s_rayArgs = 5; s.resolvedMethods++; }
                     else {
-                        t = pMethodFrom(cPhys, "Raycast", 3);
-                        if (t) { mRaycast = t; s_rayArgs = 3; s.resolvedMethods++; }
+                        t = pMethodFrom(cPhys, "Raycast", 4);
+                        if (t) { mRaycast = t; s_rayArgs = 4; s.resolvedMethods++; }
                         else {
-                            t = pMethodFrom(cPhys, "Raycast", 2);
-                            if (t) { mRaycast = t; s_rayArgs = 2; s.resolvedMethods++; }
+                            t = pMethodFrom(cPhys, "Raycast", 3);
+                            if (t) { mRaycast = t; s_rayArgs = 3; s.resolvedMethods++; }
+                            else {
+                                t = pMethodFrom(cPhys, "Raycast", 2);
+                                if (t) { mRaycast = t; s_rayArgs = 2; s.resolvedMethods++; }
+                            }
                         }
+                    }
+                }
+                // 4) Linecast como alternativa (start,end[,mask]) — sem ambiguidade Ray.
+                // Seguranca: /4 (start,end,out RaycastHit,int) = discriminante (ignora
+                // corpo do proprio alvo pela distancia). /3 e AMBIGUO entre
+                // (out RaycastHit) e (int) -> nunca invocar. /2 = seguro, porem nao
+                // discrimina corpo proprio: usar so como ultimo recurso.
+                if (pMethodFrom) {
+                    MonoMethod* t = pMethodFrom(cPhys, "Linecast", 4);
+                    if (t) { mLinecast = t; s_lineArgs = 4; s.resolvedMethods++; Log::Info("LOS-SIG Physics.Linecast/4 resolvido (discriminante)."); }
+                    else {
+                        t = pMethodFrom(cPhys, "Linecast", 2);
+                        if (t) { mLinecast = t; s_lineArgs = 2; s.resolvedMethods++; Log::Warn("LOS-SIG Linecast/2 (sem RaycastHit): corpo proprio nao discriminado."); }
+                        else Log::Warn("Metodo nao resolvido: Physics.Linecast (overload /3 ambiguo ignorado por seguranca).");
                     }
                 }
                 if (mRaycast) Log::Infof("LOS-SIG Physics.Raycast/%d resolvido.", s_rayArgs);
                 else Log::Warn("Metodo nao resolvido: Physics.Raycast (2-5)");
+                if (mRaycast && !mLinecast) Log::Warn("Linecast ausente; Raycast e a unica via.");
             }
             cRayHit = pClassFrom(s_unity, "UnityEngine", "RaycastHit");
             if (cRayHit) {
@@ -418,6 +504,45 @@ namespace Mono {
                 return;
             }
         }
+    }
+    static bool LosPointLinecast(const Vec3& from, const Vec3& to) {
+        // Linecast: hit => ocluido. /4 le o RaycastHit e ignora o corpo do proprio
+        // alvo (hd ~= dist => exposto); /2 (sem hitInfo) e fail-conservador p/ corpo
+        // proprio: hit de qualquer coisa = ocluido. Seguro em ambos (nunca grava no int).
+        if (!mLinecast || s_lineArgs == 0) return true;
+        float dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
+        float dist = sqrtf(dx * dx + dy * dy + dz * dz);
+        if (!(dist > 0.5f) || !(dist < 10000.0f)) return true;
+        __try {
+            int mask = s_geomMask;
+            MonoObject* exc = nullptr;
+            MonoObject* ret = nullptr;
+            if (s_lineArgs == 4) {
+                unsigned char hitBuf[128] = { 0 };
+                void* args[4];
+                args[0] = (void*)&from;
+                args[1] = (void*)&to;
+                args[2] = (void*)hitBuf;
+                args[3] = (void*)&mask;
+                ret = pInvoke(mLinecast, nullptr, args, &exc);
+                if (exc || !ret) return true;
+                bool hit = (*(unsigned char*)pUnbox(ret)) != 0;
+                if (!hit) return true; // nada no caminho = exposto
+                float hd = 0;
+                __try { memcpy(&hd, hitBuf + s_hitDistOff, sizeof(hd)); } __except (EXCEPTION_EXECUTE_HANDLER) { return true; }
+                if (!(hd == hd) || hd <= 0) return true;
+                if (hd >= dist - 0.15f) return true; // hit no proprio corpo = exposto
+                return false; // parede/outro objeto bloqueia
+            }
+            // s_lineArgs == 2: (start,end) — hit de qualquer coisa = ocluido.
+            void* args[2];
+            args[0] = (void*)&from;
+            args[1] = (void*)&to;
+            ret = pInvoke(mLinecast, nullptr, args, &exc);
+            if (exc || !ret) return true;
+            bool hit = (*(unsigned char*)pUnbox(ret)) != 0;
+            return !hit;
+        } __except (EXCEPTION_EXECUTE_HANDLER) { return true; }
     }
     static bool LosPoint(const Vec3& from, const Vec3& to, float* outHit, int* outLayer) {
         if (outHit) *outHit = 0;
@@ -984,7 +1109,8 @@ namespace Mono {
                         pts[2] = { bb.center.x, bb.center.y - bb.extents.y * 0.35f, bb.center.z }; // quadril
                         pts[3] = { bb.center.x - bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z }; // coxaL
                         pts[4] = { bb.center.x + bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z }; // coxaR
-                        // Depth decide ponto a ponto; ponto sem depth cai p/ raycast.
+                        // Depth decide ponto a ponto; ponto sem depth cai p/ Linecast,
+                        // depois raycast (ordem: depth > linecast > raycast).
                         int h = 0; bool he = false;
                         for (int pi = 0; pi < 5; ++pi) {
                             float ndc = 0, u = 0, v = 0;
@@ -998,6 +1124,8 @@ namespace Mono {
                                     float eps = 0.5f / (dist * dist + 1.0f) + 0.001f;
                                     exp = ndc <= scene + eps;
                                 }
+                            } else if (mLinecast && s_lineArgs >= 2) {
+                                exp = LosPointLinecast(camW, pts[pi]);
                             } else {
                                 float dummy; int dumL;
                                 exp = LosPoint(camW, pts[pi], &dummy, &dumL);
@@ -1008,7 +1136,7 @@ namespace Mono {
                         tmpEn.losVis = (h >= 2) || he;
                         if (s_losLogN < 40) {
                             s_losLogN++;
-                            Log::Infof("[LOS] id=0x%p dist=%.1f hits=%d/5 visivel=%d (depth+ray)",
+                            Log::Infof("[LOS] id=0x%p dist=%.1f hits=%d/5 visivel=%d (depth+line+ray)",
                                 e, (double)dist, h, tmpEn.losVis ? 1 : 0);
                         }
                     }
