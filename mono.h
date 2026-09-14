@@ -38,6 +38,7 @@ namespace Mono {
         float ex, ey, ez;   // extents da AABB (log diagnostico P1)
         bool  losVis;       // item 14: proporcao exposta >= 40% (multi-bone)
         int   losHits;      // item 14: pontos expostos de 5 (log [LOS])
+        float losDepth[5];  // item 14/Passo5: profundidade NDC do osso (depth buffer)
         int   skN;          // juntas validas (item 12 Skeleton real)
         float skX[20], skY[20]; // pixels Unity (y p/ cima, igual px/py)
         bool  skV[20];      // junta na frente da camera
@@ -67,6 +68,9 @@ namespace Mono {
     void Tick();
     const State& Get();
     void SetViewport(float w, float h); // tela atual (p/ W2S proprio)
+    // Implementado em main.cpp (captura D3D11). Declarado aqui p/ a worker.
+    // Usa :: (global) porque a definicao esta em namespace global, nao em Mono.
+    namespace DepthVisShim { bool Sample(float u, float v, float& outNdc); }
 
     // Snapshot do ESP (preenchido no Tick; ler no Render).
     // N <0 = todos; retorna quantidade escrita.

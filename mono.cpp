@@ -536,6 +536,46 @@ namespace Mono {
         if (w > 100 && h > 100) { s_vpW = w; s_vpH = h; }
     }
 
+    // Item 14/Passo 5: NDC de profundidade de um ponto de MUNDO via VP proprio.
+    // Mesma matematica do W2S, mas retorna o Z clip (0=perto, 1=longe) em vez do pixel.
+    // Comparado com o depth buffer da cena: osso mais fundo que a cena = ocluido.
+    static bool BoneNdc(const Vec3& w, float& outNdc, float& outU, float& outV) {
+        if (!s_vpOk || s_vpW < 64 || s_vpH < 64) return false;
+        float cx = s_vp[0] * w.x + s_vp[4] * w.y + s_vp[8] * w.z + s_vp[12];
+        float cy = s_vp[1] * w.x + s_vp[5] * w.y + s_vp[9] * w.z + s_vp[13];
+        float cz = s_vp[2] * w.x + s_vp[6] * w.y + s_vp[10] * w.z + s_vp[14];
+        float cw = s_vp[3] * w.x + s_vp[7] * w.y + s_vp[11] * w.z + s_vp[15];
+        if (!(cw > 0.05f)) return false;
+        float inv = 1.0f / cw;
+        float nx = cx * inv, ny = cy * inv, nz = cz * inv;
+        if (!(nx == nx && ny == ny && nz == nz)) return false;
+        if (nx < -1.2f || nx > 1.2f || ny < -1.2f || ny > 1.2f) return false;
+        outNdc = nz * 0.5f + 0.5f; // clip [-1,1] -> depth [0,1] (D3D)
+        outU = nx * 0.5f + 0.5f;
+        outV = 1.0f - (ny * 0.5f + 0.5f); // NDC y-up -> UV y-down (texel)
+        return true;
+    }
+    static int s_depthOk = 0, s_depthMiss = 0; // diagnostico depth (amostragem)
+    // Ponto exposto? Compara NDC do osso com a cena. Epsilon 0.001 + margem de
+    // 0.5m em profundidade (converte: margem relativa a distancia do osso).
+    static bool DepthExposed(const Vec3& w, float distToBone) {
+        float ndc = 0, u = 0, v = 0;
+        if (!BoneNdc(w, ndc, u, v)) return true; // fora da tela = nao decide
+        float scene = 0;
+        if (!DepthVisShim::Sample(u, v, scene)) {
+            if (s_depthMiss < 3) { s_depthMiss++; Log::Warn("Depth sample indisponivel (MSAA/staging?)."); }
+            return true; // fail-open: sem depth, exposto
+        }
+        if (s_depthOk < 2) { s_depthOk++; Log::Infof("Depth OK: osso=%.4f cena=%.4f u=%.2f v=%.2f.", (double)ndc, (double)scene, (double)u, (double)v); }
+        // Cena no far (1.0) = ceu: osso sempre exposto.
+        if (scene >= 0.999f) return true;
+        // Margem: osso ate ~0.5m atras da superficie ainda conta como exposto
+        // (espessura do corpo + jitter). Em NDC a margem encolhe com a distancia;
+        // aproxima com 0.5m convertido via derivada: eps = 0.5 / dist^2 * k.
+        float eps = 0.5f / (distToBone * distToBone + 1.0f) + 0.001f;
+        return ndc <= scene + eps;
+    }
+
     // Le matriz 4x4 da camera (64 bytes, column-major Unity).
     static bool GetMat(MonoMethod* m, void* cam, float out[16]) {
         if (!m || !cam) return false;
@@ -897,8 +937,8 @@ namespace Mono {
                     if (nv < 6) return;
                     // Maos ja calculadas em CollectJoints (fix bugs 1-2, 4) — vale p/ 2D e 3D.
                     CollectJoints(zo, cam, tmpEn);
-                    // Item 14 multi-bone: 5 pontos (cabeca/peito/quadril/coxaL/coxaR).
-                    // Fonte unica da regra = LosMulti (hits>=2 ou cabeca).
+                    // Item 14/Passo 5: depth buffer nos 5 pontos (cabeca/peito/quadril/coxas).
+                    // Raycast (LosMulti) = fallback se depth indisponivel.
                     tmpEn.losVis = true;
                     tmpEn.losHits = 5;
                     if (Config::bVisibleCheck && hasCamW) {
@@ -908,14 +948,33 @@ namespace Mono {
                         pts[2] = { bb.center.x, bb.center.y - bb.extents.y * 0.35f, bb.center.z }; // quadril
                         pts[3] = { bb.center.x - bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z }; // coxaL
                         pts[4] = { bb.center.x + bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z }; // coxaR
-                        tmpEn.losVis = LosMulti(camW, pts, dist, e);
-                        // Reconta hits p/ snapshot (barato; LosMulti ja validou a regra).
-                        int h = 0;
+                        // Depth decide ponto a ponto; ponto sem depth cai p/ raycast.
+                        int h = 0; bool he = false;
                         for (int pi = 0; pi < 5; ++pi) {
-                            float dummy; int dumL;
-                            if (LosPoint(camW, pts[pi], &dummy, &dumL)) h++;
+                            float ndc = 0, u = 0, v = 0;
+                            bool hasNdc = BoneNdc(pts[pi], ndc, u, v);
+                            float scene = 0;
+                            bool hasDepth = hasNdc && DepthVisShim::Sample(u, v, scene);
+                            bool exp;
+                            if (hasDepth) {
+                                if (scene >= 0.999f) exp = true;
+                                else {
+                                    float eps = 0.5f / (dist * dist + 1.0f) + 0.001f;
+                                    exp = ndc <= scene + eps;
+                                }
+                            } else {
+                                float dummy; int dumL;
+                                exp = LosPoint(camW, pts[pi], &dummy, &dumL);
+                            }
+                            if (exp) { h++; if (pi == 0) he = true; }
                         }
                         tmpEn.losHits = h;
+                        tmpEn.losVis = (h >= 2) || he;
+                        if (s_losLogN < 40) {
+                            s_losLogN++;
+                            Log::Infof("[LOS] id=0x%p dist=%.1f hits=%d/5 visivel=%d (depth+ray)",
+                                e, (double)dist, h, tmpEn.losVis ? 1 : 0);
+                        }
                     }
                     if (!s_handLogged2 && (tmpEn.skV[SkJoint::SK_HL2L] || tmpEn.skV[SkJoint::SK_HL2R])) {
                         s_handLogged2 = true;
@@ -967,7 +1026,7 @@ namespace Mono {
             }
             if (n == 0) { s_dbgEyeY = wh.y; s_dbgFootY = wf.y; }
             CollectJoints(zo, cam, tmpEn);
-            // Item 14 multi-bone (fallback 2D): cabeca/olho, peito, quadril, pes.
+            // Item 14/Passo 5 (fallback 2D): depth buffer nos 5 pontos (cabeca->pes).
             tmpEn.losVis = true;
             tmpEn.losHits = 5;
             if (Config::bVisibleCheck && hasCamW) {
@@ -977,13 +1036,13 @@ namespace Mono {
                 pts[2] = { (wh.x + wf.x) * 0.5f, wh.y + (wf.y - wh.y) * 0.5f, (wh.z + wf.z) * 0.5f };  // quadril
                 pts[3] = { (wh.x + wf.x) * 0.5f, wh.y + (wf.y - wh.y) * 0.75f, (wh.z + wf.z) * 0.5f }; // coxa
                 pts[4] = wf; // pes
-                tmpEn.losVis = LosMulti(camW, pts, dist, e);
-                int h = 0;
+                int h = 0; bool he = false;
                 for (int pi = 0; pi < 5; ++pi) {
-                    float dummy; int dumL;
-                    if (LosPoint(camW, pts[pi], &dummy, &dumL)) h++;
+                    if (DepthExposed(pts[pi], dist)) { h++; if (pi == 0) he = true; }
+                    tmpEn.losDepth[pi] = 0; // (debug futuro: guardar NDC por ponto)
                 }
                 tmpEn.losHits = h;
+                tmpEn.losVis = (h >= 2) || he;
             }
             EspEntry& en = tmp[n++];
             memcpy(en.name, tmpEn.name, sizeof(en.name));
@@ -1189,6 +1248,7 @@ namespace Mono {
         s_dom = nullptr; s_img = nullptr;
     }
 }
+
 
 
 
