@@ -886,6 +886,23 @@ namespace GUI {
                     dl->AddLine(r0, b0, col, 1.0f); dl->AddLine(ImVec2(r1.x, r0.y), ImVec2(b1.x, b0.y), col, 1.0f);
                     dl->AddLine(ImVec2(r0.x, r1.y), ImVec2(b0.x, b1.y), col, 1.0f); dl->AddLine(r1, b1, col, 1.0f);
                 }
+                // Item 12 Skeleton: ossos projetados (Unity px -> ImGui). Ordem do array.
+                if (layout.skeleton && es[i].skN >= 2) {
+                    for (int k = 0; k + 1 < es[i].skN && k + 1 < 16; ++k) {
+                        if (!es[i].skV[k] || !es[i].skV[k + 1]) continue;
+                        ImVec2 a = ImVec2(es[i].skX[k], H - es[i].skY[k]);
+                        ImVec2 b = ImVec2(es[i].skX[k + 1], H - es[i].skY[k + 1]);
+                        if (a.x < -10000 || a.x > 10000 || a.y < -10000 || a.y > 10000) continue;
+                        if (b.x < -10000 || b.x > 10000 || b.y < -10000 || b.y > 10000) continue;
+                        dl->AddLine(a, b, col, 1.5f);
+                    }
+                    for (int k = 0; k < es[i].skN && k < 16; ++k) {
+                        if (!es[i].skV[k]) continue;
+                        ImVec2 p = ImVec2(es[i].skX[k], H - es[i].skY[k]);
+                        if (p.x < -10000 || p.x > 10000 || p.y < -10000 || p.y > 10000) continue;
+                        dl->AddCircleFilled(p, 2.0f, col);
+                    }
+                }
                 EspLayout::Rect envelope = { r0, r1 };
                 if (layout.boxStyle == 1 && !es[i].has3d) {
                     envelope.min.y -= h * 0.10f;

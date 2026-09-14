@@ -22,6 +22,9 @@ namespace Mono {
         bool  has3d;        // AABB valida (Box 3D real; senao fallback 2D)
         void* ent;          // ponteiro da entidade (log diagnostico P1)
         float ex, ey, ez;   // extents da AABB (log diagnostico P1)
+        int   skN;          // ossos projetados (item 12 Skeleton, max 16)
+        float skX[16], skY[16]; // pixels Unity (y p/ cima, igual px/py)
+        bool  skV[16];      // osso na frente da camera
         char  name[64];
         bool  onScreen;
         bool  isAlly;        // item 15 (sempre false no item 7)

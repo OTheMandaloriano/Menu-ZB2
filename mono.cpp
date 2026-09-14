@@ -52,6 +52,8 @@ namespace Off {
     // ZombieObject (instancia)
     constexpr int ZO_eye = 88;
     constexpr int ZO_foot = 96;
+    constexpr int ZO_armature = 72; // Transform[] (item 12 Skeleton)
+    constexpr int SK_MAX = 16;
     constexpr int ZO_mesh = 56; // SkinnedMeshRenderer do corpo (bounds p/ Box 3D)
     constexpr int Z_obj = 16;
     // MainCamera (instancia)
@@ -416,6 +418,40 @@ namespace Mono {
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 
+    // Item 12 Skeleton: le armatureBone Transform[] (+72), projeta ate 16 ossos.
+    // So roda com bZombieSkeleton ligado (cada osso = 2 invokes).
+    // Sem fallback aqui: cada caminho (2D/3D) aplica o seu (head/foot ou AABB).
+    static void CollectBones(void* zo, void* cam, EspEntry& out) {
+        out.skN = 0;
+        for (int k = 0; k < Off::SK_MAX; ++k) { out.skV[k] = false; out.skX[k] = out.skY[k] = 0; }
+        if (!Config::bZombieSkeleton) return;
+        void* arr = ReadP(zo, Off::ZO_armature);
+        int got = 0;
+        if (arr) {
+            __try {
+                long long ll = 0;
+                memcpy(&ll, (char*)arr + Off::A_len, sizeof(ll));
+                long long len = ll;
+                if (len < 0 || len > 64) len = 0;
+                int want = len > Off::SK_MAX ? Off::SK_MAX : (int)len;
+                for (int i = 0; i < want; ++i) {
+                    void* bone = nullptr;
+                    memcpy(&bone, (char*)arr + Off::A_data + (size_t)i * 8, 8);
+                    if (!bone) continue;
+                    Vec3 w, s3;
+                    if (!GetPos(bone, w)) continue;
+                    if (!Fin(w.x) || !Fin(w.y) || !Fin(w.z)) continue;
+                    if (!W2S(cam, w, s3)) continue;
+                    if (!Sane2(s3.x, s3.y)) continue;
+                    out.skX[got] = s3.x; out.skY[got] = s3.y; out.skV[got] = true;
+                    if (++got >= Off::SK_MAX) break;
+                }
+            } __except (EXCEPTION_EXECUTE_HANDLER) {}
+        }
+        if (got >= 2) { out.skN = got; return; }
+        out.skN = got; // <2: chamador aplica fallback do caminho (2D/3D)
+    }
+
     // Monta snapshot do ESP (zumbis). Roda na worker 30Hz, nao por frame.
     static void BuildEsp() {
         EspEntry tmp[128] = {};
@@ -509,6 +545,18 @@ namespace Mono {
                     int nv = 0; // Fix B: cantos atras da camera nao desenham (sem fragmentos)
                     for (int k = 0; k < 8; ++k) if (tmpEn.pv[k]) nv++;
                     if (nv < 6) return;
+                    CollectBones(zo, cam, tmpEn);
+                    if (tmpEn.skN < 2) {
+                        // Fallback 3D: espinha no eixo da AABB (topo->base), projetada.
+                        Vec3 wt = { bb.center.x, bb.center.y + bb.extents.y, bb.center.z };
+                        Vec3 wb = { bb.center.x, bb.center.y - bb.extents.y, bb.center.z };
+                        Vec3 st, sb;
+                        if (W2S(cam, wt, st) && W2S(cam, wb, sb) && Sane2(st.x, st.y) && Sane2(sb.x, sb.y)) {
+                            tmpEn.skX[0] = st.x; tmpEn.skY[0] = st.y; tmpEn.skV[0] = true;
+                            tmpEn.skX[1] = sb.x; tmpEn.skY[1] = sb.y; tmpEn.skV[1] = true;
+                            tmpEn.skN = 2;
+                        }
+                    }
             EspEntry& en = tmp[n++];
             memcpy(en.name, tmpEn.name, sizeof(en.name));
             en.has3d = false;
@@ -516,6 +564,10 @@ namespace Mono {
                     memcpy(en.px, tmpEn.px, sizeof(en.px));
                     memcpy(en.py, tmpEn.py, sizeof(en.py));
                     memcpy(en.pv, tmpEn.pv, sizeof(en.pv));
+                    en.skN = tmpEn.skN;
+                    memcpy(en.skX, tmpEn.skX, sizeof(en.skX));
+                    memcpy(en.skY, tmpEn.skY, sizeof(en.skY));
+                    memcpy(en.skV, tmpEn.skV, sizeof(en.skV));
                     en.has3d = true;
                     en.ent = e; en.ex = bb.extents.x; en.ey = bb.extents.y; en.ez = bb.extents.z;
                     en.headX = en.headY = en.footX = en.footY = 0;
@@ -547,11 +599,22 @@ namespace Mono {
                 return;
             }
             if (n == 0) { s_dbgEyeY = wh.y; s_dbgFootY = wf.y; }
+            CollectBones(zo, cam, tmpEn);
+            if (tmpEn.skN < 2) {
+                // Fallback 2D: espinha head->foot (Unity px). Nunca some no teste.
+                tmpEn.skX[0] = sh.x; tmpEn.skY[0] = sh.y; tmpEn.skV[0] = true;
+                tmpEn.skX[1] = sf.x; tmpEn.skY[1] = sf.y; tmpEn.skV[1] = true;
+                tmpEn.skN = 2;
+            }
             EspEntry& en = tmp[n++];
             memcpy(en.name, tmpEn.name, sizeof(en.name));
             en.dist = dist;
             en.headX = sh.x; en.headY = sh.y;
             en.footX = sf.x; en.footY = sf.y;
+            en.skN = tmpEn.skN;
+            memcpy(en.skX, tmpEn.skX, sizeof(en.skX));
+            memcpy(en.skY, tmpEn.skY, sizeof(en.skY));
+            memcpy(en.skV, tmpEn.skV, sizeof(en.skV));
             en.ent = e; en.ex = en.ey = en.ez = 0;
             en.hp = hp; en.maxHp = mx;
             en.onScreen = true; en.isAlly = false;
