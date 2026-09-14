@@ -914,6 +914,21 @@ namespace GUI {
                     }
                     // Sem circulo na cabeca: Head Dot (item 13) e funcao separada do menu.
                 }
+                // Item 13 Snapline: base da tela -> centro do pe da box (padrao grandes cheats).
+                if (layout.snapline && w > 2.0f && h > 2.0f) {
+                    ImVec2 base = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y);
+                    ImVec2 tgt = ImVec2((r0.x + r1.x) * 0.5f, r1.y);
+                    if (tgt.x > -10000 && tgt.x < 10000 && tgt.y > -10000 && tgt.y < 10000)
+                        dl->AddLine(base, tgt, col, 1.0f);
+                }
+                // Item 13 Head Dot: ponto na junta HEAD (projetada, nao fixa no box).
+                if (layout.headDot && es[i].skN == Mono::SK_COUNT && es[i].skV[Mono::SK_HEAD]) {
+                    ImVec2 hp = ImVec2(es[i].skX[Mono::SK_HEAD], H - es[i].skY[Mono::SK_HEAD]);
+                    if (hp.x > -10000 && hp.x < 10000 && hp.y > -10000 && hp.y < 10000) {
+                        float hr = h * 0.03f; if (hr < 2.0f) hr = 2.0f; if (hr > 6.0f) hr = 6.0f;
+                        dl->AddCircleFilled(hp, hr, col);
+                    }
+                }
                 EspLayout::Rect envelope = { r0, r1 };
                 if (layout.boxStyle == 1 && !es[i].has3d) {
                     envelope.min.y -= h * 0.10f;
