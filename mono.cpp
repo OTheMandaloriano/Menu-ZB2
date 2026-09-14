@@ -116,6 +116,8 @@ namespace Mono {
     static MonoClassField* fZLInst = nullptr;
     static MonoClassField* fPCInst = nullptr;
     static MonoMethod* mHasLocal = nullptr;
+    static MonoMethod* mGetGO = nullptr; // Component.get_gameObject (auditoria ossos)
+    static bool s_boneLogged = false;
     static DWORD WINAPI EspThread(LPVOID); // forward (definida apos BuildEsp)
     static MonoImage*  s_unity = nullptr;
     static MonoClass*  cCamU = nullptr;
@@ -285,6 +287,7 @@ namespace Mono {
             if (cCamU) { MonoMethod* t = pMethodFrom(cCamU, "get_projectionMatrix", 0); if (t) { mGetProjMat = t; s.resolvedMethods++; } else Log::Warn("Metodo nao resolvido: Camera.get_projectionMatrix/0"); }
             if (cTrans) ResolveMethod(cTrans, "Transform", "get_position", 0, mGetPos);
             if (cComp) ResolveMethod(cComp, "Component", "get_transform", 0, mGetTrans);
+            if (cComp) ResolveMethod(cComp, "Component", "get_gameObject", 0, mGetGO);
             MonoClass* cObj = pClassFrom(s_unity, "UnityEngine", "Object");
             if (cObj) { s.resolvedClasses++; ResolveMethod(cObj, "Object", "get_name", 0, mGetName); }
             MonoClass* cRend = pClassFrom(s_unity, "UnityEngine", "Renderer");
@@ -660,6 +663,53 @@ namespace Mono {
         }
     }
 
+    // Auditoria ossos (item 12): registra 1x o nome de cada Transform do
+    // armatureBone do primeiro zumbi vivo. Com os nomes, mapeio cabeca, bracos,
+    // pernas e fio as juntas certas (padrao dos grandes: bone IDs, nao chute).
+    static void AuditBones() {
+        if (s_boneLogged || !mGetGO) return;
+        void* zl = nullptr;
+        if (!StaticInstance(cZLoader, fZLInst, zl)) return;
+        void* list = ReadP(zl, Off::ZL_zombies);
+        if (!list) return;
+        bool done = false;
+        WalkList(list, 512, [&](void* e, int) {
+            if (done) return;
+            void* h = ReadP(e, Off::Z_health);
+            if (!h) return;
+            if (ReadF(h, Off::ZH_amount) <= 0) return;
+            void* zo = ReadP(e, Off::Z_obj);
+            if (!zo) return;
+            void* arr = ReadP(zo, Off::ZO_armature);
+            if (!arr) return;
+            long long len = 0;
+            __try { memcpy(&len, (char*)arr + Off::A_len, sizeof(len)); }
+            __except (EXCEPTION_EXECUTE_HANDLER) { return; }
+            if (len <= 0 || len > 64) return;
+            Log::Infof("[BONE] armature len=%d ent=0x%p", (int)len, e);
+            for (long long i = 0; i < len && i < 40; ++i) {
+                void* bone = nullptr;
+                __try { memcpy(&bone, (char*)arr + Off::A_data + (size_t)i * 8, 8); }
+                __except (EXCEPTION_EXECUTE_HANDLER) { break; }
+                if (!bone) { Log::Infof("[BONE] idx=%d (null)", (int)i); continue; }
+                char nm[64] = { 0 };
+                __try {
+                    MonoObject* exc = nullptr;
+                    MonoObject* go = pInvoke(mGetGO, bone, nullptr, &exc);
+                    if (exc || !go) { Log::Infof("[BONE] idx=%d (sem gameObject)", (int)i); continue; }
+                    MonoObject* exc2 = nullptr;
+                    MonoObject* ret = pInvoke(mGetName, go, nullptr, &exc2);
+                    if (exc2 || !ret) { Log::Infof("[BONE] idx=%d (sem nome)", (int)i); continue; }
+                    char* u = pStrUtf8(ret);
+                    if (u) { strncpy_s(nm, u, _TRUNCATE); pFree(u); }
+                } __except (EXCEPTION_EXECUTE_HANDLER) { continue; }
+                Log::Infof("[BONE] idx=%d name=%s bone=0x%p", (int)i, nm[0] ? nm : "?", bone);
+            }
+            done = true;
+        });
+        if (done) { s_boneLogged = true; Log::Info("[BONE] auditoria concluida."); }
+    }
+
     void Tick() {
         // ESP roda em worker thread (30Hz): Present nunca bloqueia em invoke.
         // a camera gira. Leituras de texto do overlay seguem a 2Hz (30 frames).
@@ -668,6 +718,7 @@ namespace Mono {
         if (s_tick % 30 != 0) return;
         static int n = 0;
         ReadAll();
+        AuditBones();
         if (++n == 1 || n % 20 == 0)
             Log::Infof("Mono live: localHP=%.0f stam=%.0f players=%d zombies=%d zHp0=%.0f day=%.2fh eyeY=%.2f footY=%.2f fantasma(morta=%d ruim=%d)",
                 s.localHp, s.localStam, s.players, s.zombies, s.zHp0, s.dayTime, s_dbgEyeY, s_dbgFootY, s_ghostDead, s_ghostBad);
