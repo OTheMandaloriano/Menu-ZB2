@@ -959,6 +959,16 @@ namespace Mono {
                     CollectJoints(zo, cam, tmpEn);
                     // Item 14/Passo 5: depth buffer nos 5 pontos (cabeca/peito/quadril/coxas).
                     // Raycast (LosMulti) = fallback se depth indisponivel.
+                    // Auditoria: DEPTH-ROW 1x (caminho 3D real do print).
+                    {
+                        Vec3 dpts[5];
+                        dpts[0] = { bb.center.x, bb.center.y + bb.extents.y, bb.center.z };
+                        dpts[1] = bb.center;
+                        dpts[2] = { bb.center.x, bb.center.y - bb.extents.y * 0.35f, bb.center.z };
+                        dpts[3] = { bb.center.x - bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z };
+                        dpts[4] = { bb.center.x + bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z };
+                        DepthDiagRow(dpts, dist);
+                    }
                     tmpEn.losVis = true;
                     tmpEn.losHits = 5;
                     if (Config::bVisibleCheck && hasCamW) {

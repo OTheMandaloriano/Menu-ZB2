@@ -45,6 +45,7 @@ namespace DepthVis {
     // Amostra NDC [0,1] no ultimo frame valido. Retorna false se indisponivel.
     bool Sample(float u, float v, float& outNdc);
     void Shutdown();
+    void AuditTick(UINT w, UINT h, DXGI_FORMAT fmt, UINT samples, int hasDsv, int hasTex);
 }
 namespace Mono { namespace DepthVisShim {
     // Shim: corpo em main.cpp (TU com o DepthVis global). So declara aqui.
@@ -124,6 +125,29 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
             g_pContext->OMGetRenderTargets(1, nullptr, &dsv);
             g_pContext->RSGetViewports(&nvp, vp);
         }
+        // Auditoria: registra o que o OM entrega (1-2x). Sem DSV aqui = sem depth.
+        {
+            ID3D11Resource* ares = nullptr;
+            UINT aw = 0, ah = 0, as = 0;
+            DXGI_FORMAT af = DXGI_FORMAT_UNKNOWN;
+            int hasT = 0;
+            if (dsv) {
+                D3D11_TEXTURE2D_DESC atd = {};
+                ID3D11Resource* ar2 = nullptr;
+                dsv->GetResource(&ar2);
+                if (ar2) {
+                    ID3D11Texture2D* at = nullptr;
+                    if (SUCCEEDED(ar2->QueryInterface(__uuidof(ID3D11Texture2D), (void**)&at)) && at) {
+                        at->GetDesc(&atd);
+                        aw = atd.Width; ah = atd.Height; af = atd.Format; as = atd.SampleDesc.Count;
+                        hasT = 1;
+                        at->Release();
+                    }
+                    ar2->Release();
+                }
+            }
+            DepthVis::AuditTick(aw, ah, af, as, dsv ? 1 : 0, hasT);
+        }
         if (dsv) {
             D3D11_DEPTH_STENCIL_VIEW_DESC dd = {};
             dsv->GetDesc(&dd);
@@ -189,12 +213,24 @@ namespace DepthVis {
     static DXGI_FORMAT s_fmt = DXGI_FORMAT_UNKNOWN;
     static float s_nw = 0, s_nh = 0;
     static int s_seq = 0, s_logged = 0;
+    // Auditoria 14/09: contadores de captura (Publish) vs consumo (Sample).
+    // Se published=0 => bloco de captura nunca publicou (DSV nulo/formato/MSAA).
+    static long s_pubN = 0, s_mapOk = 0, s_mapFail = 0, s_msaaSkip = 0;
+    static int s_statLogged = 0;
     void Publish(ID3D11DeviceContext* ctx, ID3D11Texture2D* staging, UINT w, UINT h, DXGI_FORMAT fmt, float ndcW, float ndcH) {
         if (!g_depthCSInit) { InitializeCriticalSection(&g_depthCS); g_depthCSInit = true; }
         EnterCriticalSection(&g_depthCS);
         s_ctx = ctx; s_tex = staging; s_w = w; s_h = h; s_fmt = fmt; s_nw = ndcW; s_nh = ndcH;
         s_seq++;
+        s_pubN++;
         LeaveCriticalSection(&g_depthCS);
+    }
+    // Auditoria: de onde vem o DSV? Loga formato/dimensao/MSAA 1x (causa raiz).
+    void AuditTick(UINT w, UINT h, DXGI_FORMAT fmt, UINT samples, int hasDsv, int hasTex) {
+        if (s_statLogged >= 2) return;
+        s_statLogged++;
+        Log::Infof("[DEPTH-STAT] dsv=%d tex=%d %ux%u fmt=%d msaa=%u.",
+            hasDsv, hasTex, w, h, (int)fmt, samples);
     }
     // Amostra o pixel (u,v em [0,1]) e retorna NDC decodificado por formato.
     // D24/D16: inteiro normalizado. D32: float direto. R24G8/R32: typeless views.
@@ -215,7 +251,13 @@ namespace DepthVis {
         if ((UINT)y >= h) y = (int)h - 1;
         D3D11_MAPPED_SUBRESOURCE mp = {};
         // Map em staging com READ e sem flags extras (dado do frame anterior e valido).
-        if (FAILED(ctx->Map(tex, 0, D3D11_MAP_READ, 0, &mp))) return false;
+        if (FAILED(ctx->Map(tex, 0, D3D11_MAP_READ, 0, &mp))) {
+            long f = 0;
+            if (g_depthCSInit) { EnterCriticalSection(&g_depthCS); f = ++s_mapFail; LeaveCriticalSection(&g_depthCS); }
+            if (f <= 2) Log::Warn("Depth Map falhou (dispositivo/staging).");
+            return false;
+        }
+        if (g_depthCSInit) { EnterCriticalSection(&g_depthCS); s_mapOk++; LeaveCriticalSection(&g_depthCS); }
         bool ok = false;
         __try {
             if (fmt == DXGI_FORMAT_D32_FLOAT || fmt == DXGI_FORMAT_R32_TYPELESS) {
