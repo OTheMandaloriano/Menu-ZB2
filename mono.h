@@ -36,7 +36,8 @@ namespace Mono {
         bool  has3d;        // AABB valida (Box 3D real; senao fallback 2D)
         void* ent;          // ponteiro da entidade (log diagnostico P1)
         float ex, ey, ez;   // extents da AABB (log diagnostico P1)
-        bool  losVis;       // item 14: peito visivel da camera (sem oclusao)
+        bool  losVis;       // item 14: proporcao exposta >= 40% (multi-bone)
+        int   losHits;      // item 14: pontos expostos de 5 (log [LOS])
         int   skN;          // juntas validas (item 12 Skeleton real)
         float skX[20], skY[20]; // pixels Unity (y p/ cima, igual px/py)
         bool  skV[20];      // junta na frente da camera

@@ -130,10 +130,18 @@ namespace Mono {
     static MonoMethod* mW2S = nullptr;
     static MonoMethod* mGetTrans = nullptr;
     // Item 14 LOS: Physics dota o teste de oclusao sem custo de disposicao.
+    typedef unsigned int (__cdecl* FnFieldOffset)(void*); // mono_field_get_offset
     static MonoMethod* mRaycast = nullptr; // Physics.Raycast(Vector3,Vector3,RaycastHit&,Single,Int32)
     static MonoClass*  cRayHit = nullptr;  // UnityEngine.RaycastHit (struct p/ out)
-    static MonoClassField* fHitDist = nullptr; // RaycastHit.distance (+20)
-    static int s_losVisN = 0, s_losOccN = 0; // diagnostico LOS (amostragem, sem spam)
+    static MonoClassField* fHitDist = nullptr; // RaycastHit.distance (offset real via API)
+    static MonoClassField* fHitCol = nullptr;  // RaycastHit.collider (p/ log layer)
+    static MonoClass*  cCollider = nullptr; // UnityEngine.Collider (gameObject/layer)
+    static MonoMethod* mGetHitGO = nullptr; // Collider.get_gameObject (log HIT)
+    static MonoMethod* mGetLayer = nullptr; // GameObject.get_layer (log HIT)
+    static FnFieldOffset pFieldOff = nullptr; // mono_field_get_offset
+    static int s_hitDistOff = 20; // fallback; corrigido no Init via API
+    static int s_losLogN = 0; // log [LOS] por entidade (1x cada, sem spam)
+    static int s_geomMask = -1; // layer mask (auditoria Passo 2; default = tudo)
     static bool      s_losOk = false; // Physics.Raycast resolvido e funcional
     static EspEntry s_esp[128];
     static int s_espN = 0;
@@ -317,10 +325,34 @@ namespace Mono {
                 fHitDist = pFieldFrom(cRayHit, "distance");
                 if (fHitDist) s.resolvedFields++;
                 else Log::Warn("Campo nao resolvido: RaycastHit.distance");
+                fHitCol = pFieldFrom(cRayHit, "m_Collider");
+                if (!fHitCol) fHitCol = pFieldFrom(cRayHit, "collider");
+                if (fHitCol) s.resolvedFields++;
+                else Log::Warn("Campo nao resolvido: RaycastHit.collider");
+            }
+            cCollider = pClassFrom(s_unity, "UnityEngine", "Collider");
+            if (cCollider && cComp) {
+                MonoMethod* t = pMethodFrom(cCollider, "get_gameObject", 0);
+                if (t) { mGetHitGO = t; s.resolvedMethods++; }
+            }
+            MonoClass* cGO = pClassFrom(s_unity, "UnityEngine", "GameObject");
+            if (cGO) {
+                MonoMethod* t = pMethodFrom(cGO, "get_layer", 0);
+                if (t) { mGetLayer = t; s.resolvedMethods++; }
+            }
+            // Offset REAL do campo via mono_field_get_offset (fix: +20 era chute).
+            {
+                HMODULE mm = GetModuleHandleW(L"mono-2.0-bdwgc.dll");
+                if (mm) pFieldOff = (FnFieldOffset)GetProcAddress(mm, "mono_field_get_offset");
+                if (pFieldOff && fHitDist) {
+                    s_hitDistOff = (int)pFieldOff(fHitDist);
+                    Log::Infof("LOS RaycastHit.distance offset=%d (via API).", s_hitDistOff);
+                } else Log::Warn("mono_field_get_offset ausente; distance usa fallback +20.");
             }
             s_losOk = (mRaycast && cRayHit && fHitDist);
-            Log::Infof("LOS %s.", s_losOk ? "OK (Physics.Raycast/5 + RaycastHit)" : "INDISPONIVEL (tudo visivel)");
-        } else Log::Warn("Imagem UnityEngine.CoreModule nao carregada.");
+            Log::Infof("LOS %s (mask=0x%X).", s_losOk ? "OK (Raycast/5 + HitGO/layer)" : "INDISPONIVEL (tudo visivel)", (unsigned)s_geomMask);
+        }                     else Log::Warn("Imagem UnityEngine.CoreModule nao carregada.");
+        // Passo 2: auditoria de layers via CE MCP (preencher GEOMETRY_MASK apos ler o log [LOS-HIT]).
 
         s.ready = (cDay && cPlayer && cZombie && cZLoader && cPlayers
             && fDayInst && fZLInst && fPCInst && mHasLocal);
@@ -339,53 +371,79 @@ namespace Mono {
         return s.ready;
     }
 
-    // Item 14 LOS: Raycast camera->alvo. Hit ANTES do peito = ocluido.
-    // Sem layerMask (colide tudo); hit dentro de 1m do alvo = encosto no corpo.
-    // Retorna true=visivel. Fail-open: qualquer falha = visivel (nunca some ESP).
-    static bool LosVisible(const Vec3& from, const Vec3& to) {
+    // Item 14 LOS multi-bone: 1 ponto por osso (cabeca/peito/quadril/coxas).
+    // maxDist = ate o osso - 0.15m (nao acerta o proprio zumbi). Hit = ocluido.
+    // Retorna true=ponto exposto. Fail-open: falha = exposto (nunca some ESP).
+    static bool LosPoint(const Vec3& from, const Vec3& to, float* outHit, int* outLayer) {
+        if (outHit) *outHit = 0;
+        if (outLayer) *outLayer = -1;
         if (!s_losOk) return true;
         float dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
         float dist = sqrtf(dx * dx + dy * dy + dz * dz);
         if (!(dist > 0.5f) || !(dist < 10000.0f)) return true;
         Vec3 dir = { dx / dist, dy / dist, dz / dist };
-        // RaycastHit e value-type: buffer cru no stack serve de out.
         unsigned char hitBuf[128] = { 0 };
         void* args[5];
         args[0] = (void*)&from;
         args[1] = (void*)&dir;
         args[2] = (void*)hitBuf;
         __try {
-            float maxD = dist;
-            int mask = -1;
+            float maxD = dist - 0.15f;
+            int mask = s_geomMask;
             args[3] = (void*)&maxD;
             args[4] = (void*)&mask;
             MonoObject* exc = nullptr;
             MonoObject* ret = pInvoke(mRaycast, nullptr, args, &exc);
             if (exc || !ret) return true;
-            if (!(*(unsigned char*)pUnbox(ret))) return true; // sem hit = visivel
+            if (!(*(unsigned char*)pUnbox(ret))) return true; // sem hit = exposto
             float hd = 0;
-            __try {
-                // RaycastHit.distance: offset obtido via field (fallback +20).
-                int off = 20;
-                if (fHitDist) {
-                    // mono_class_get_field offset: usa leitura direta do handle
-                    // (field offset resolvido em runtime abaixo se possivel).
-                }
-                memcpy(&hd, hitBuf + off, sizeof(hd));
-            } __except (EXCEPTION_EXECUTE_HANDLER) { return true; }
+            __try { memcpy(&hd, hitBuf + s_hitDistOff, sizeof(hd)); }
+            __except (EXCEPTION_EXECUTE_HANDLER) { return true; }
+            if (outHit) *outHit = hd;
             if (!(hd == hd) || hd <= 0) return true;
-            if (hd >= dist - 1.0f) return true; // hit no proprio corpo
-            // Amostragem: 1 a cada ~30 ocluidos + 1 a cada ~300 visiveis.
-            if (s_losOccN % 30 == 0)
-                Log::Infof("[LOS] OCC dist=%.1f hit=%.1f", (double)dist, (double)hd);
-            s_losOccN++;
-            return false; // hit antes = parede na frente
+            if (hd >= dist - 0.15f) return true; // encosto no corpo
+            // Log HIT: collider + layer do que bloqueou (Passo 1/2).
+            if (outLayer && fHitCol && mGetHitGO && mGetLayer) {
+                __try {
+                    void* col = nullptr;
+                    memcpy(&col, hitBuf, sizeof(col)); // m_Collider = 1o campo
+                    if (col) {
+                        MonoObject* e2 = nullptr;
+                        MonoObject* go = pInvoke(mGetHitGO, col, nullptr, &e2);
+                        if (go && !e2) {
+                            MonoObject* e3 = nullptr;
+                            MonoObject* lr = pInvoke(mGetLayer, go, nullptr, &e3);
+                            if (lr && !e3) *outLayer = *(int*)pUnbox(lr);
+                        }
+                    }
+                } __except (EXCEPTION_EXECUTE_HANDLER) {}
+            }
+            return false;
         } __except (EXCEPTION_EXECUTE_HANDLER) { return true; }
     }
-    static void LosSample(bool vis) {
-        if (!vis) return;
-        if (++s_losVisN % 300 == 1)
-            Log::Infof("[LOS] visivel (amostra %d)", s_losVisN);
+    // REGRA PROPORCIONAL: 5 pontos (cabeca/peito/quadril/coxaL/coxaR).
+    // visivel = hits >= 2 (40%) OU cabeca exposta (headshot viavel).
+    // Log [LOS] por entidade 1x (Passo 1/7): id/dist/hits/visivel.
+    static bool LosMulti(const Vec3& from, const Vec3 pts[5], float dist, void* ent) {
+        if (!s_losOk || !Config::bVisibleCheck) return true;
+        int hits = 0;
+        bool headExp = false;
+        int layers[5] = { -1,-1,-1,-1,-1 };
+        float hd[5] = { 0,0,0,0,0 };
+        for (int i = 0; i < 5; ++i) {
+            if (LosPoint(from, pts[i], &hd[i], &layers[i])) {
+                hits++;
+                if (i == 0) headExp = true;
+            }
+        }
+        bool vis = (hits >= 2) || headExp;
+        if (s_losLogN < 40) {
+            s_losLogN++;
+            Log::Infof("[LOS] id=0x%p dist=%.1f hits=%d/5 visivel=%d (lay=%d,%d,%d,%d,%d)",
+                ent, (double)dist, hits, vis ? 1 : 0,
+                layers[0], layers[1], layers[2], layers[3], layers[4]);
+        }
+        return vis;
     }
 
     // invoke Transform.get_position -> mundo. Retorna false se falhar.
@@ -765,12 +823,25 @@ namespace Mono {
                     if (nv < 6) return;
                     // Maos ja calculadas em CollectJoints (fix bugs 1-2, 4) — vale p/ 2D e 3D.
                     CollectJoints(zo, cam, tmpEn);
-                    // Item 14: peito = centro da AABB; LOS decide visivel/invisivel.
+                    // Item 14 multi-bone: 5 pontos (cabeca/peito/quadril/coxaL/coxaR).
+                    // Fonte unica da regra = LosMulti (hits>=2 ou cabeca).
                     tmpEn.losVis = true;
+                    tmpEn.losHits = 5;
                     if (Config::bVisibleCheck && hasCamW) {
-                        Vec3 chest = bb.center;
-                        tmpEn.losVis = LosVisible(camW, chest);
-                        LosSample(tmpEn.losVis);
+                        Vec3 pts[5];
+                        pts[0] = { bb.center.x, bb.center.y + bb.extents.y, bb.center.z }; // cabeca
+                        pts[1] = bb.center;                                                 // peito
+                        pts[2] = { bb.center.x, bb.center.y - bb.extents.y * 0.35f, bb.center.z }; // quadril
+                        pts[3] = { bb.center.x - bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z }; // coxaL
+                        pts[4] = { bb.center.x + bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z }; // coxaR
+                        tmpEn.losVis = LosMulti(camW, pts, dist, e);
+                        // Reconta hits p/ snapshot (barato; LosMulti ja validou a regra).
+                        int h = 0;
+                        for (int pi = 0; pi < 5; ++pi) {
+                            float dummy; int dumL;
+                            if (LosPoint(camW, pts[pi], &dummy, &dumL)) h++;
+                        }
+                        tmpEn.losHits = h;
                     }
                     if (!s_handLogged2 && (tmpEn.skV[SkJoint::SK_HL2L] || tmpEn.skV[SkJoint::SK_HL2R])) {
                         s_handLogged2 = true;
@@ -790,6 +861,7 @@ namespace Mono {
                     memcpy(en.skV, tmpEn.skV, sizeof(en.skV));
                     en.has3d = true;
                     en.losVis = tmpEn.losVis;
+                    en.losHits = tmpEn.losHits;
                     en.ent = e; en.ex = bb.extents.x; en.ey = bb.extents.y; en.ez = bb.extents.z;
                     en.headX = en.headY = en.footX = en.footY = 0;
                     en.hp = hp; en.maxHp = mx;
@@ -821,16 +893,29 @@ namespace Mono {
             }
             if (n == 0) { s_dbgEyeY = wh.y; s_dbgFootY = wf.y; }
             CollectJoints(zo, cam, tmpEn);
-            // Item 14: peito = meio do segmento pescoco->pe (mundo, sem margem).
+            // Item 14 multi-bone (fallback 2D): cabeca/olho, peito, quadril, pes.
             tmpEn.losVis = true;
+            tmpEn.losHits = 5;
             if (Config::bVisibleCheck && hasCamW) {
-                Vec3 neck = { (wh.x + wf.x) * 0.5f, wh.y + (wf.y - wh.y) * 0.25f, (wh.z + wf.z) * 0.5f };
-                tmpEn.losVis = LosVisible(camW, neck);
-                LosSample(tmpEn.losVis);
+                Vec3 pts[5];
+                pts[0] = wh; // cabeca (olho)
+                pts[1] = { (wh.x + wf.x) * 0.5f, wh.y + (wf.y - wh.y) * 0.25f, (wh.z + wf.z) * 0.5f }; // peito
+                pts[2] = { (wh.x + wf.x) * 0.5f, wh.y + (wf.y - wh.y) * 0.5f, (wh.z + wf.z) * 0.5f };  // quadril
+                pts[3] = { (wh.x + wf.x) * 0.5f, wh.y + (wf.y - wh.y) * 0.75f, (wh.z + wf.z) * 0.5f }; // coxa
+                pts[4] = wf; // pes
+                tmpEn.losVis = LosMulti(camW, pts, dist, e);
+                int h = 0;
+                for (int pi = 0; pi < 5; ++pi) {
+                    float dummy; int dumL;
+                    if (LosPoint(camW, pts[pi], &dummy, &dumL)) h++;
+                }
+                tmpEn.losHits = h;
             }
             EspEntry& en = tmp[n++];
             memcpy(en.name, tmpEn.name, sizeof(en.name));
             en.dist = dist;
+            en.losVis = tmpEn.losVis;
+            en.losHits = tmpEn.losHits;
             en.headX = sh.x; en.headY = sh.y;
             en.footX = sf.x; en.footY = sf.y;
             // Diagnostico SKEL (1x/sessao, 1a entidade): mascara de juntas + tela.
