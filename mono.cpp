@@ -959,7 +959,7 @@ namespace Mono {
                     CollectJoints(zo, cam, tmpEn);
                     // Item 14/Passo 5: depth buffer nos 5 pontos (cabeca/peito/quadril/coxas).
                     // Raycast (LosMulti) = fallback se depth indisponivel.
-                    // Auditoria: DEPTH-ROW 1x (caminho 3D real do print).
+                    // Auditoria: DEPTH-ROW 1x no caminho 3D + UV vs viewport real.
                     {
                         Vec3 dpts[5];
                         dpts[0] = { bb.center.x, bb.center.y + bb.extents.y, bb.center.z };
@@ -968,6 +968,12 @@ namespace Mono {
                         dpts[3] = { bb.center.x - bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z };
                         dpts[4] = { bb.center.x + bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z };
                         DepthDiagRow(dpts, dist);
+                        // UV fora de [0,1] = BoneNdc divergindo da viewport do jogo.
+                        for (int di = 0; di < 5; ++di) {
+                            float nn = 0, uu = 0, vv = 0;
+                            if (BoneNdc(dpts[di], nn, uu, vv) && (uu < 0 || uu > 1 || vv < 0 || vv > 1))
+                                Log::Infof("[DEPTH-UV] pt=%d u=%.3f v=%.3f fora [0,1] (viewport divergente).", di, (double)uu, (double)vv);
+                        }
                     }
                     tmpEn.losVis = true;
                     tmpEn.losHits = 5;
