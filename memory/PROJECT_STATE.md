@@ -9,7 +9,7 @@
 - [x] 9. ESP Zumbis Distancia - TESTADO OK (print 55m/25m/71m/48m/5m, linha sumida)
 - [x] 10. ESP Health Bar - TESTADO OK (% sem colidir)
 - [x] 11. Box 3D (AABB real) e Corners - TESTADO OK (prints 5m/20m/50m + corners, 14/09)
-- [x] 12. Skeleton — BUILD OK v5 (mao em mundo 0.22m, sem circulo), AGUARDANDO TESTE EM PARTIDA
+- [x] 12. Skeleton — TESTADO OK (quat real + eixo travado, bracos ate a mao, 14/09)
 - [ ] 13. Snapline e Head Dot
 - [ ] 14. Cores Visivel/Invisivel (raycast)
 - [ ] 15. ESP Aliados (azul)
