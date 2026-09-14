@@ -12,14 +12,16 @@ namespace Mono {
     struct Vec3 { float x, y, z; };
 
     // Juntas do rig (auditorias [BONE]+[JOINT] 14/09, armature len=19):
-    // hl=pelvis, sp1-3=coluna, a1=ombro->cotovelo(0.28m), a2=antebraco(0.21m),
-    // mao = ponta estimada do antebraco. Sem mao: braco fica em L (curto de frente).
+    // hl=pelvis, sp1-3=coluna, a1=ombro->cotovelo(0.28m), a2=antebraco(0.21m).
+    // SK_PHYS = 18 ossos fisicos (idx 0-17). HL2 = maos estimadas via rotacao
+    // do antebraco (a2) — disponiveis em 2D e 3D (fix bugs 1-4).
     enum SkJoint {
         SK_HEAD = 0, SK_NECK, SK_SP3, SK_SP2, SK_SP1,
         SK_HL, SK_L1L, SK_L2L, SK_FL,
         SK_L1R, SK_L2R, SK_FR,
         SK_SL, SK_A1L, SK_A2L, SK_SR, SK_A1R, SK_A2R,
-        SK_HL2L, SK_HL2R, // maos estimadas (runtime, nao-bones)
+        SK_PHYS = 18,
+        SK_HL2L = 18, SK_HL2R = 19, // maos estimadas (runtime, nao-bones)
         SK_COUNT = 20
     };
 

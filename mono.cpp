@@ -116,10 +116,12 @@ namespace Mono {
     static MonoClassField* fPCInst = nullptr;
     static MonoMethod* mHasLocal = nullptr;
     static MonoMethod* mGetGO = nullptr; // Component.get_gameObject (auditoria ossos)
+    static MonoMethod* mGetRot = nullptr; // Transform.get_rotation -> Matrix4x4 (fix bug 4)
     static bool s_boneLogged = false;
     static bool s_jointLogged = false; // auditoria juntas (1x por sessao)
     static bool s_skelLogged = false; // diagnostico SKEL (1x: mascara + tela dos bracos)
     static bool s_handLogged = false; // diagnostico HAND (1x: ponta da mao em mundo)
+    static bool s_handLogged2 = false; // diagnostico HAND2 (1x: maos vivas pos-fix)
     static DWORD WINAPI EspThread(LPVOID); // forward (definida apos BuildEsp)
     static MonoImage*  s_unity = nullptr;
     static MonoClass*  cCamU = nullptr;
@@ -288,6 +290,7 @@ namespace Mono {
             if (cCamU) { MonoMethod* t = pMethodFrom(cCamU, "get_worldToCameraMatrix", 0); if (t) { mGetViewMat = t; s.resolvedMethods++; } else Log::Warn("Metodo nao resolvido: Camera.get_worldToCameraMatrix/0"); }
             if (cCamU) { MonoMethod* t = pMethodFrom(cCamU, "get_projectionMatrix", 0); if (t) { mGetProjMat = t; s.resolvedMethods++; } else Log::Warn("Metodo nao resolvido: Camera.get_projectionMatrix/0"); }
             if (cTrans) ResolveMethod(cTrans, "Transform", "get_position", 0, mGetPos);
+            if (cTrans) ResolveMethod(cTrans, "Transform", "get_rotation", 0, mGetRot);
             if (cComp) ResolveMethod(cComp, "Component", "get_transform", 0, mGetTrans);
             if (cComp) ResolveMethod(cComp, "Component", "get_gameObject", 0, mGetGO);
             MonoClass* cObj = pClassFrom(s_unity, "UnityEngine", "Object");
@@ -426,9 +429,55 @@ namespace Mono {
     // Item 12 Skeleton real: juntas pelos indices auditados ([BONE] 14/09).
     // Ordem SkJoint: head12 neck11 sp3-10 sp2-9 sp1-8 | perna L: hl1 l1l2 l2l3 fl4
     // perna R: l1r5 l2r6 fr7 (topo = sp1) | braco L: sl13 a1l14 a2l15 | R: sr16 a1r17 a2r18.
-    static const int kBoneIdx[SkJoint::SK_COUNT] = {
+    // FIX Bug 3: array com SK_PHYS (18) entradas — iterar so ossos fisicos e
+    // calcular HL2L/HL2R explicitamente (fix bugs 1-2: mGetRot + unificado 2D/3D).
+    static const int kBoneIdx[SkJoint::SK_PHYS] = {
         12, 11, 10, 9, 8, 1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 16, 17, 18
     };
+    // Rotacao do Transform -> matriz 3x3 (colunas = eixos X/Y/Z em mundo).
+    // FIX Bug 4: mao = A2 + (eixo do antebraco x 0.25m), acompanha animacao.
+    static bool GetRot(void* trans, float R[9]) {
+        if (!mGetRot || !trans) return false;
+        __try {
+            MonoObject* exc = nullptr;
+            MonoObject* ret = pInvoke(mGetRot, trans, nullptr, &exc);
+            if (exc || !ret) return false;
+            memcpy(R, pUnbox(ret), sizeof(float) * 9);
+            for (int i = 0; i < 9; ++i) if (!(R[i] == R[i])) return false;
+            return true;
+        } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    }
+    // Direcao do antebraco: eixo local de maior projecao no vetor ( Ombro->Cotovelo ).
+    // Coluna dominante do R do cotovelo decide X/Y/Z; fallback = eixo Y local.
+    static bool ForearmFwd(void* elbowBone, const Vec3& shoulderW, const Vec3& elbowW, Vec3& out) {
+        float R[9] = { 0 };
+        if (GetRot(elbowBone, R)) {
+            float ax = elbowW.x - shoulderW.x, ay = elbowW.y - shoulderW.y, az = elbowW.z - shoulderW.z;
+            float al = sqrtf(ax * ax + ay * ay + az * az);
+            if (al > 0.001f) { ax /= al; ay /= al; az /= al; }
+            else { ax = 0; ay = -1; az = 0; }
+            // colunas: X=(R0,R3,R6) Y=(R1,R4,R7) Z=(R2,R5,R8) — Unity column-major
+            float dx[3] = { R[0] * ax + R[3] * ay + R[6] * az,
+                            R[1] * ax + R[4] * ay + R[7] * az,
+                            R[2] * ax + R[5] * ay + R[8] * az };
+            int best = 0;
+            float ba = dx[0] < 0 ? -dx[0] : dx[0];
+            for (int i = 1; i < 3; ++i) { float a = dx[i] < 0 ? -dx[i] : dx[i]; if (a > ba) { ba = a; best = i; } }
+            float sx = R[best], sy = R[3 + best], sz = R[6 + best];
+            // antebraco aponta p/ baixo/frente: se o eixo escolhido apontar p/ cima, inverte
+            if (sy > 0.3f) { sx = -sx; sy = -sy; sz = -sz; }
+            float l = sqrtf(sx * sx + sy * sy + sz * sz);
+            if (l < 0.001f) return false;
+            out.x = sx / l; out.y = sy / l; out.z = sz / l;
+            return true;
+        }
+        // fallback sem rotacao: mantem (Cotovelo - Ombro) como antes
+        Vec3 d = { elbowW.x - shoulderW.x, elbowW.y - shoulderW.y, elbowW.z - shoulderW.z };
+        float l = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
+        if (l < 0.01f) return false;
+        out.x = d.x / l; out.y = d.y / l; out.z = d.z / l;
+        return true;
+    }
     static void CollectJoints(void* zo, void* cam, EspEntry& out) {
         out.skN = SkJoint::SK_COUNT;
         for (int k = 0; k < SkJoint::SK_COUNT; ++k) { out.skV[k] = false; out.skX[k] = out.skY[k] = 0; }
@@ -439,31 +488,62 @@ namespace Mono {
         __try { memcpy(&len, (char*)arr + Off::A_len, sizeof(len)); }
         __except (EXCEPTION_EXECUTE_HANDLER) { out.skN = 0; return; }
         if (len < 19) { out.skN = 0; return; } // rig incompleto: sem skeleton
-        for (int k = 0; k < SkJoint::SK_COUNT; ++k) {
-            void* bone = nullptr;
-            __try { memcpy(&bone, (char*)arr + Off::A_data + (size_t)kBoneIdx[k] * 8, 8); }
-            __except (EXCEPTION_EXECUTE_HANDLER) { continue; }
-            if (!bone) continue;
+        void* bones[SkJoint::SK_PHYS] = { nullptr };
+        for (int k = 0; k < SkJoint::SK_PHYS; ++k) {
+            __try { memcpy(&bones[k], (char*)arr + Off::A_data + (size_t)kBoneIdx[k] * 8, 8); }
+            __except (EXCEPTION_EXECUTE_HANDLER) { bones[k] = nullptr; }
+        }
+        Vec3 wp[SkJoint::SK_PHYS];
+        bool wok[SkJoint::SK_PHYS] = { false };
+        for (int k = 0; k < SkJoint::SK_PHYS; ++k) {
+            if (!bones[k]) continue;
             Vec3 w, s3;
-            if (!GetPos(bone, w)) continue;
+            if (!GetPos(bones[k], w)) continue;
             if (!Fin(w.x) || !Fin(w.y) || !Fin(w.z)) continue;
+            wp[k] = w; wok[k] = true;
             if (!W2S(cam, w, s3)) continue;
             if (!Sane2(s3.x, s3.y)) continue;
             out.skX[k] = s3.x; out.skY[k] = s3.y; out.skV[k] = true;
+        }
+        // Maos estimadas via rotacao do antebraco — vale p/ 2D e 3D (fix bugs 1-2, 4).
+        {
+            Vec3 fwd;
+            if (wok[SkJoint::SK_A1L] && wok[SkJoint::SK_A2L] &&
+                ForearmFwd(bones[SkJoint::SK_A2L], wp[SkJoint::SK_A1L], wp[SkJoint::SK_A2L], fwd)) {
+                Vec3 hw = { wp[SkJoint::SK_A2L].x + fwd.x * 0.25f,
+                            wp[SkJoint::SK_A2L].y + fwd.y * 0.25f,
+                            wp[SkJoint::SK_A2L].z + fwd.z * 0.25f };
+                Vec3 s3;
+                if (W2S(cam, hw, s3) && Sane2(s3.x, s3.y)) {
+                    out.skX[SkJoint::SK_HL2L] = s3.x; out.skY[SkJoint::SK_HL2L] = s3.y;
+                    out.skV[SkJoint::SK_HL2L] = true;
+                }
+            }
+            if (wok[SkJoint::SK_A1R] && wok[SkJoint::SK_A2R] &&
+                ForearmFwd(bones[SkJoint::SK_A2R], wp[SkJoint::SK_A1R], wp[SkJoint::SK_A2R], fwd)) {
+                Vec3 hw = { wp[SkJoint::SK_A2R].x + fwd.x * 0.25f,
+                            wp[SkJoint::SK_A2R].y + fwd.y * 0.25f,
+                            wp[SkJoint::SK_A2R].z + fwd.z * 0.25f };
+                Vec3 s3;
+                if (W2S(cam, hw, s3) && Sane2(s3.x, s3.y)) {
+                    out.skX[SkJoint::SK_HL2R] = s3.x; out.skY[SkJoint::SK_HL2R] = s3.y;
+                    out.skV[SkJoint::SK_HL2R] = true;
+                }
+            }
         }
         // Auditoria juntas (1x/sessao): posicao de mundo + direcao ate o pai.
         // Resultado 14/09: braco real = ombro(12)+antebraco(0.21m); sem mao no rig.
         // Mao estimada = ponta do antebraco (padrao grandes cheats p/ rig sem falange).
         if (!s_jointLogged) {
-            Vec3 wp[SkJoint::SK_COUNT];
-            bool okp[SkJoint::SK_COUNT] = { false };
-            for (int k = 0; k < SkJoint::SK_COUNT; ++k) {
+            Vec3 wp[SkJoint::SK_PHYS];
+            bool okp[SkJoint::SK_PHYS] = { false };
+            for (int k = 0; k < SkJoint::SK_PHYS; ++k) {
                 void* bone = nullptr;
                 __try { memcpy(&bone, (char*)arr + Off::A_data + (size_t)kBoneIdx[k] * 8, 8); }
                 __except (EXCEPTION_EXECUTE_HANDLER) { continue; }
                 if (bone && GetPos(bone, wp[k]) && Fin(wp[k].x)) okp[k] = true;
             }
-            static const char* JN[SkJoint::SK_COUNT] = { "HEAD","NECK","SP3","SP2","SP1","HL","L1L","L2L","FL","L1R","L2R","FR","SL","A1L","A2L","SR","A1R","A2R" };
+            static const char* JN[SkJoint::SK_PHYS] = { "HEAD","NECK","SP3","SP2","SP1","HL","L1L","L2L","FL","L1R","L2R","FR","SL","A1L","A2L","SR","A1R","A2R" };
             using MJ = SkJoint;
             static const int SEGJ[][2] = {
                 { MJ::SK_SP3, MJ::SK_SL }, { MJ::SK_SL, MJ::SK_A1L }, { MJ::SK_A1L, MJ::SK_A2L },
@@ -583,73 +663,12 @@ namespace Mono {
                     int nv = 0; // Fix B: cantos atras da camera nao desenham (sem fragmentos)
                     for (int k = 0; k < 8; ++k) if (tmpEn.pv[k]) nv++;
                     if (nv < 6) return;
-                    // Mao: ponta do antebraco em MUNDO (antes da projecao = escala certa).
-                    // v = a2 + (a2-a1).norm * 0.22m (antebraco mede 0.21m na auditoria).
+                    // Maos ja calculadas em CollectJoints (fix bugs 1-2, 4) — vale p/ 2D e 3D.
                     CollectJoints(zo, cam, tmpEn);
-                    {
-                        float exL[3] = { 0 }, exR[3] = { 0 };
-                        bool okL = false, okR = false;
-                        void* arr = ReadP(zo, Off::ZO_armature);
-                        if (arr) {
-                            Vec3 p1, p2;
-                            void* b1 = nullptr, *b2 = nullptr;
-                            __try {
-                                memcpy(&b1, (char*)arr + Off::A_data + (size_t)14 * 8, 8);
-                                memcpy(&b2, (char*)arr + Off::A_data + (size_t)15 * 8, 8);
-                            } __except (EXCEPTION_EXECUTE_HANDLER) { b1 = b2 = nullptr; }
-                            if (b1 && b2 && GetPos(b1, p1) && GetPos(b2, p2)) {
-                                float dx = p2.x - p1.x, dy = p2.y - p1.y, dz = p2.z - p1.z;
-                                float l = sqrtf(dx * dx + dy * dy + dz * dz);
-                                if (l > 0.01f) {
-                                    exL[0] = p2.x + dx / l * 0.22f; exL[1] = p2.y + dy / l * 0.22f; exL[2] = p2.z + dz / l * 0.22f;
-                                    okL = true;
-                                }
-                            }
-                            b1 = b2 = nullptr;
-                            __try {
-                                memcpy(&b1, (char*)arr + Off::A_data + (size_t)17 * 8, 8);
-                                memcpy(&b2, (char*)arr + Off::A_data + (size_t)18 * 8, 8);
-                            } __except (EXCEPTION_EXECUTE_HANDLER) { b1 = b2 = nullptr; }
-                            if (b1 && b2 && GetPos(b1, p1) && GetPos(b2, p2)) {
-                                float dx = p2.x - p1.x, dy = p2.y - p1.y, dz = p2.z - p1.z;
-                                float l = sqrtf(dx * dx + dy * dy + dz * dz);
-                                if (l > 0.01f) {
-                                    exR[0] = p2.x + dx / l * 0.22f; exR[1] = p2.y + dy / l * 0.22f; exR[2] = p2.z + dz / l * 0.22f;
-                                    okR = true;
-                                }
-                            }
-                        }
-                        if (okL || okR) {
-                            if (tmpEn.skN < SkJoint::SK_COUNT) tmpEn.skN = SkJoint::SK_COUNT;
-                            Vec3 w, s3;
-                            if (okL) {
-                                w.x = exL[0]; w.y = exL[1]; w.z = exL[2];
-                                Vec3 pa1, pa2;
-                                void* bLa1 = nullptr, *bLa2 = nullptr;
-                                __try {
-                                    memcpy(&bLa1, (char*)arr + Off::A_data + (size_t)14 * 8, 8);
-                                    memcpy(&bLa2, (char*)arr + Off::A_data + (size_t)15 * 8, 8);
-                                } __except (EXCEPTION_EXECUTE_HANDLER) { bLa1 = bLa2 = nullptr; }
-                                bool g1 = bLa1 && GetPos(bLa1, pa1), g2 = bLa2 && GetPos(bLa2, pa2);
-                                if (W2S(cam, w, s3) && Sane2(s3.x, s3.y)) {
-                                    tmpEn.skX[SkJoint::SK_HL2L] = s3.x; tmpEn.skY[SkJoint::SK_HL2L] = s3.y; tmpEn.skV[SkJoint::SK_HL2L] = true;
-                                    if (!s_handLogged) Log::Infof("[HAND] L a1=(%.1f,%.1f,%.1f)%d a2=(%.1f,%.1f,%.1f)%d mao=(%.1f,%.1f,%.1f) scr=(%.0f,%.0f)",
-                                        (double)pa1.x, (double)pa1.y, (double)pa1.z, g1 ? 1 : 0,
-                                        (double)pa2.x, (double)pa2.y, (double)pa2.z, g2 ? 1 : 0,
-                                        (double)exL[0], (double)exL[1], (double)exL[2], (double)s3.x, (double)s3.y);
-                                } else if (!s_handLogged) {
-                                    Log::Infof("[HAND] L FALHOU a1=%d a2=%d mao=(%.1f,%.1f,%.1f)", g1 ? 1 : 0, g2 ? 1 : 0, (double)exL[0], (double)exL[1], (double)exL[2]);
-                                }
-                            }
-                            if (okR) {
-                                w.x = exR[0]; w.y = exR[1]; w.z = exR[2];
-                                if (W2S(cam, w, s3) && Sane2(s3.x, s3.y)) {
-                                    tmpEn.skX[SkJoint::SK_HL2R] = s3.x; tmpEn.skY[SkJoint::SK_HL2R] = s3.y; tmpEn.skV[SkJoint::SK_HL2R] = true;
-                                }
-                            }
-                            if ((okL && tmpEn.skV[SkJoint::SK_HL2L]) || (okR && tmpEn.skV[SkJoint::SK_HL2R]))
-                                s_handLogged = true;
-                        }
+                    if (!s_handLogged2 && (tmpEn.skV[SkJoint::SK_HL2L] || tmpEn.skV[SkJoint::SK_HL2R])) {
+                        s_handLogged2 = true;
+                        Log::Infof("[HAND2] maos vivas L=%d R=%d (Bug 1 corrigido)",
+                            tmpEn.skV[SkJoint::SK_HL2L] ? 1 : 0, tmpEn.skV[SkJoint::SK_HL2R] ? 1 : 0);
                     }
             EspEntry& en = tmp[n++];
             memcpy(en.name, tmpEn.name, sizeof(en.name));
