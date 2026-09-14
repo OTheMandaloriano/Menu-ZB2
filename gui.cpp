@@ -886,22 +886,37 @@ namespace GUI {
                     dl->AddLine(r0, b0, col, 1.0f); dl->AddLine(ImVec2(r1.x, r0.y), ImVec2(b1.x, b0.y), col, 1.0f);
                     dl->AddLine(ImVec2(r0.x, r1.y), ImVec2(b0.x, b1.y), col, 1.0f); dl->AddLine(r1, b1, col, 1.0f);
                 }
-                // Item 12 Skeleton: ossos projetados (Unity px -> ImGui). Ordem do array.
-                if (layout.skeleton && es[i].skN >= 2) {
-                    for (int k = 0; k + 1 < es[i].skN && k + 1 < 16; ++k) {
-                        if (!es[i].skV[k] || !es[i].skV[k + 1]) continue;
-                        ImVec2 a = ImVec2(es[i].skX[k], H - es[i].skY[k]);
-                        ImVec2 b = ImVec2(es[i].skX[k + 1], H - es[i].skY[k + 1]);
-                        if (a.x < -10000 || a.x > 10000 || a.y < -10000 || a.y > 10000) continue;
-                        if (b.x < -10000 || b.x > 10000 || b.y < -10000 || b.y > 10000) continue;
-                        dl->AddLine(a, b, col, 1.5f);
-                    }
-                    for (int k = 0; k < es[i].skN && k < 16; ++k) {
-                        if (!es[i].skV[k]) continue;
-                        ImVec2 p = ImVec2(es[i].skX[k], H - es[i].skY[k]);
-                        if (p.x < -10000 || p.x > 10000 || p.y < -10000 || p.y > 10000) continue;
-                        dl->AddCircleFilled(p, 2.0f, col);
-                    }
+                // Item 12 Skeleton: boneco proporcional ao box (cabeca, bracos, pernas).
+                // armatureBone tem ordem desconhecida — sequencia colapsava no centro.
+                if (layout.skeleton && w > 4.0f && h > 8.0f) {
+                    float bcx = (r0.x + r1.x) * 0.5f;
+                    float t = r0.y; // topo
+                    ImVec2 headC = ImVec2(bcx, t + h * 0.10f);
+                    float headR = h * 0.07f; if (headR < 1.5f) headR = 1.5f;
+                    ImVec2 neck = ImVec2(bcx, t + h * 0.18f);
+                    ImVec2 shL = ImVec2(bcx - w * 0.22f, t + h * 0.24f);
+                    ImVec2 shR = ImVec2(bcx + w * 0.22f, t + h * 0.24f);
+                    ImVec2 elL = ImVec2(bcx - w * 0.26f, t + h * 0.38f);
+                    ImVec2 elR = ImVec2(bcx + w * 0.26f, t + h * 0.38f);
+                    ImVec2 haL = ImVec2(bcx - w * 0.30f, t + h * 0.50f);
+                    ImVec2 haR = ImVec2(bcx + w * 0.30f, t + h * 0.50f);
+                    ImVec2 hipC = ImVec2(bcx, t + h * 0.52f);
+                    ImVec2 hipL = ImVec2(bcx - w * 0.12f, t + h * 0.52f);
+                    ImVec2 hipR = ImVec2(bcx + w * 0.12f, t + h * 0.52f);
+                    ImVec2 knL = ImVec2(bcx - w * 0.13f, t + h * 0.75f);
+                    ImVec2 knR = ImVec2(bcx + w * 0.13f, t + h * 0.75f);
+                    ImVec2 ftL = ImVec2(bcx - w * 0.14f, t + h);
+                    ImVec2 ftR = ImVec2(bcx + w * 0.14f, t + h);
+                    ImVec2 midSh = ImVec2(bcx, t + h * 0.24f);
+                    dl->AddCircle(headC, headR, col, 12, 1.5f);
+                    dl->AddLine(neck, midSh, col, 1.5f);
+                    dl->AddLine(shL, shR, col, 1.5f);
+                    dl->AddLine(shL, elL, col, 1.5f); dl->AddLine(elL, haL, col, 1.5f);
+                    dl->AddLine(shR, elR, col, 1.5f); dl->AddLine(elR, haR, col, 1.5f);
+                    dl->AddLine(midSh, hipC, col, 1.5f);
+                    dl->AddLine(hipL, hipR, col, 1.5f);
+                    dl->AddLine(hipL, knL, col, 1.5f); dl->AddLine(knL, ftL, col, 1.5f);
+                    dl->AddLine(hipR, knR, col, 1.5f); dl->AddLine(knR, ftR, col, 1.5f);
                 }
                 EspLayout::Rect envelope = { r0, r1 };
                 if (layout.boxStyle == 1 && !es[i].has3d) {
