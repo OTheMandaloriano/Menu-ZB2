@@ -314,13 +314,16 @@ namespace GUI {
     }
 
 
-    static EspLayout::Style LayoutStyle(float health) {
+    static EspLayout::Style LayoutStyle(float health, bool losVis = true) {
         EspLayout::Style style;
         style.font = ImGui::GetFont();
         style.fontSize = style.font->FontSize * ImGui::GetIO().FontGlobalScale;
-        style.color[EspLayout::Name] = ImGui::GetColorU32(ImVec4(Config::colZombieNameVis[0], Config::colZombieNameVis[1], Config::colZombieNameVis[2], Config::colZombieNameVis[3]));
-        style.color[EspLayout::Distance] = ImGui::GetColorU32(ImVec4(Config::colZombieDistVis[0], Config::colZombieDistVis[1], Config::colZombieDistVis[2], Config::colZombieDistVis[3]));
-        style.boxColor = ImGui::GetColorU32(ImVec4(Config::colZombieVis[0], Config::colZombieVis[1], Config::colZombieVis[2], Config::colZombieVis[3]));
+        float(*nc)[4] = losVis ? &Config::colZombieNameVis : &Config::colZombieNameInv;
+        float(*dc)[4] = losVis ? &Config::colZombieDistVis : &Config::colZombieDistInv;
+        float(*bc)[4] = losVis ? &Config::colZombieVis : &Config::colZombieInv;
+        style.color[EspLayout::Name] = ImGui::GetColorU32(ImVec4((*nc)[0], (*nc)[1], (*nc)[2], (*nc)[3]));
+        style.color[EspLayout::Distance] = ImGui::GetColorU32(ImVec4((*dc)[0], (*dc)[1], (*dc)[2], (*dc)[3]));
+        style.boxColor = ImGui::GetColorU32(ImVec4((*bc)[0], (*bc)[1], (*bc)[2], (*bc)[3]));
         float color[4];
         HpColor(health * 100.0f, color);
         style.color[EspLayout::Health] = ImGui::GetColorU32(ImVec4(color[0], color[1], color[2], color[3]));
@@ -804,8 +807,12 @@ namespace GUI {
             Mono::EspEntry es[128];
             int n = Mono::GetEsp(es, 128);
             float H = io.DisplaySize.y;
-            ImU32 col = ImGui::GetColorU32(ImVec4(Config::colZombieVis[0], Config::colZombieVis[1], Config::colZombieVis[2], Config::colZombieVis[3]));
+            ImU32 colVis = ImGui::GetColorU32(ImVec4(Config::colZombieVis[0], Config::colZombieVis[1], Config::colZombieVis[2], Config::colZombieVis[3]));
+            ImU32 colInv = ImGui::GetColorU32(ImVec4(Config::colZombieInv[0], Config::colZombieInv[1], Config::colZombieInv[2], Config::colZombieInv[3]));
             for (int i = 0; i < n; ++i) {
+                // Item 14: cor por LOS (desliga = tudo visivel).
+                bool vis = !Config::bVisibleCheck || es[i].losVis;
+                ImU32 col = vis ? colVis : colInv;
                 float h = 0, w = 0, cx = 0, hy = 0, fy = 0;
                 ImVec2 r0, r1;
                 bool is3d = (layout.boxStyle == 1 && es[i].has3d);
@@ -935,7 +942,7 @@ namespace GUI {
                     envelope.max.x += w * 0.28f;
                 }
                 auto content = LayoutContent(es[i].name, es[i].dist, es[i].hp, es[i].maxHp);
-                auto style = LayoutStyle(content.health);
+                auto style = LayoutStyle(content.health, vis);
                 auto geometry = EspLayout::Resolve(layout, envelope, { ImVec2(2.0f, 2.0f), ImVec2(io.DisplaySize.x - 2.0f, io.DisplaySize.y - 2.0f) }, content, style, true);
                 EspLayout::Draw(dl, geometry, content, style);
             }

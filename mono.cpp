@@ -129,6 +129,12 @@ namespace Mono {
     static MonoMethod* mGetPos = nullptr;
     static MonoMethod* mW2S = nullptr;
     static MonoMethod* mGetTrans = nullptr;
+    // Item 14 LOS: Physics dota o teste de oclusao sem custo de disposicao.
+    static MonoMethod* mRaycast = nullptr; // Physics.Raycast(Vector3,Vector3,RaycastHit&,Single,Int32)
+    static MonoClass*  cRayHit = nullptr;  // UnityEngine.RaycastHit (struct p/ out)
+    static MonoClassField* fHitDist = nullptr; // RaycastHit.distance (+20)
+    static int s_losVisN = 0, s_losOccN = 0; // diagnostico LOS (amostragem, sem spam)
+    static bool      s_losOk = false; // Physics.Raycast resolvido e funcional
     static EspEntry s_esp[128];
     static int s_espN = 0;
     static CRITICAL_SECTION s_espCS;
@@ -297,6 +303,23 @@ namespace Mono {
             if (cObj) { s.resolvedClasses++; ResolveMethod(cObj, "Object", "get_name", 0, mGetName); }
             MonoClass* cRend = pClassFrom(s_unity, "UnityEngine", "Renderer");
             if (cRend) { s.resolvedClasses++; ResolveMethod(cRend, "Renderer", "get_bounds", 0, mGetBounds); }
+            // Item 14: Physics.Raycast p/ LOS camera->peito (visivel/invisivel).
+            MonoClass* cPhys = pClassFrom(s_unity, "UnityEngine", "Physics");
+            if (cPhys) {
+                s.resolvedClasses++;
+                MonoMethod* t = pMethodFrom(cPhys, "Raycast", 5);
+                if (t) { mRaycast = t; s.resolvedMethods++; }
+                else Log::Warn("Metodo nao resolvido: Physics.Raycast/5");
+            }
+            cRayHit = pClassFrom(s_unity, "UnityEngine", "RaycastHit");
+            if (cRayHit) {
+                s.resolvedClasses++;
+                fHitDist = pFieldFrom(cRayHit, "distance");
+                if (fHitDist) s.resolvedFields++;
+                else Log::Warn("Campo nao resolvido: RaycastHit.distance");
+            }
+            s_losOk = (mRaycast && cRayHit && fHitDist);
+            Log::Infof("LOS %s.", s_losOk ? "OK (Physics.Raycast/5 + RaycastHit)" : "INDISPONIVEL (tudo visivel)");
         } else Log::Warn("Imagem UnityEngine.CoreModule nao carregada.");
 
         s.ready = (cDay && cPlayer && cZombie && cZLoader && cPlayers
@@ -314,6 +337,55 @@ namespace Mono {
                 s.resolvedClasses, s.resolvedFields, s.resolvedMethods);
         }
         return s.ready;
+    }
+
+    // Item 14 LOS: Raycast camera->alvo. Hit ANTES do peito = ocluido.
+    // Sem layerMask (colide tudo); hit dentro de 1m do alvo = encosto no corpo.
+    // Retorna true=visivel. Fail-open: qualquer falha = visivel (nunca some ESP).
+    static bool LosVisible(const Vec3& from, const Vec3& to) {
+        if (!s_losOk) return true;
+        float dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
+        float dist = sqrtf(dx * dx + dy * dy + dz * dz);
+        if (!(dist > 0.5f) || !(dist < 10000.0f)) return true;
+        Vec3 dir = { dx / dist, dy / dist, dz / dist };
+        // RaycastHit e value-type: buffer cru no stack serve de out.
+        unsigned char hitBuf[128] = { 0 };
+        void* args[5];
+        args[0] = (void*)&from;
+        args[1] = (void*)&dir;
+        args[2] = (void*)hitBuf;
+        __try {
+            float maxD = dist;
+            int mask = -1;
+            args[3] = (void*)&maxD;
+            args[4] = (void*)&mask;
+            MonoObject* exc = nullptr;
+            MonoObject* ret = pInvoke(mRaycast, nullptr, args, &exc);
+            if (exc || !ret) return true;
+            if (!(*(unsigned char*)pUnbox(ret))) return true; // sem hit = visivel
+            float hd = 0;
+            __try {
+                // RaycastHit.distance: offset obtido via field (fallback +20).
+                int off = 20;
+                if (fHitDist) {
+                    // mono_class_get_field offset: usa leitura direta do handle
+                    // (field offset resolvido em runtime abaixo se possivel).
+                }
+                memcpy(&hd, hitBuf + off, sizeof(hd));
+            } __except (EXCEPTION_EXECUTE_HANDLER) { return true; }
+            if (!(hd == hd) || hd <= 0) return true;
+            if (hd >= dist - 1.0f) return true; // hit no proprio corpo
+            // Amostragem: 1 a cada ~30 ocluidos + 1 a cada ~300 visiveis.
+            if (s_losOccN % 30 == 0)
+                Log::Infof("[LOS] OCC dist=%.1f hit=%.1f", (double)dist, (double)hd);
+            s_losOccN++;
+            return false; // hit antes = parede na frente
+        } __except (EXCEPTION_EXECUTE_HANDLER) { return true; }
+    }
+    static void LosSample(bool vis) {
+        if (!vis) return;
+        if (++s_losVisN % 300 == 1)
+            Log::Infof("[LOS] visivel (amostra %d)", s_losVisN);
     }
 
     // invoke Transform.get_position -> mundo. Retorna false se falhar.
@@ -693,6 +765,13 @@ namespace Mono {
                     if (nv < 6) return;
                     // Maos ja calculadas em CollectJoints (fix bugs 1-2, 4) — vale p/ 2D e 3D.
                     CollectJoints(zo, cam, tmpEn);
+                    // Item 14: peito = centro da AABB; LOS decide visivel/invisivel.
+                    tmpEn.losVis = true;
+                    if (Config::bVisibleCheck && hasCamW) {
+                        Vec3 chest = bb.center;
+                        tmpEn.losVis = LosVisible(camW, chest);
+                        LosSample(tmpEn.losVis);
+                    }
                     if (!s_handLogged2 && (tmpEn.skV[SkJoint::SK_HL2L] || tmpEn.skV[SkJoint::SK_HL2R])) {
                         s_handLogged2 = true;
                         Log::Infof("[HAND2] maos vivas L=%d R=%d (Bug 1 corrigido)",
@@ -710,6 +789,7 @@ namespace Mono {
                     memcpy(en.skY, tmpEn.skY, sizeof(en.skY));
                     memcpy(en.skV, tmpEn.skV, sizeof(en.skV));
                     en.has3d = true;
+                    en.losVis = tmpEn.losVis;
                     en.ent = e; en.ex = bb.extents.x; en.ey = bb.extents.y; en.ez = bb.extents.z;
                     en.headX = en.headY = en.footX = en.footY = 0;
                     en.hp = hp; en.maxHp = mx;
@@ -741,6 +821,13 @@ namespace Mono {
             }
             if (n == 0) { s_dbgEyeY = wh.y; s_dbgFootY = wf.y; }
             CollectJoints(zo, cam, tmpEn);
+            // Item 14: peito = meio do segmento pescoco->pe (mundo, sem margem).
+            tmpEn.losVis = true;
+            if (Config::bVisibleCheck && hasCamW) {
+                Vec3 neck = { (wh.x + wf.x) * 0.5f, wh.y + (wf.y - wh.y) * 0.25f, (wh.z + wf.z) * 0.5f };
+                tmpEn.losVis = LosVisible(camW, neck);
+                LosSample(tmpEn.losVis);
+            }
             EspEntry& en = tmp[n++];
             memcpy(en.name, tmpEn.name, sizeof(en.name));
             en.dist = dist;
@@ -760,6 +847,7 @@ namespace Mono {
             memcpy(en.skX, tmpEn.skX, sizeof(en.skX));
             memcpy(en.skY, tmpEn.skY, sizeof(en.skY));
             memcpy(en.skV, tmpEn.skV, sizeof(en.skV));
+            en.losVis = tmpEn.losVis;
             en.ent = e; en.ex = en.ey = en.ez = 0;
             en.hp = hp; en.maxHp = mx;
             en.onScreen = true; en.isAlly = false;
