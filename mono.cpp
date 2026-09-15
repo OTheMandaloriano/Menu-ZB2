@@ -665,22 +665,13 @@ namespace Mono {
             if (outHit) *outHit = hd;
             if (!(hd == hd) || hd <= 0) return true;
             if (hd >= dist - 0.15f) return true; // encosto no corpo
-            // Log HIT: collider + layer do que bloqueou (Passo 1/2).
-            if (outLayer && fHitCol && mGetHitGO && mGetLayer) {
-                __try {
-                    void* col = nullptr;
-                    memcpy(&col, hitBuf, sizeof(col)); // m_Collider = 1o campo
-                    if (col) {
-                        MonoObject* e2 = nullptr;
-                        MonoObject* go = pInvoke(mGetHitGO, col, nullptr, &e2);
-                        if (go && !e2) {
-                            MonoObject* e3 = nullptr;
-                            MonoObject* lr = pInvoke(mGetLayer, go, nullptr, &e3);
-                            if (lr && !e3) *outLayer = *(int*)pUnbox(lr);
-                        }
-                    }
-                } __except (EXCEPTION_EXECUTE_HANDLER) {}
-            }
+            // Log HIT DESABILITADO (P0 crash em aproximacao 15/09): invocar
+            // Collider.get_gameObject / GameObject.get_layer num collider que o
+            // jogo pode estar destruindo (LODController.SetColliding/GameObject.
+            // SetActive na mesma janela — ver crash dump 10:57) = AV dentro do
+            // runtime Mono. Layer fica -1 (desconhecida); a decisao visivel/
+            // invisivel NAO usa layer, so a distancia. Zero mudança visual.
+            if (outLayer) *outLayer = -1;
             return false;
         } __except (EXCEPTION_EXECUTE_HANDLER) { return true; }
     }
