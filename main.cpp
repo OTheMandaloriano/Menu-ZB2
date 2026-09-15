@@ -116,6 +116,11 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
     // pode devolver DSV errado/nulo). Falha silenciosa = ultimo frame valido.
     // NOTA: este bloco roda DEPOIS de ImGui::Render() mas ANTES de RenderDrawData
     // (o draw do overlay ainda nao executou) — o DSV ainda e o da cena do jogo.
+    // BUG 4 DOC: em Unity com post-processing (URP/HDRP/Built-in + stack), o DSV
+    // no Present pertence a pass de composicao final (UI/fullscreen quad), NAO a
+    // cena 3D. Todos os pixels leem 1.0 (far). Correcao futura: hook em
+    // DrawIndexed/DrawIndexedInstanced para capturar o DSV da pass geometrica.
+    // Por ora, o Raycast (bugs 1+2 corrigidos) e a via primaria; depth e bonus.
     {
         ID3D11DepthStencilView* dsv = nullptr;
         ID3D11Texture2D* depthTex = nullptr;

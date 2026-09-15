@@ -1,4 +1,4 @@
-﻿#include "mono.h"
+#include "mono.h"
 #include "config.h"
 #include "log.h"
 #include <Windows.h>
@@ -34,7 +34,7 @@ typedef MonoVTable* (__cdecl* FnClassVTable)(MonoDomain*, MonoClass*);
 typedef void        (__cdecl* FnStaticGetValue)(MonoVTable*, MonoClassField*, void*);
 typedef MonoMethod* (__cdecl* FnMethodFromName)(MonoClass*, const char*, int);
 typedef void* (__cdecl* FnMethodDescNew)(const char*, int);
-typedef void* (__cdecl* FnMethodDescSearch)(void*, void*); // (desc, klass) — correto
+typedef void* (__cdecl* FnMethodDescSearch)(void*, void*); // (desc, klass)
 typedef void (__cdecl* FnMethodDescFree)(void*);
 typedef void* (__cdecl* FnClassGetMethods)(void*, void**);
 typedef void* (__cdecl* FnMethodSig)(void*);
@@ -376,15 +376,16 @@ namespace Mono {
                     Log::Infof("[LOS-AUDIT] Physics declarados=%d Raycast=%d Linecast=%d.", nTotal, nRay, nLine);
                 } else Log::Warn("LOS-AUDIT sem API de enumeracao (pClassMethods/pSigOf/pSigCount/pMethodGetName).");
                 // 2) Tenta por descritor exato (origin,dir,hit,maxDist,mask).
+                // BUG 1 fix: pDescSearch(desc, klass) — estava invertido.
+                // BUG 2 fix: descritor precisa do nome da classe "Physics:Raycast(...)".
                 if (pDescNew && pDescSearch && pDescFree) {
-                    void* dd = pDescNew(":Raycast(UnityEngine.Vector3,UnityEngine.Vector3,UnityEngine.RaycastHit&,System.Single,System.Int32)", 0);
+                    void* dd = pDescNew("Physics:Raycast(UnityEngine.Vector3,UnityEngine.Vector3,UnityEngine.RaycastHit&,System.Single,System.Int32)", 1);
                     if (dd) {
-                        MonoMethod* t = (MonoMethod*)pDescSearch(cPhys, (void*)dd);
-                        // ATENCAO: pDescSearch espera (desc, namespace) em algumas builds;
-                        // se retornar null, cai para o fallback por aridade abaixo.
+                        MonoMethod* t = (MonoMethod*)pDescSearch(dd, cPhys);
                         if (t) { mRaycast = t; s_rayArgs = 5; s.resolvedMethods++; Log::Info("LOS-SIG Raycast/5 via descritor exato."); }
+                        else Log::Warn("LOS-SIG descritor nao casou (fallback por aridade).");
                         pDescFree(dd);
-                    }
+                    } else Log::Warn("LOS-SIG mono_method_desc_new retornou null.");
                 }
                 // 3) Fallback por aridade (comportamento anterior).
                 if (!mRaycast) {
@@ -442,18 +443,20 @@ namespace Mono {
                 MonoMethod* t = pMethodFrom(cGO, "get_layer", 0);
                 if (t) { mGetLayer = t; s.resolvedMethods++; }
             }
-            // Offset REAL do campo via mono_field_get_offset (fix: +20 era chute).
-            // NOTA runtime 14/09: GetProcAddress(mono-2.0-bdwgc, mono_field_get_offset)
-            // retorna NULL — a exportacao nao existe nessa build do Mono. Workaround:
-            // calibra o offset comparando o buffer do hit com a distancia conhecida
-            // (primeiro OCC com dist conhecida revela o slot; ver LosCalibrate).
+            // Offset REAL do campo via mono_field_get_offset.
+            // NOTA: mono-2.0-bdwgc.dll do Unity 6 NAO exporta esta funcao.
+            // Workaround: LosCalibrate descobre o slot comparando o buffer do
+            // hit com a distancia conhecida (auto-calibracao no 1o OCC real).
+            // BUG 3 doc: fallback +20 e chute; LosCalibrate corrige em runtime.
             {
                 HMODULE mm = GetModuleHandleW(L"mono-2.0-bdwgc.dll");
                 if (mm) pFieldOff = (FnFieldOffset)GetProcAddress(mm, "mono_field_get_offset");
                 if (pFieldOff && fHitDist) {
                     s_hitDistOff = (int)pFieldOff(fHitDist);
                     Log::Infof("LOS RaycastHit.distance offset=%d (via API).", s_hitDistOff);
-                } else Log::Warn("mono_field_get_offset ausente; distance usa fallback +20.");
+                } else {
+                    Log::Warnf("mono_field_get_offset ausente; distance usa fallback +%d (LosCalibrate corrige).", s_hitDistOff);
+                }
             }
             s_losOk = (mRaycast && cRayHit && fHitDist);
             Log::Infof("LOS %s (mask=0x%X).", s_losOk ? "OK (Raycast/5 + HitGO/layer)" : "INDISPONIVEL (tudo visivel)", (unsigned)s_geomMask);
@@ -848,53 +851,107 @@ namespace Mono {
         R[3]=2*(xy+wz);   R[4]=1-2*(xx+zz); R[5]=2*(yz-wx);
         R[6]=2*(xz-wy);   R[7]=2*(yz+wx);   R[8]=1-2*(xx+yy);
     }
-    static int s_axisL = -1, s_axisR = -1; // eixo longitudinal travado 1x por lado
     static bool s_rotWarned = false;
-    // Direcao do antebraco: eixo LONGITUDINAL do osso (segmento biceps), lido da
-    // rotacao real do cotovelo. Eixo travado 1x por lado: o que mais alinha com
-    // (Ombro->Cotovelo) no momento da trava. FIX: sem re-escolha por frame
-    // (era ela que fazia a mao "curvar para o peito").
+
     static bool GetRot(void* trans, float R[9]) {
         float q[4] = { 0 };
         if (!GetQuat(trans, q)) return false;
         QuatToMat3(q, R);
         return true;
     }
-    static bool ForearmFwd(void* elbowBone, const Vec3& shoulderW, const Vec3& elbowW, Vec3& out, int side /*0=L,1=R*/) {
+
+    // Calcula o vetor frontal anatomico do torax a partir dos ombros e coluna:
+    // right = SR - SL, up = NECK - HL, fwd = normalize(cross(right, up)).
+    static bool GetBodyForward(const Vec3 wp[SkJoint::SK_PHYS], const bool wok[SkJoint::SK_PHYS], Vec3& outFwd) {
+        if (!wok[SkJoint::SK_SL] || !wok[SkJoint::SK_SR] || !wok[SkJoint::SK_HL] || !wok[SkJoint::SK_NECK])
+            return false;
+        Vec3 r = { wp[SkJoint::SK_SR].x - wp[SkJoint::SK_SL].x,
+                   wp[SkJoint::SK_SR].y - wp[SkJoint::SK_SL].y,
+                   wp[SkJoint::SK_SR].z - wp[SkJoint::SK_SL].z };
+        Vec3 u = { wp[SkJoint::SK_NECK].x - wp[SkJoint::SK_HL].x,
+                   wp[SkJoint::SK_NECK].y - wp[SkJoint::SK_HL].y,
+                   wp[SkJoint::SK_NECK].z - wp[SkJoint::SK_HL].z };
+        Vec3 f = { r.y * u.z - r.z * u.y,
+                   r.z * u.x - r.x * u.z,
+                   r.x * u.y - r.y * u.x };
+        float len = sqrtf(f.x * f.x + f.y * f.y + f.z * f.z);
+        if (len < 0.001f) return false;
+        outFwd.x = f.x / len;
+        outFwd.y = f.y / len;
+        outFwd.z = f.z / len;
+        return true;
+    }
+
+    // Direcao do antebraco: eixo longitudinal do osso a partir da rotacao do cotovelo.
+    // Avalia os eixos locais para selecionar o sentido que projeta para frente (bodyFwd)
+    // e/ou continua a extensao do membro (ombro->cotovelo), sem heuristica de trava estatica
+    // ou inversoes artificiais sy>0.3 (fix bugs 1-4).
+    static bool ForearmFwd(void* elbowBone, const Vec3& shoulderW, const Vec3& elbowW, const Vec3& bodyFwd, bool hasBodyFwd, Vec3& out, int side /*0=L,1=R*/) {
         float R[9] = { 0 };
         if (GetRot(elbowBone, R)) {
-            float ax = elbowW.x - shoulderW.x, ay = elbowW.y - shoulderW.y, az = elbowW.z - shoulderW.z;
-            float al = sqrtf(ax * ax + ay * ay + az * az);
-            if (al > 0.001f) { ax /= al; ay /= al; az /= al; }
-            else { ax = 0; ay = -1; az = 0; }
-            int* locked = (side == 0) ? &s_axisL : &s_axisR;
-            if (*locked < 0 || *locked > 2) {
-                float dx[3] = { R[0]*ax + R[3]*ay + R[6]*az,
-                                R[1]*ax + R[4]*ay + R[7]*az,
-                                R[2]*ax + R[5]*ay + R[8]*az };
-                int best = 0;
-                float ba = dx[0] < 0 ? -dx[0] : dx[0];
-                for (int i = 1; i < 3; ++i) { float a = dx[i] < 0 ? -dx[i] : dx[i]; if (a > ba) { ba = a; best = i; } }
-                *locked = best;
-                float sx = R[best], sy = R[3 + best], sz = R[6 + best];
-                Log::Infof("[AXIS] lado=%s eixo=%d (fixo daqui em diante)", side == 0 ? "L" : "R", best);
+            Vec3 bDir = { elbowW.x - shoulderW.x, elbowW.y - shoulderW.y, elbowW.z - shoulderW.z };
+            float bLen = sqrtf(bDir.x * bDir.x + bDir.y * bDir.y + bDir.z * bDir.z);
+            if (bLen > 0.001f) { bDir.x /= bLen; bDir.y /= bLen; bDir.z /= bLen; }
+            else { bDir.x = 0; bDir.y = -1.0f; bDir.z = 0; }
+
+            Vec3 cols[3] = {
+                { R[0], R[3], R[6] }, // Local X
+                { R[1], R[4], R[7] }, // Local Y (eixo auditado longitudinal do rig ZB2)
+                { R[2], R[5], R[8] }  // Local Z
+            };
+
+            int bestAxis = 1;
+            float bestScore = -9999.0f;
+            float bestSign = 1.0f;
+
+            for (int i = 0; i < 3; ++i) {
+                float len = sqrtf(cols[i].x * cols[i].x + cols[i].y * cols[i].y + cols[i].z * cols[i].z);
+                if (len < 0.001f) continue;
+                Vec3 axis = { cols[i].x / len, cols[i].y / len, cols[i].z / len };
+
+                for (float s = 1.0f; s >= -1.0f; s -= 2.0f) {
+                    Vec3 cand = { axis.x * s, axis.y * s, axis.z * s };
+                    float dotFwd = hasBodyFwd ? (cand.x * bodyFwd.x + cand.y * bodyFwd.y + cand.z * bodyFwd.z) : 0.0f;
+                    float dotExt = (cand.x * bDir.x + cand.y * bDir.y + cand.z * bDir.z);
+                    // Prioriza sentido para a frente (corrida/ataque) e continuacao do braco
+                    float score = (hasBodyFwd ? (dotFwd * 1.5f) : 0.0f) + dotExt;
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestAxis = i;
+                        bestSign = s;
+                    }
+                }
             }
-            int best = *locked;
-            float sx = R[best], sy = R[3 + best], sz = R[6 + best];
-            if (sy > 0.3f) { sx = -sx; sy = -sy; sz = -sz; }
-            float l = sqrtf(sx * sx + sy * sy + sz * sz);
-            if (l < 0.001f) return false;
-            out.x = sx / l; out.y = sy / l; out.z = sz / l;
-            return true;
+
+            Vec3 chosen = { cols[bestAxis].x * bestSign, cols[bestAxis].y * bestSign, cols[bestAxis].z * bestSign };
+            float clen = sqrtf(chosen.x * chosen.x + chosen.y * chosen.y + chosen.z * chosen.z);
+            if (clen > 0.001f) {
+                out.x = chosen.x / clen;
+                out.y = chosen.y / clen;
+                out.z = chosen.z / clen;
+                return true;
+            }
         }
-        if (!s_rotWarned) { s_rotWarned = true; Log::Warn("get_rotation falhou; mao usa fallback colinear."); }
-        // fallback sem rotacao: mantem (Cotovelo - Ombro) como antes
+
+        if (!s_rotWarned) { s_rotWarned = true; Log::Warn("get_rotation falhou; mao usa fallback frontal/colinear."); }
+
+        // Fallback robusto sem rotacao: projeta para frente do zumbi
+        if (hasBodyFwd) {
+            Vec3 fb = { bodyFwd.x * 0.85f, bodyFwd.y * 0.85f - 0.15f, bodyFwd.z * 0.85f };
+            float fl = sqrtf(fb.x * fb.x + fb.y * fb.y + fb.z * fb.z);
+            if (fl > 0.001f) {
+                out.x = fb.x / fl; out.y = fb.y / fl; out.z = fb.z / fl;
+                return true;
+            }
+        }
+
         Vec3 d = { elbowW.x - shoulderW.x, elbowW.y - shoulderW.y, elbowW.z - shoulderW.z };
         float l = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
         if (l < 0.01f) return false;
         out.x = d.x / l; out.y = d.y / l; out.z = d.z / l;
         return true;
     }
+
     static void CollectJoints(void* zo, void* cam, EspEntry& out) {
         out.skN = SkJoint::SK_COUNT;
         for (int k = 0; k < SkJoint::SK_COUNT; ++k) { out.skV[k] = false; out.skX[k] = out.skY[k] = 0; }
@@ -922,11 +979,13 @@ namespace Mono {
             if (!Sane2(s3.x, s3.y)) continue;
             out.skX[k] = s3.x; out.skY[k] = s3.y; out.skV[k] = true;
         }
-        // Maos estimadas via rotacao do antebraco — vale p/ 2D e 3D (fix bugs 1-2, 4).
+        // Maos estimadas via rotacao do antebraco — unificado p/ 2D e 3D (fix bugs 1-4).
+        Vec3 bodyFwd = { 0, 0, 0 };
+        bool hasBodyFwd = GetBodyForward(wp, wok, bodyFwd);
         {
             Vec3 fwd;
             if (wok[SkJoint::SK_A1L] && wok[SkJoint::SK_A2L] &&
-                ForearmFwd(bones[SkJoint::SK_A2L], wp[SkJoint::SK_A1L], wp[SkJoint::SK_A2L], fwd, 0)) {
+                ForearmFwd(bones[SkJoint::SK_A2L], wp[SkJoint::SK_A1L], wp[SkJoint::SK_A2L], bodyFwd, hasBodyFwd, fwd, 0)) {
                 Vec3 hw = { wp[SkJoint::SK_A2L].x + fwd.x * 0.25f,
                             wp[SkJoint::SK_A2L].y + fwd.y * 0.25f,
                             wp[SkJoint::SK_A2L].z + fwd.z * 0.25f };
@@ -937,7 +996,7 @@ namespace Mono {
                 }
             }
             if (wok[SkJoint::SK_A1R] && wok[SkJoint::SK_A2R] &&
-                ForearmFwd(bones[SkJoint::SK_A2R], wp[SkJoint::SK_A1R], wp[SkJoint::SK_A2R], fwd, 1)) {
+                ForearmFwd(bones[SkJoint::SK_A2R], wp[SkJoint::SK_A1R], wp[SkJoint::SK_A2R], bodyFwd, hasBodyFwd, fwd, 1)) {
                 Vec3 hw = { wp[SkJoint::SK_A2R].x + fwd.x * 0.25f,
                             wp[SkJoint::SK_A2R].y + fwd.y * 0.25f,
                             wp[SkJoint::SK_A2R].z + fwd.z * 0.25f };
@@ -1109,26 +1168,33 @@ namespace Mono {
                         pts[2] = { bb.center.x, bb.center.y - bb.extents.y * 0.35f, bb.center.z }; // quadril
                         pts[3] = { bb.center.x - bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z }; // coxaL
                         pts[4] = { bb.center.x + bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z }; // coxaR
-                        // Depth decide ponto a ponto; ponto sem depth cai p/ Linecast,
-                        // depois raycast (ordem: depth > linecast > raycast).
+                        // Ordem de decisao ponto a ponto:
+                        // 1) Raycast (via primaria — bugs 1+2 corrigidos)
+                        // 2) Linecast (fallback sem ambiguidade Ray)
+                        // 3) Depth buffer (bonus — BUG 4: DSV no Present = UI, scene=1.0)
+                        // Raycast/Linecast confiaveis > depth com DSV errado.
                         int h = 0; bool he = false;
                         for (int pi = 0; pi < 5; ++pi) {
-                            float ndc = 0, u = 0, v = 0;
-                            bool hasNdc = BoneNdc(pts[pi], ndc, u, v);
-                            float scene = 0;
-                            bool hasDepth = hasNdc && DepthVisShim::Sample(u, v, scene);
                             bool exp;
-                            if (hasDepth) {
-                                if (scene >= 0.999f) exp = true;
-                                else {
-                                    float eps = 0.5f / (dist * dist + 1.0f) + 0.001f;
-                                    exp = ndc <= scene + eps;
-                                }
+                            if (s_losOk) {
+                                // Raycast primario (resolve assinatura correta agora)
+                                float dummy; int dumL;
+                                exp = LosPoint(camW, pts[pi], &dummy, &dumL);
                             } else if (mLinecast && s_lineArgs >= 2) {
                                 exp = LosPointLinecast(camW, pts[pi]);
                             } else {
-                                float dummy; int dumL;
-                                exp = LosPoint(camW, pts[pi], &dummy, &dumL);
+                                // Depth como ultimo recurso (BUG 4: provavelmente 1.0)
+                                float ndc = 0, u = 0, v = 0;
+                                bool hasNdc = BoneNdc(pts[pi], ndc, u, v);
+                                float scene = 0;
+                                bool hasDepth = hasNdc && DepthVisShim::Sample(u, v, scene);
+                                if (hasDepth) {
+                                    if (scene >= 0.999f) exp = true;
+                                    else {
+                                        float eps = 0.5f / (dist * dist + 1.0f) + 0.001f;
+                                        exp = ndc <= scene + eps;
+                                    }
+                                } else exp = true; // fail-open
                             }
                             if (exp) { h++; if (pi == 0) he = true; }
                         }
@@ -1136,9 +1202,19 @@ namespace Mono {
                         tmpEn.losVis = (h >= 2) || he;
                         if (s_losLogN < 40) {
                             s_losLogN++;
-                            Log::Infof("[LOS] id=0x%p dist=%.1f hits=%d/5 visivel=%d (depth+line+ray)",
-                                e, (double)dist, h, tmpEn.losVis ? 1 : 0);
+                            const char* via = s_losOk ? "ray" : (mLinecast ? "line" : "depth");
+                            Log::Infof("[LOS] id=0x%p dist=%.1f hits=%d/5 visivel=%d via=%s",
+                                e, (double)dist, h, tmpEn.losVis ? 1 : 0, via);
                         }
+                    }
+                    if (!s_skelLogged && tmpEn.skN == SkJoint::SK_COUNT) {
+                        s_skelLogged = true;
+                        unsigned m = 0;
+                        for (int k = 0; k < SkJoint::SK_COUNT; ++k) if (tmpEn.skV[k]) m |= (1u << k);
+                        Log::Infof("[SKEL] mask=0x%05X dist=%.1f (3D)", m, (double)dist);
+                        static const char* JN[SkJoint::SK_COUNT] = { "HEAD","NECK","SP3","SP2","SP1","HL","L1L","L2L","FL","L1R","L2R","FR","SL","A1L","A2L","SR","A1R","A2R","HL2L","HL2R" };
+                        for (int k = 0; k < SkJoint::SK_COUNT; ++k)
+                            Log::Infof("[SKEL] %s v=%d scr=(%.0f,%.0f)", JN[k], tmpEn.skV[k] ? 1 : 0, (double)tmpEn.skX[k], (double)tmpEn.skY[k]);
                     }
                     if (!s_handLogged2 && (tmpEn.skV[SkJoint::SK_HL2L] || tmpEn.skV[SkJoint::SK_HL2R])) {
                         s_handLogged2 = true;
@@ -1190,7 +1266,8 @@ namespace Mono {
             }
             if (n == 0) { s_dbgEyeY = wh.y; s_dbgFootY = wf.y; }
             CollectJoints(zo, cam, tmpEn);
-            // Item 14/Passo 5 (fallback 2D): depth buffer nos 5 pontos (cabeca->pes).
+            // Item 14/Passo 5 (fallback 2D): mesma logica do 3D —
+            // Raycast primario, Linecast secundario, Depth ultimo recurso.
             tmpEn.losVis = true;
             tmpEn.losHits = 5;
             if (Config::bVisibleCheck && hasCamW) {
@@ -1202,7 +1279,16 @@ namespace Mono {
                 pts[4] = wf; // pes
                 int h = 0; bool he = false;
                 for (int pi = 0; pi < 5; ++pi) {
-                    if (DepthExposed(pts[pi], dist)) { h++; if (pi == 0) he = true; }
+                    bool exp;
+                    if (s_losOk) {
+                        float dummy; int dumL;
+                        exp = LosPoint(camW, pts[pi], &dummy, &dumL);
+                    } else if (mLinecast && s_lineArgs >= 2) {
+                        exp = LosPointLinecast(camW, pts[pi]);
+                    } else {
+                        exp = DepthExposed(pts[pi], dist);
+                    }
+                    if (exp) { h++; if (pi == 0) he = true; }
                     float ndc = 0, uu = 0, vv = 0;
                     tmpEn.losDepth[pi] = BoneNdc(pts[pi], ndc, uu, vv) ? ndc : -1.0f;
                 }
