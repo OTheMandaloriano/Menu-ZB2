@@ -550,6 +550,10 @@ namespace Mono {
     static int s_calDone = 0; // calibracao RaycastHit.distance (1x, ver LosCalibrate)
     static void LosCalibrate(const unsigned char* hitBuf, float knownDist) {
         if (s_calDone || !(knownDist > 1.0f)) return;
+        if (pFieldOff) return; // FIX P1: API (mono_field_get_offset) = autoridade.
+        // Sem este gate, a heuristica sobrescrevia o offset correto (ex: 44 ->
+        // 28 = m_Normal.x casando por acaso na margem de 50%). Roda so quando
+        // a API nao exporta a funcao (builds antigas do Mono).
         // Procura o slot float cujo valor ~= knownDist (hit confirmado pelo bool).
         for (int off = 0; off + 4 <= 128; off += 4) {
             float v = 0;
@@ -859,24 +863,13 @@ namespace Mono {
     }
     static int s_glitchLogged = 0; // log diagnostico (Passo 7), sem spam
 
-    // Nome via Object.get_name (GameObject). Fallback "Zumbi".
+    // DESATIVADA (P0 crash pos-kill): Object.get_name em wrapper marcado p/
+    // Destroy() = AV dentro do JIT do Mono — SEH nao captura, jogo fecha.
+    // Caminho quente usa "Zombie" fixo. Mantida p/ referencia futura (cache
+    // entPtr->name na 1a aparicao, se um dia houver nome variavel).
     static void GetName(void* obj, char* out, size_t cap) {
-        strncpy_s(out, cap, "Zumbi", _TRUNCATE);
-        if (!mGetName || !obj || !pStrUtf8 || !pFree) return;
-        __try {
-            MonoObject* exc = nullptr;
-            MonoObject* ret = pInvoke(mGetName, obj, nullptr, &exc);
-            if (exc || !ret) return;
-            char* u = pStrUtf8(ret);
-            if (u) {
-                strncpy_s(out, cap, u, _TRUNCATE);
-                pFree(u);
-                // "ZombiePrefab(Clone)" -> "Zombie" (legivel no ESP)
-                char* p;
-                while ((p = strstr(out, "(Clone)")) != nullptr) memmove(p, p + 7, strlen(p + 7) + 1);
-                while ((p = strstr(out, "Prefab")) != nullptr) memmove(p, p + 6, strlen(p + 6) + 1);
-            }
-        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+        (void)obj;
+        strncpy_s(out, cap, "Zombie", _TRUNCATE);
     }
 
     // Item 12 Skeleton real: juntas pelos indices auditados ([BONE] 14/09).
@@ -1161,8 +1154,12 @@ namespace Mono {
             if (!alive) { s_ghostDead++; return; }
             void* zo = ReadP(e, Off::Z_obj);
             if (!zo) return;
-            EspEntry tmpEn = {}; // nome antes dos Transforms (barato, 1 invoke)
-            GetName(zo, tmpEn.name, sizeof(tmpEn.name));
+            EspEntry tmpEn = {};
+            // FIX P0 crash pos-kill: Object.get_name em wrapper marcado p/ Destroy()
+            // = AV dentro do JIT do Mono (SEH nao captura). Nome e cosmetico e
+            // uniforme ("Zombie") — zero invokes no caminho quente. Se um dia houver
+            // entidade com nome variavel: cache entPtr->name na 1a aparicao (ver mono.h).
+            strncpy_s(tmpEn.name, sizeof(tmpEn.name), "Zombie", _TRUNCATE);
             for (int k = 0; k < 8; ++k) { tmpEn.pv[k] = false; tmpEn.px[k] = tmpEn.py[k] = 0; }
             tmpEn.has3d = false;
             // Box 3D real: AABB de mundo do corpo (sem hardcode de tamanho).

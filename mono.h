@@ -38,6 +38,9 @@ namespace Mono {
         float ex, ey, ez;   // extents da AABB (log diagnostico P1)
         bool  losVis;       // item 14: proporcao exposta >= 40% (multi-bone)
         int   losHits;      // item 14: pontos expostos de 5 (log [LOS])
+        // DIVIDA TECNICA: se um dia houver entidade com nome variavel, cachear
+        // entPtr->name (tabela hash, 1a aparicao, memcpy direto + SEH). Nunca
+        // invocar Object.get_name no caminho quente (P0 crash pos-kill).
         float losDepth[5];  // item 14/Passo5: profundidade NDC do osso (depth buffer)
         int   skN;          // juntas validas (item 12 Skeleton real)
         float skX[20], skY[20]; // pixels Unity (y p/ cima, igual px/py)
