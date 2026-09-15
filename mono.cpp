@@ -593,9 +593,13 @@ namespace Mono {
     static int s_calDone = 0; // calibracao RaycastHit.distance (1x, ver LosCalibrate)
     // Histerese LOS: a cor exibida so vira apos ~3 ciclos iguais da mesma
     // entidade (anti-flicker). Retorna a cor ESTAVEL; atualiza o streak.
-    static bool LosStable(void* ent, bool rawVis) {
+    // skip=true (ciclo pulado por orcamento/rodizio): NAO mexe no streak,
+    // devolve a cor exibida atual (ou a crua p/ entidade nova). Sem isso, o
+    // rodizio apagava o vermelho: pular ciclo virava verde (bug 16/09).
+    static bool LosStable(void* ent, bool rawVis, bool skip = false) {
         for (int i = 0; i < 256; ++i) {
             if (s_hystEnt[i] == ent) {
+                if (skip) return s_hystShown[i];
                 int s = (int)s_hystStreak[i] + (rawVis ? 1 : -1);
                 if (s > 5) s = 5; if (s < -5) s = -5;
                 s_hystStreak[i] = (signed char)s;
@@ -1305,51 +1309,56 @@ namespace Mono {
                         pts[3] = { bb.center.x - bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z }; // coxaL
                         pts[4] = { bb.center.x + bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z }; // coxaR
                         // Rodizio anti-horda: LOS pesado (5 raycasts) alterna entre
-                        // perto (sempre) e longe (1 de 3 ciclos). Zumbi a 70m nao
-                        // precisa de LOS a 30Hz; o snapshot segura a cor anterior.
+                        // perto (sempre) e longe (1 de 3 ciclos). Ciclo pulado =
+                        // mantem a cor exibida anterior (skip=true na histerese).
+                        // NUNCA forca verde no pulo (bug 16/09: !doLos virava verde).
                         bool doLos = (dist < 45.0f) || (((s_losCursor + n) % 3) == 0);
-                        int h = 0; bool he = false;
-                        for (int pi = 0; pi < 5; ++pi) {
-                            bool exp;
-                            if (!doLos) { exp = (tmpEn.losHits > 0); }
-                            else if (s_losOk) {
-                                float dummy; int dumL;
-                                exp = LosPoint(camW, pts[pi], &dummy, &dumL);
-                            } else if (mLinecast && s_lineArgs >= 2) {
-                                exp = LosPointLinecast(camW, pts[pi]);
-                            } else {
-                                float ndc = 0, u = 0, v = 0;
-                                bool hasNdc = BoneNdc(pts[pi], ndc, u, v);
-                                float scene = 0;
-                                bool hasDepth = hasNdc && DepthVisShim::Sample(u, v, scene);
-                                if (hasDepth) {
-                                    if (scene >= 0.999f) exp = true;
-                                    else {
-                                        float eps = 0.5f / (dist * dist + 1.0f) + 0.001f;
-                                        exp = ndc <= scene + eps;
-                                    }
-                                } else exp = true; // fail-open
+                        if (!doLos) {
+                            tmpEn.losVis = LosStable(e, true, true); // skip: mantem cor
+                            tmpEn.losHits = -1; // -1 = ciclo pulado (log distingue)
+                        } else {
+                            int h = 0; bool he = false;
+                            for (int pi = 0; pi < 5; ++pi) {
+                                bool exp;
+                                if (s_losOk) {
+                                    float dummy; int dumL;
+                                    exp = LosPoint(camW, pts[pi], &dummy, &dumL);
+                                } else if (mLinecast && s_lineArgs >= 2) {
+                                    exp = LosPointLinecast(camW, pts[pi]);
+                                } else {
+                                    float ndc = 0, u = 0, v = 0;
+                                    bool hasNdc = BoneNdc(pts[pi], ndc, u, v);
+                                    float scene = 0;
+                                    bool hasDepth = hasNdc && DepthVisShim::Sample(u, v, scene);
+                                    if (hasDepth) {
+                                        if (scene >= 0.999f) exp = true;
+                                        else {
+                                            float eps = 0.5f / (dist * dist + 1.0f) + 0.001f;
+                                            exp = ndc <= scene + eps;
+                                        }
+                                    } else exp = true; // fail-open
+                                }
+                                if (exp) { h++; if (pi == 0) he = true; }
                             }
-                            if (exp) { h++; if (pi == 0) he = true; }
-                        }
-                        tmpEn.losHits = h;
-                        // Histerese: cor exibida estavel (anti-flicker). Log mostra crua+estavel.
-                        bool rawVis = (h >= 2) || he;
-                        tmpEn.losVis = LosStable(e, rawVis);
-                        // DIAG 2.1C (temporario): resultado sempre (1x/sessao) — prova que o bloco roda.
-                        {
-                            static bool s_resLogged = false;
-                            if (!s_resLogged) {
-                                s_resLogged = true;
-                                Log::Infof("[LOS-RESULT] 3D ent=0x%p losVis=%d losHits=%d",
-                                    e, tmpEn.losVis ? 1 : 0, h);
+                            tmpEn.losHits = h;
+                            // Histerese: cor exibida estavel (anti-flicker). Log mostra crua+estavel.
+                            bool rawVis = (h >= 2) || he;
+                            tmpEn.losVis = LosStable(e, rawVis);
+                            // DIAG 2.1C (temporario): resultado sempre (1x/sessao) — prova que o bloco roda.
+                            {
+                                static bool s_resLogged = false;
+                                if (!s_resLogged) {
+                                    s_resLogged = true;
+                                    Log::Infof("[LOS-RESULT] 3D ent=0x%p losVis=%d losHits=%d",
+                                        e, tmpEn.losVis ? 1 : 0, h);
+                                }
                             }
-                        }
-                        if (s_losLogN < 40) {
-                            s_losLogN++;
-                            const char* via = s_losOk ? "ray" : (mLinecast ? "line" : "depth");
-                            Log::Infof("[LOS] id=0x%p dist=%.1f hits=%d/5 visivel=%d(raw=%d) via=%s",
-                                e, (double)dist, h, tmpEn.losVis ? 1 : 0, rawVis ? 1 : 0, via);
+                            if (s_losLogN < 40) {
+                                s_losLogN++;
+                                const char* via = s_losOk ? "ray" : (mLinecast ? "line" : "depth");
+                                Log::Infof("[LOS] id=0x%p dist=%.1f hits=%d/5 visivel=%d(raw=%d) via=%s",
+                                    e, (double)dist, h, tmpEn.losVis ? 1 : 0, rawVis ? 1 : 0, via);
+                            }
                         }
                     }
                     if (!s_skelLogged && tmpEn.skN == SkJoint::SK_COUNT) {
@@ -1442,24 +1451,28 @@ namespace Mono {
                 pts[4] = wf; // pes
                 int h = 0; bool he = false;
                 bool doLos2 = (dist < 45.0f) || (((s_losCursor + n) % 3) == 0); // rodizio (igual 3D)
-                for (int pi = 0; pi < 5; ++pi) {
-                    bool exp;
-                    if (!doLos2) { exp = (tmpEn.losHits > 0); }
-                    else if (s_losOk) {
-                        float dummy; int dumL;
-                        exp = LosPoint(camW, pts[pi], &dummy, &dumL);
-                    } else if (mLinecast && s_lineArgs >= 2) {
-                        exp = LosPointLinecast(camW, pts[pi]);
-                    } else {
-                        exp = DepthExposed(pts[pi], dist);
+                if (!doLos2) {
+                    tmpEn.losVis = LosStable(e, true, true); // skip: mantem cor
+                    tmpEn.losHits = -1;
+                } else {
+                    for (int pi = 0; pi < 5; ++pi) {
+                        bool exp;
+                        if (s_losOk) {
+                            float dummy; int dumL;
+                            exp = LosPoint(camW, pts[pi], &dummy, &dumL);
+                        } else if (mLinecast && s_lineArgs >= 2) {
+                            exp = LosPointLinecast(camW, pts[pi]);
+                        } else {
+                            exp = DepthExposed(pts[pi], dist);
+                        }
+                        if (exp) { h++; if (pi == 0) he = true; }
+                        float ndc = 0, uu = 0, vv = 0;
+                        tmpEn.losDepth[pi] = BoneNdc(pts[pi], ndc, uu, vv) ? ndc : -1.0f;
                     }
-                    if (exp) { h++; if (pi == 0) he = true; }
-                    float ndc = 0, uu = 0, vv = 0;
-                    tmpEn.losDepth[pi] = BoneNdc(pts[pi], ndc, uu, vv) ? ndc : -1.0f;
+                    DepthDiagRow(pts, dist);
+                    tmpEn.losHits = h;
+                    tmpEn.losVis = LosStable(e, (h >= 2) || he); // histerese (igual 3D)
                 }
-                DepthDiagRow(pts, dist);
-                tmpEn.losHits = h;
-                tmpEn.losVis = LosStable(e, (h >= 2) || he); // histerese (igual 3D)
                 // DIAG 2.1C-2D (temporario): resultado do 2D, 1x/sessao.
                 {
                     static bool s_resLogged2 = false;
