@@ -632,8 +632,13 @@ namespace Mono {
     static bool LosPointSafe(const Vec3& from, const Vec3& to, float* outHit, int* outLayer) {
         if (outHit) *outHit = 0;
         if (outLayer) *outLayer = -1;
-        if (!s_losOk || !mRaycast || s_rayArgs != 5) return true; // contenção P0
-        return LosPoint(from, to, outHit, outLayer);
+        // CONTENÇÃO TOTAL P0 (15/09): jogo crasha com AV em UnityPlayer.dll.
+        // Physics.Raycast via mono_runtime_invoke a partir de CreateThread nossa
+        // compete com o PhysX multithread do jogo (Player.log: Threading Mode:
+        // Multi-Threaded) fora do loop de física. NENHUM invoke físico roda até
+        // a via segura (main-thread marshal ou depth) estar pronta. Fail-open.
+        (void)from; (void)to;
+        return true;
     }
     static bool LosPoint(const Vec3& from, const Vec3& to, float* outHit, int* outLayer) {
         if (outHit) *outHit = 0;
@@ -1313,7 +1318,8 @@ namespace Mono {
                                             exp ? 1 : 0, (double)dummy);
                                     }
                                 }
-                            } else if (mLinecast && s_lineArgs >= 2) {
+                            } else if (false && mLinecast && s_lineArgs >= 2) {
+                                // CONTENÇÃO TOTAL P0: Linecast também é invoke físico.
                                 exp = LosPointLinecast(camW, pts[pi]);
                             } else {
                                 // Depth como ultimo recurso (BUG 4: provavelmente 1.0)
@@ -1445,7 +1451,8 @@ namespace Mono {
                                     s_rayArgs, (unsigned)s_geomMask, (double)(dist - 0.15f));
                             }
                         }
-                    } else if (mLinecast && s_lineArgs >= 2) {
+                    } else if (false && mLinecast && s_lineArgs >= 2) {
+                        // CONTENÇÃO TOTAL P0: Linecast também é invoke físico.
                         exp = LosPointLinecast(camW, pts[pi]);
                     } else {
                         exp = DepthExposed(pts[pi], dist);
