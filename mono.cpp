@@ -1222,6 +1222,17 @@ namespace Mono {
                     }
                     tmpEn.losVis = true;
                     tmpEn.losHits = 5;
+                    // DIAG 2.1A (temporario): qual gate falha? 1x por entidade seria ideal,
+                    // mas aqui vale 1x por sessao (sem spam): mostra bVisibleCheck/hasCamW/s_losOk.
+                    {
+                        static bool s_gateLogged = false;
+                        if (!s_gateLogged) {
+                            s_gateLogged = true;
+                            Log::Infof("[LOS-GATE] 3D bVisibleCheck=%d hasCamW=%d s_losOk=%d mLinecast=0x%p s_rayArgs=%d",
+                                Config::bVisibleCheck ? 1 : 0, hasCamW ? 1 : 0, s_losOk ? 1 : 0,
+                                (void*)mLinecast, s_rayArgs);
+                        }
+                    }
                     if (Config::bVisibleCheck && hasCamW) {
                         Vec3 pts[5];
                         pts[0] = { bb.center.x, bb.center.y + bb.extents.y, bb.center.z }; // cabeca
@@ -1241,6 +1252,17 @@ namespace Mono {
                                 // Raycast primario (resolve assinatura correta agora)
                                 float dummy; int dumL;
                                 exp = LosPoint(camW, pts[pi], &dummy, &dumL);
+                                // DIAG 2.1B (temporario): 1o ponto 1x por sessao.
+                                if (pi == 0) {
+                                    static bool s_callLogged = false;
+                                    if (!s_callLogged) {
+                                        s_callLogged = true;
+                                        Log::Infof("[LOS-CALL] 3D ent=0x%p from=(%.1f,%.1f,%.1f) to=(%.1f,%.1f,%.1f) exp=%d hd=%.1f",
+                                            e, (double)camW.x, (double)camW.y, (double)camW.z,
+                                            (double)pts[0].x, (double)pts[0].y, (double)pts[0].z,
+                                            exp ? 1 : 0, (double)dummy);
+                                    }
+                                }
                             } else if (mLinecast && s_lineArgs >= 2) {
                                 exp = LosPointLinecast(camW, pts[pi]);
                             } else {
@@ -1261,6 +1283,15 @@ namespace Mono {
                         }
                         tmpEn.losHits = h;
                         tmpEn.losVis = (h >= 2) || he;
+                        // DIAG 2.1C (temporario): resultado sempre (1x/sessao) — prova que o bloco roda.
+                        {
+                            static bool s_resLogged = false;
+                            if (!s_resLogged) {
+                                s_resLogged = true;
+                                Log::Infof("[LOS-RESULT] 3D ent=0x%p losVis=%d losHits=%d",
+                                    e, tmpEn.losVis ? 1 : 0, h);
+                            }
+                        }
                         if (s_losLogN < 40) {
                             s_losLogN++;
                             const char* via = s_losOk ? "ray" : (mLinecast ? "line" : "depth");
@@ -1331,6 +1362,15 @@ namespace Mono {
             // Raycast primario, Linecast secundario, Depth ultimo recurso.
             tmpEn.losVis = true;
             tmpEn.losHits = 5;
+            // DIAG 2.1A-2D (temporario): gate do caminho 2D, 1x/sessao.
+            {
+                static bool s_gateLogged2 = false;
+                if (!s_gateLogged2) {
+                    s_gateLogged2 = true;
+                    Log::Infof("[LOS-GATE] 2D bVisibleCheck=%d hasCamW=%d s_losOk=%d",
+                        Config::bVisibleCheck ? 1 : 0, hasCamW ? 1 : 0, s_losOk ? 1 : 0);
+                }
+            }
             if (Config::bVisibleCheck && hasCamW) {
                 Vec3 pts[5];
                 pts[0] = wh; // cabeca (olho)
@@ -1356,6 +1396,14 @@ namespace Mono {
                 DepthDiagRow(pts, dist);
                 tmpEn.losHits = h;
                 tmpEn.losVis = (h >= 2) || he;
+                // DIAG 2.1C-2D (temporario): resultado do 2D, 1x/sessao.
+                {
+                    static bool s_resLogged2 = false;
+                    if (!s_resLogged2) {
+                        s_resLogged2 = true;
+                        Log::Infof("[LOS-RESULT] 2D ent=0x%p losVis=%d losHits=%d", e, tmpEn.losVis ? 1 : 0, h);
+                    }
+                }
             }
             EspEntry& en = tmp[n++];
             memcpy(en.name, tmpEn.name, sizeof(en.name));
