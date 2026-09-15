@@ -637,6 +637,22 @@ namespace Mono {
                 args[3] = (void*)&maxD;
                 args[4] = (void*)&mask;
                 ret = pInvoke(mRaycast, nullptr, args, &exc);
+                // DIAG Fase 1C (temporario): resultado cru do invoke, 1x/sessao.
+                {
+                    static bool s_rayLogged = false;
+                    if (!s_rayLogged) {
+                        s_rayLogged = true;
+                        float raw = 0;
+                        if (ret && !exc) {
+                            __try { memcpy(&raw, hitBuf + s_hitDistOff, sizeof(raw)); }
+                            __except (EXCEPTION_EXECUTE_HANDLER) { raw = -999.0f; }
+                        }
+                        Log::Infof("[AUDIT-RAY] ret=0x%p exc=0x%p hit=%d hd_off=%d hd_raw=%.4f maxD=%.1f mask=0x%X",
+                            ret, (void*)exc,
+                            (ret && !exc) ? ((*(unsigned char*)pUnbox(ret)) != 0 ? 1 : 0) : -1,
+                            s_hitDistOff, (double)raw, (double)maxD, (unsigned)mask);
+                    }
+                }
                 if (exc || !ret) return true;
                 hit = (*(unsigned char*)pUnbox(ret)) != 0;
             } else if (s_rayArgs == 4) {
@@ -1127,11 +1143,23 @@ namespace Mono {
         // Posicao da camera 1x por ciclo p/ cull por distancia (poupa 2 invokes de W2S nos longe).
         Vec3 camW = { 0, 0, 0 };
         bool hasCamW = false;
+        MonoObject* camTr = nullptr; // DIAG Fase 1A: guardar p/ [AUDIT-CAM]
         if (mGetTrans) {
             MonoObject* exc = nullptr;
             MonoObject* tr = nullptr;
             __try { tr = pInvoke(mGetTrans, cam, nullptr, &exc); } __except (EXCEPTION_EXECUTE_HANDLER) { tr = nullptr; exc = (MonoObject*)1; }
             if (tr && !exc) hasCamW = GetPos(tr, camW);
+            camTr = tr;
+        }
+        // DIAG Fase 1A (temporario, remover no commit final): camW e a camera real?
+        {
+            static bool s_camLogged = false;
+            if (!s_camLogged) {
+                s_camLogged = true;
+                Log::Infof("[AUDIT-CAM] cam=0x%p tr=0x%p hasCamW=%d pos=(%.2f,%.2f,%.2f) vpOk=%d",
+                    cam, camTr, hasCamW ? 1 : 0,
+                    (double)camW.x, (double)camW.y, (double)camW.z, s_vpOk ? 1 : 0);
+            }
         }
         float maxD = Config::fMaxDistance;
         float maxD2 = maxD * maxD;
@@ -1249,12 +1277,12 @@ namespace Mono {
                                 // Raycast primario (resolve assinatura correta agora)
                                 float dummy; int dumL;
                                 exp = LosPoint(camW, pts[pi], &dummy, &dumL);
-                                // DIAG 2.1B (temporario): 1o ponto 1x por sessao.
+                                // DIAG Fase 1D (temporario): from/to do 1o ponto 3D, 1x/sessao.
                                 if (pi == 0) {
-                                    static bool s_callLogged = false;
-                                    if (!s_callLogged) {
-                                        s_callLogged = true;
-                                        Log::Infof("[LOS-CALL] 3D ent=0x%p from=(%.1f,%.1f,%.1f) to=(%.1f,%.1f,%.1f) exp=%d hd=%.1f",
+                                    static bool s_call3DLogged = false;
+                                    if (!s_call3DLogged) {
+                                        s_call3DLogged = true;
+                                        Log::Infof("[AUDIT-CALL-3D] ent=0x%p from=(%.1f,%.1f,%.1f) to=(%.1f,%.1f,%.1f) exp=%d hd=%.1f",
                                             e, (double)camW.x, (double)camW.y, (double)camW.z,
                                             (double)pts[0].x, (double)pts[0].y, (double)pts[0].z,
                                             exp ? 1 : 0, (double)dummy);
@@ -1381,6 +1409,17 @@ namespace Mono {
                     if (s_losOk) {
                         float dummy; int dumL;
                         exp = LosPoint(camW, pts[pi], &dummy, &dumL);
+                        // DIAG Fase 1B (temporario): from/to do 1o ponto, 1x/sessao.
+                        if (pi == 0) {
+                            static bool s_call2DLogged = false;
+                            if (!s_call2DLogged) {
+                                s_call2DLogged = true;
+                                Log::Infof("[AUDIT-CALL-2D] ent=0x%p from=(%.1f,%.1f,%.1f) to=(%.1f,%.1f,%.1f) s_rayArgs=%d mask=0x%X maxD=%.1f",
+                                    e, (double)camW.x, (double)camW.y, (double)camW.z,
+                                    (double)pts[0].x, (double)pts[0].y, (double)pts[0].z,
+                                    s_rayArgs, (unsigned)s_geomMask, (double)(dist - 0.15f));
+                            }
+                        }
                     } else if (mLinecast && s_lineArgs >= 2) {
                         exp = LosPointLinecast(camW, pts[pi]);
                     } else {
