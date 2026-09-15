@@ -23,14 +23,12 @@ extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 
 static Present_t       oPresent = nullptr;
 static ResizeBuffers_t oResizeBuffers = nullptr;
-// AUDIT SENIOR 15/09: hook DrawIndexed (slot 12 da vtable D3D11) para capturar
-// o DSV da pass GEOMÉTRICA da cena — o DSV visível no Present pertence à pass
-// de composição/UI (post-processing) e lê 1.0 em tudo. Sem invoke, sem Mono,
-// sem risco de AV: só OMGetRenderTargets + CopyResource (operações D3D puras).
-typedef void (__stdcall* DrawIndexed_t)(ID3D11DeviceContext*, UINT, UINT, INT);
-static DrawIndexed_t   oDrawIndexed = nullptr;
-static long            s_diFrames = 0;   // frames observados (log 1x)
-static long            s_diCaptured = 0; // capturas da cena (log 1x)
+// REV 15/09: hook DrawIndexed REMOVIDO — crashava o jogo no inject.
+// Causa: MinHook no slot 12 da vtable do immediate context compete com o
+// worker de render do Unity (kGfxThreadingModeClientWorkerJobs, ver Player.log)
+// + deferred contexts;jgambiarras no contexto imediato durante draws da cena =
+// AV em UnityPlayer.dll. Depth segue via Present (pass de composição), com o
+// Raycast como via primária do LOS (funcionava na sessão 23:07).
 static WNDPROC         oWndProc = nullptr;
 static HWND            g_hWindow = nullptr;
 static bool            g_bInit = false;
@@ -71,72 +69,6 @@ static void CreateRenderTarget(IDXGISwapChain* pSwapChain) {
 
 static void CleanupRenderTarget() {
     if (g_pRTV) { g_pRTV->Release(); g_pRTV = nullptr; }
-}
-
-// DrawIndexed: roda DENTRO de cada draw da cena (thread de render do jogo).
-// Captura o DSV da pass geométrica: heurística = primeiro DSV >= 64x64 com
-// formato de depth por frame. UI/fullscreen quads vêm depois; a staging guarda
-// a ÚLTIMA captura válida do frame — a cena 3D domina em área (>90% dos draws).
-// Custo: 1 OMGetRenderTargets + (1 CopyResource quando o formato muda) por frame.
-static void CaptureSceneDepth() {
-    if (!g_pContext || !g_pDevice) return;
-    ID3D11DepthStencilView* dsv = nullptr;
-    g_pContext->OMGetRenderTargets(1, nullptr, &dsv);
-    if (!dsv) return;
-    ID3D11Resource* res = nullptr;
-    dsv->GetResource(&res);
-    dsv->Release();
-    if (!res) return;
-    ID3D11Texture2D* depthTex = nullptr;
-    res->QueryInterface(__uuidof(ID3D11Texture2D), (void**)&depthTex);
-    res->Release();
-    if (!depthTex) return;
-    D3D11_TEXTURE2D_DESC td = {};
-    depthTex->GetDesc(&td);
-    bool fmtOk = (td.Format == DXGI_FORMAT_D24_UNORM_S8_UINT ||
-                  td.Format == DXGI_FORMAT_D32_FLOAT ||
-                  td.Format == DXGI_FORMAT_D16_UNORM ||
-                  td.Format == DXGI_FORMAT_R24G8_TYPELESS ||
-                  td.Format == DXGI_FORMAT_R32_TYPELESS ||
-                  td.Format == DXGI_FORMAT_R32G8X24_TYPELESS ||
-                  td.Format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT);
-    if (!fmtOk || td.Width < 64 || td.Height < 64 || td.Width > 8192 || td.Height > 8192) {
-        depthTex->Release();
-        return;
-    }
-    DXGI_FORMAT stageFmt = (td.Format == DXGI_FORMAT_R32G8X24_TYPELESS)
-        ? DXGI_FORMAT_D32_FLOAT_S8X24_UINT : td.Format;
-    if (!g_depthStaging || td.Width != g_depthW || td.Height != g_depthH || stageFmt != g_depthFmt) {
-        if (g_depthStaging) { g_depthStaging->Release(); g_depthStaging = nullptr; }
-        D3D11_TEXTURE2D_DESC sd = {};
-        sd.Width = td.Width; sd.Height = td.Height;
-        sd.MipLevels = 1; sd.ArraySize = 1;
-        sd.Format = stageFmt;
-        sd.SampleDesc.Count = 1;
-        sd.Usage = D3D11_USAGE_STAGING;
-        sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-        if (SUCCEEDED(g_pDevice->CreateTexture2D(&sd, nullptr, &g_depthStaging))) {
-            g_depthW = td.Width; g_depthH = td.Height; g_depthFmt = stageFmt;
-        }
-    }
-    if (g_depthStaging && td.SampleDesc.Count == 1) {
-        g_pContext->CopyResource(g_depthStaging, depthTex);
-        D3D11_VIEWPORT vp[8] = {};
-        UINT nvp = 8;
-        g_pContext->RSGetViewports(&nvp, vp);
-        float vw = (nvp > 0 && vp[0].Width > 0) ? vp[0].Width : (float)td.Width;
-        float vh = (nvp > 0 && vp[0].Height > 0) ? vp[0].Height : (float)td.Height;
-        DepthVis::Publish(g_pContext, g_depthStaging, td.Width, td.Height, stageFmt, vw, vh);
-        long c = InterlockedIncrement(&s_diCaptured);
-        if (c == 1) Log::Infof("[DEPTH-DI] 1a captura cena: %ux%u dsvFmt=%d stageFmt=%d.", td.Width, td.Height, (int)td.Format, (int)stageFmt);
-    }
-    depthTex->Release();
-}
-static void __stdcall hkDrawIndexed(ID3D11DeviceContext* pCtx, UINT IndexCount, UINT StartIndexLocation, INT BaseVertexLocation) {
-    long f = InterlockedIncrement(&s_diFrames);
-    if (f == 1) Log::Info("[DEPTH-DI] hook DrawIndexed ativo (slot 12).");
-    if (g_pContext && pCtx == g_pContext) CaptureSceneDepth();
-    oDrawIndexed(pCtx, IndexCount, StartIndexLocation, BaseVertexLocation);
 }
 
 // ResizeBuffers: recria RTV (Alt+Tab / resize). Sem isso, tela preta/crash.
@@ -486,10 +418,6 @@ static DWORD WINAPI MainThread(LPVOID lpReserved) {
                 Log::Info("Bind OK: ResizeBuffers (slot 13).");
             else
                 Log::Error("Bind FALHOU: ResizeBuffers (slot 13).");
-            if (kiero::bind(12, (void**)&oDrawIndexed, (void*)hkDrawIndexed) == kiero::Status::Success)
-                Log::Info("Bind OK: DrawIndexed (slot 12, DSV da cena).");
-            else
-                Log::Warn("Bind FALHOU: DrawIndexed (slot 12) — depth segue via Present.");
 
             oWndProc = (WNDPROC)SetWindowLongPtr(g_hWindow, GWL_WNDPROC_INDEX, (LONG_PTR)hkWndProc);
             Log::Info("WndProc hookado, menu operacional (INSERT/DELETE).");

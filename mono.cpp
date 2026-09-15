@@ -632,13 +632,14 @@ namespace Mono {
     static bool LosPointSafe(const Vec3& from, const Vec3& to, float* outHit, int* outLayer) {
         if (outHit) *outHit = 0;
         if (outLayer) *outLayer = -1;
-        // CONTENÇÃO TOTAL P0 (15/09): jogo crasha com AV em UnityPlayer.dll.
-        // Physics.Raycast via mono_runtime_invoke a partir de CreateThread nossa
-        // compete com o PhysX multithread do jogo (Player.log: Threading Mode:
-        // Multi-Threaded) fora do loop de física. NENHUM invoke físico roda até
-        // a via segura (main-thread marshal ou depth) estar pronta. Fail-open.
-        (void)from; (void)to;
-        return true;
+        // REV 15/09: contenção total REMOVIDA. Evidência do operador: sessão 23:07
+        // (Raycast/5 via invoke da worker) tinha visible check FUNCIONANDO
+        // (vermelho/verde corretos); o único crash era pós-kill no soco — já
+        // corrigido pelo Fix P0 (GetName removido, commit 828ccc4). O AV em
+        // UnityPlayer.dll veio do hook DrawIndexed (commit 3204cc9), não do Raycast.
+        // Volta a invocar com assinatura confirmada via [SIG] (s_rayArgs==5).
+        if (!s_losOk || !mRaycast || s_rayArgs != 5) return true;
+        return LosPoint(from, to, outHit, outLayer);
     }
     static bool LosPoint(const Vec3& from, const Vec3& to, float* outHit, int* outLayer) {
         if (outHit) *outHit = 0;
@@ -1318,8 +1319,7 @@ namespace Mono {
                                             exp ? 1 : 0, (double)dummy);
                                     }
                                 }
-                            } else if (false && mLinecast && s_lineArgs >= 2) {
-                                // CONTENÇÃO TOTAL P0: Linecast também é invoke físico.
+                            } else if (mLinecast && s_lineArgs >= 2) {
                                 exp = LosPointLinecast(camW, pts[pi]);
                             } else {
                                 // Depth como ultimo recurso (BUG 4: provavelmente 1.0)
@@ -1451,8 +1451,7 @@ namespace Mono {
                                     s_rayArgs, (unsigned)s_geomMask, (double)(dist - 0.15f));
                             }
                         }
-                    } else if (false && mLinecast && s_lineArgs >= 2) {
-                        // CONTENÇÃO TOTAL P0: Linecast também é invoke físico.
+                    } else if (mLinecast && s_lineArgs >= 2) {
                         exp = LosPointLinecast(camW, pts[pi]);
                     } else {
                         exp = DepthExposed(pts[pi], dist);
