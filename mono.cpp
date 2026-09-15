@@ -772,10 +772,11 @@ namespace Mono {
     }
 
     // invoke Transform.get_position -> mundo. Retorna false se falhar.
-    // Consome 1 do orçamento (anti-crash em horda: sem saldo, sem invoke).
+    // GetPos fora do orçamento (posicao e dado vital: box/skeleton/LOS
+    // dependem dela; sem posicao a entidade some). O teto que protege a
+    // horda e o de entidades/ciclo + LOS em rodizio, nao este.
     static bool GetPos(void* trans, Vec3& out) {
         if (!mGetPos || !trans) return false;
-        if (!BudgetTake(1)) return false;
         __try {
             MonoObject* exc = nullptr;
             MonoObject* ret = pInvoke(mGetPos, trans, nullptr, &exc);
@@ -902,7 +903,6 @@ namespace Mono {
     // bracos e cabeca, qualquer tamanho/tipo). Com validacao de sanidade.
     static bool GetBounds(void* rend, Bnd& out) {
         if (!mGetBounds || !rend) return false;
-        if (!BudgetTake(1)) return false;
         __try {
             MonoObject* exc = nullptr;
             MonoObject* ret = pInvoke(mGetBounds, rend, nullptr, &exc);
@@ -944,7 +944,7 @@ namespace Mono {
     // do objeto e a mao ia para dentro do peito. Converte quat->matriz 3x3 aqui.
     static bool GetQuat(void* trans, float q[4]) {
         if (!mGetRot || !trans) return false;
-        if (!BudgetTake(1)) return false;
+        if (!BudgetTake(1)) return false; // maos viram fallback colinear sem saldo
         __try {
             MonoObject* exc = nullptr;
             MonoObject* ret = pInvoke(mGetRot, trans, nullptr, &exc);
@@ -1571,6 +1571,11 @@ namespace Mono {
             return true;
         } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
     }
+    // Ritmo adaptativo anti-crash: a worker mede o custo do BuildEsp e ajusta
+    // o intervalo. Ciclo caro (>25ms, horda densa) = respira 66ms; ciclo leve
+    // (<12ms) = volta pros 33ms. O jogo nunca recebe rajada de invokes: quanto
+    // mais pesado o ciclo, mais folga o PhysX/LOD ganha antes do proximo.
+    static int s_sleepMs = 33;
     static DWORD WINAPI EspThread(LPVOID) {
         pAttach(s_dom); // worker precisa do proprio attach no Mono
         Log::Info("Thread ESP iniciada (30Hz, fora do Present).");
@@ -1587,9 +1592,15 @@ namespace Mono {
                 }
                 if (s_deadN > 0) { s_deadN = 0; Log::Info("[SCENE] loader vivo — worker retomada."); }
                 BuildEsp();
+                // Adapta pelo custo medido no ciclo (s.espMs, media movel).
+                int want = (s.espMs > 25.0f) ? 66 : (s.espMs < 12.0f ? 33 : 50);
+                if (want != s_sleepMs) {
+                    s_sleepMs = want;
+                    Log::Infof("[PERF] ciclo %.1fms -> intervalo %dms.", (double)s.espMs, want);
+                }
             }
             else { EnterCriticalSection(&s_espCS); s_espN = 0; LeaveCriticalSection(&s_espCS); }
-            Sleep(33); // ~30Hz: boxes a 30fps parecem grudadas; 20Hz parecia "queda de FPS"
+            Sleep(s_sleepMs);
         }
         return 0;
     }
