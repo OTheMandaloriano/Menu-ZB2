@@ -1492,11 +1492,41 @@ namespace Mono {
         }
     }
 
+    // Watchdog anti-hang no respawn: se a cena trocou (morte do player) o
+    // Mono pode estar recarregando o domain enquanto a worker invoca. Sinais:
+    // imagem C# sumiu, ZombieLoader morto, ou camera sem posicao. Nesses casos
+    // a worker dorme 500ms e tenta de novo — nunca invoca no escuro.
+    static bool SceneAlive() {
+        __try {
+            if (!s_img || !s_dom) return false;
+            if (!cZLoader || !fZLInst) return true; // init ainda nao rodou: deixa passar
+            MonoVTable* vt = pVTable(s_dom, cZLoader);
+            if (!vt) return false;
+            void* zl = nullptr;
+            pStaticGet(vt, fZLInst, &zl);
+            if (!zl) return false;
+            volatile char probe = 0;
+            memcpy((void*)&probe, zl, 1);
+            return true;
+        } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    }
     static DWORD WINAPI EspThread(LPVOID) {
         pAttach(s_dom); // worker precisa do proprio attach no Mono
         Log::Info("Thread ESP iniciada (30Hz, fora do Present).");
+        static int s_deadN = 0;
         while (s_espRun) {
-            if (s.ready && Config::bZombieEsp) BuildEsp();
+            if (s.ready && Config::bZombieEsp) {
+                if (!SceneAlive()) {
+                    // Cena morta/trocando (respawn): zera o snapshot e espera.
+                    // TryEnter: se o Present estiver lendo, pula em vez de travar.
+                    if (TryEnterCriticalSection(&s_espCS)) { s_espN = 0; s_lastN = 0; LeaveCriticalSection(&s_espCS); }
+                    if (++s_deadN == 1) Log::Warn("[SCENE] loader morto — worker em espera (respawn?).");
+                    Sleep(500);
+                    continue;
+                }
+                if (s_deadN > 0) { s_deadN = 0; Log::Info("[SCENE] loader vivo — worker retomada."); }
+                BuildEsp();
+            }
             else { EnterCriticalSection(&s_espCS); s_espN = 0; LeaveCriticalSection(&s_espCS); }
             Sleep(33); // ~30Hz: boxes a 30fps parecem grudadas; 20Hz parecia "queda de FPS"
         }
