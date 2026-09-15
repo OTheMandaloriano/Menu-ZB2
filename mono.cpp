@@ -142,6 +142,20 @@ namespace Mono {
     static MonoClassField* fZLInst = nullptr;
     static MonoClassField* fPCInst = nullptr;
     static MonoMethod* mHasLocal = nullptr;
+    // Orçamento de invokes por ciclo de BuildEsp (anti-crash em horda).
+    // Cada invoke cruza para o Mono e compete com o PhysX/LOD do jogo; com
+    // 50+ zumbis, centenas de invokes por ciclo de 33ms viram corrida com o
+    // LODController:UpdatePhysics (ver crash 15/09 15:51). Estoura o teto?
+    // O resto do ciclo usa o último valor conhecido (fail-open, sem flicker).
+    static int  s_budgetLeft = 0;
+    static int  s_budgetMax = 220;
+    static bool s_budgetLogged = false;
+    static int  s_losCursor = 0; // rodízio: LOS pesado alterna entre entidades
+    static inline bool BudgetTake(int n = 1) {
+        if (s_budgetLeft < n) return false;
+        s_budgetLeft -= n;
+        return true;
+    }
     static MonoMethod* mGetGO = nullptr; // Component.get_gameObject (auditoria ossos)
     static MonoMethod* mGetRot = nullptr; // Transform.get_rotation -> Matrix4x4 (fix bug 4)
     static MonoMethod* mLinecast = nullptr; // Physics.Linecast alternativa (sem ambiguidade Ray)
@@ -248,7 +262,22 @@ namespace Mono {
         return v;
     }
 
-    // Caminha List<T>: valida _size contra o teto e cada ponteiro antes de usar.
+        // Formata "atual/limite" p/ log (sem printf no caminho quente).
+        static void BudgetFmt(char* out, size_t cap) {
+            int used = s_budgetMax - (s_budgetLeft < 0 ? 0 : s_budgetLeft);
+            if (!out || cap < 16) return;
+            int v = used, m = s_budgetMax, i = 0;
+            char tmp[16]; int tn = 0;
+            if (v == 0) tmp[tn++] = '0';
+            else { char r[12]; int rn = 0; while (v > 0 && rn < 11) { r[rn++] = (char)('0' + v % 10); v /= 10; } while (rn > 0) tmp[tn++] = r[--rn]; }
+            tmp[tn++] = '/';
+            if (m == 0) tmp[tn++] = '0';
+            else { char r[12]; int rn = 0; while (m > 0 && rn < 11) { r[rn++] = (char)('0' + m % 10); m /= 10; } while (rn > 0) tmp[tn++] = r[--rn]; }
+            tmp[tn] = 0;
+            for (i = 0; i <= tn && (size_t)i < cap; ++i) out[i] = tmp[i];
+        }
+
+        // Caminha List<T>: valida _size contra o teto e cada ponteiro antes de usar.
     template <typename Fn>
     static int WalkList(void* list, int expectMax, Fn fn) {
         if (!list) return 0;
@@ -610,6 +639,7 @@ namespace Mono {
         // alvo (hd ~= dist => exposto); /2 (sem hitInfo) e fail-conservador p/ corpo
         // proprio: hit de qualquer coisa = ocluido. Seguro em ambos (nunca grava no int).
         if (!mLinecast || s_lineArgs == 0) return true;
+        if (!BudgetTake(1)) return true; // sem saldo: exposto (fail-open)
         float dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
         float dist = sqrtf(dx * dx + dy * dy + dz * dz);
         if (!(dist > 0.5f) || !(dist < 10000.0f)) return true;
@@ -648,6 +678,7 @@ namespace Mono {
         if (outHit) *outHit = 0;
         if (outLayer) *outLayer = -1;
         if (!s_losOk) return true;
+        if (!BudgetTake(1)) return true; // sem saldo: exposto (fail-open)
         float dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
         float dist = sqrtf(dx * dx + dy * dy + dz * dz);
         if (!(dist > 0.5f) || !(dist < 10000.0f)) return true;
@@ -737,8 +768,10 @@ namespace Mono {
     }
 
     // invoke Transform.get_position -> mundo. Retorna false se falhar.
+    // Consome 1 do orçamento (anti-crash em horda: sem saldo, sem invoke).
     static bool GetPos(void* trans, Vec3& out) {
         if (!mGetPos || !trans) return false;
+        if (!BudgetTake(1)) return false;
         __try {
             MonoObject* exc = nullptr;
             MonoObject* ret = pInvoke(mGetPos, trans, nullptr, &exc);
@@ -865,6 +898,7 @@ namespace Mono {
     // bracos e cabeca, qualquer tamanho/tipo). Com validacao de sanidade.
     static bool GetBounds(void* rend, Bnd& out) {
         if (!mGetBounds || !rend) return false;
+        if (!BudgetTake(1)) return false;
         __try {
             MonoObject* exc = nullptr;
             MonoObject* ret = pInvoke(mGetBounds, rend, nullptr, &exc);
@@ -906,6 +940,7 @@ namespace Mono {
     // do objeto e a mao ia para dentro do peito. Converte quat->matriz 3x3 aqui.
     static bool GetQuat(void* trans, float q[4]) {
         if (!mGetRot || !trans) return false;
+        if (!BudgetTake(1)) return false;
         __try {
             MonoObject* exc = nullptr;
             MonoObject* ret = pInvoke(mGetRot, trans, nullptr, &exc);
@@ -1165,6 +1200,10 @@ namespace Mono {
         float maxD2 = maxD * maxD;
         LARGE_INTEGER t0, t1;
         QueryPerformanceCounter(&t0);
+        // Orçamento do ciclo: reseta a cada BuildEsp. Sem orçamento, LOS e
+        // skeleton viram leitura barata (sem invoke) em vez de travar o jogo.
+        s_budgetLeft = s_budgetMax;
+        s_losCursor = (s_losCursor + 1) & 0x7fffffff;
         void* zl = nullptr;
         if (!cZLoader) return;
         MonoClassField* fZL = pFieldFrom(cZLoader, "Instance");
@@ -1182,6 +1221,10 @@ namespace Mono {
             if (!alive) { s_ghostDead++; return; }
             void* zo = ReadP(e, Off::Z_obj);
             if (!zo) return;
+            // Anti-horda: teto de 96 entidades por ciclo. O resto fica p/ o
+            // proximo ciclo (o snapshot segura as cores). Sem isso, horda de
+            // 200+ entidades x ~8 invokes = corrida com o LOD (crash 15/09).
+            if (n >= 96) return;
             EspEntry tmpEn = {}; // FIX P0 soco: sem invoke de nome (wrapper pode estar morto)
             strncpy_s(tmpEn.name, sizeof(tmpEn.name), "Zombie", _TRUNCATE);
             for (int k = 0; k < 8; ++k) { tmpEn.pv[k] = false; tmpEn.px[k] = tmpEn.py[k] = 0; }
@@ -1261,33 +1304,20 @@ namespace Mono {
                         pts[2] = { bb.center.x, bb.center.y - bb.extents.y * 0.35f, bb.center.z }; // quadril
                         pts[3] = { bb.center.x - bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z }; // coxaL
                         pts[4] = { bb.center.x + bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z }; // coxaR
-                        // Ordem de decisao ponto a ponto:
-                        // 1) Raycast (via primaria — bugs 1+2 corrigidos)
-                        // 2) Linecast (fallback sem ambiguidade Ray)
-                        // 3) Depth buffer (bonus — BUG 4: DSV no Present = UI, scene=1.0)
-                        // Raycast/Linecast confiaveis > depth com DSV errado.
+                        // Rodizio anti-horda: LOS pesado (5 raycasts) alterna entre
+                        // perto (sempre) e longe (1 de 3 ciclos). Zumbi a 70m nao
+                        // precisa de LOS a 30Hz; o snapshot segura a cor anterior.
+                        bool doLos = (dist < 45.0f) || (((s_losCursor + n) % 3) == 0);
                         int h = 0; bool he = false;
                         for (int pi = 0; pi < 5; ++pi) {
                             bool exp;
-                            if (s_losOk) {
-                                // Raycast primario (resolve assinatura correta agora)
+                            if (!doLos) { exp = (tmpEn.losHits > 0); }
+                            else if (s_losOk) {
                                 float dummy; int dumL;
                                 exp = LosPoint(camW, pts[pi], &dummy, &dumL);
-                                // DIAG 2.1B (temporario): 1o ponto 1x por sessao.
-                                if (pi == 0) {
-                                    static bool s_callLogged = false;
-                                    if (!s_callLogged) {
-                                        s_callLogged = true;
-                                        Log::Infof("[LOS-CALL] 3D ent=0x%p from=(%.1f,%.1f,%.1f) to=(%.1f,%.1f,%.1f) exp=%d hd=%.1f",
-                                            e, (double)camW.x, (double)camW.y, (double)camW.z,
-                                            (double)pts[0].x, (double)pts[0].y, (double)pts[0].z,
-                                            exp ? 1 : 0, (double)dummy);
-                                    }
-                                }
                             } else if (mLinecast && s_lineArgs >= 2) {
                                 exp = LosPointLinecast(camW, pts[pi]);
                             } else {
-                                // Depth como ultimo recurso (BUG 4: provavelmente 1.0)
                                 float ndc = 0, u = 0, v = 0;
                                 bool hasNdc = BoneNdc(pts[pi], ndc, u, v);
                                 float scene = 0;
@@ -1375,10 +1405,19 @@ namespace Mono {
             wh.y += 0.45f; // cabeca cubo grande: margem maior (print 02:30)
             wf.y -= 0.35f; // footRef alto: margem generosa ate calibrar pelo print (v0.7.1)
             if (!W2S(cam, wh, sh) || !W2S(cam, wf, sf)) return;
-            if (!Sane2(sh.x, sh.y) || !Sane2(sf.x, sf.y)) { // P1: 2D aborta inteiro
-                if (s_glitchLogged < 5) { s_glitchLogged++; Log::Infof("[ESP-GLITCH] ent=0x%p head=(%.0f,%.0f) foot=(%.0f,%.0f)", e, (double)sh.x, (double)sh.y, (double)sf.x, (double)sf.y); }
-                return;
-            }
+                    // Cull de tela: fora da viewport nao entra (anti-horda: menos
+                    // invokes em zumbi que nem aparece; o snapshot segura o resto).
+                    {
+                        float vw = s_vpW > 64 ? s_vpW : 1280.0f;
+                        float vh = s_vpH > 64 ? s_vpH : 768.0f;
+                        bool inScr = (sh.x > -80 && sh.x < vw + 80 && sf.x > -80 && sf.x < vw + 80 &&
+                                      sh.y > -80 && sh.y < vh + 80 && sf.y > -80 && sf.y < vh + 80);
+                        if (!inScr) return;
+                    }
+                    if (!Sane2(sh.x, sh.y) || !Sane2(sf.x, sf.y)) { // P1: 2D aborta inteiro
+                        if (s_glitchLogged < 5) { s_glitchLogged++; Log::Infof("[ESP-GLITCH] ent=0x%p head=(%.0f,%.0f) foot=(%.0f,%.0f)", e, (double)sh.x, (double)sh.y, (double)sf.x, (double)sf.y); }
+                        return;
+                    }
             if (n == 0) { s_dbgEyeY = wh.y; s_dbgFootY = wf.y; }
             CollectJoints(zo, cam, tmpEn);
             // Item 14/Passo 5 (fallback 2D): mesma logica do 3D —
@@ -1402,9 +1441,11 @@ namespace Mono {
                 pts[3] = { (wh.x + wf.x) * 0.5f, wh.y + (wf.y - wh.y) * 0.75f, (wh.z + wf.z) * 0.5f }; // coxa
                 pts[4] = wf; // pes
                 int h = 0; bool he = false;
+                bool doLos2 = (dist < 45.0f) || (((s_losCursor + n) % 3) == 0); // rodizio (igual 3D)
                 for (int pi = 0; pi < 5; ++pi) {
                     bool exp;
-                    if (s_losOk) {
+                    if (!doLos2) { exp = (tmpEn.losHits > 0); }
+                    else if (s_losOk) {
                         float dummy; int dumL;
                         exp = LosPoint(camW, pts[pi], &dummy, &dumL);
                     } else if (mLinecast && s_lineArgs >= 2) {
@@ -1458,6 +1499,13 @@ namespace Mono {
         // FIX hang 15/09: TryEnter — se o Present estiver lendo o snapshot no
         // GetEsp, a worker pula a publicacao deste ciclo em vez de travar o jogo.
         if (!TryEnterCriticalSection(&s_espCS)) return;
+        // Telemetria de orcamento (1x/sessao): prova que o teto segura a horda.
+        if (!s_budgetLogged) {
+            s_budgetLogged = true;
+            char bb[32] = { 0 };
+            BudgetFmt(bb, sizeof(bb));
+            Log::Infof("[BUDGET] ciclo invocacoes=%s entidades=%d.", bb, n);
+        }
         {
             int logged = 0;
             for (int i = 0; i < n && logged < 6; ++i) {
