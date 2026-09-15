@@ -45,7 +45,7 @@ namespace DepthVis {
     // Amostra NDC [0,1] no ultimo frame valido. Retorna false se indisponivel.
     bool Sample(float u, float v, float& outNdc);
     void Shutdown();
-    void AuditTick(UINT w, UINT h, DXGI_FORMAT fmt, UINT samples, int hasDsv, int hasTex);
+    void AuditTick2(UINT w, UINT h, int dsvFmt, int stageFmt, UINT samples, int hasDsv, int hasTex);
 }
 namespace Mono { namespace DepthVisShim {
     // Shim: corpo em main.cpp (TU com o DepthVis global). So declara aqui.
@@ -151,7 +151,8 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
                     ar2->Release();
                 }
             }
-            DepthVis::AuditTick(aw, ah, af, as, dsv ? 1 : 0, hasT);
+            // Auditoria BUG 2 (pos-captura): stageFmt tipada (nunca 19).
+            DepthVis::AuditTick2(aw, ah, (int)af, (int)g_depthFmt, as, dsv ? 1 : 0, hasT);
         }
         if (dsv) {
             D3D11_DEPTH_STENCIL_VIEW_DESC dd = {};
@@ -165,24 +166,29 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
             if (depthTex) {
                 D3D11_TEXTURE2D_DESC td = {};
                 depthTex->GetDesc(&td);
+                // BUG 2: R32G8X24_TYPELESS (fmt=19, DSV do ZB2) na whitelist.
+                // staging SEMPRE tipada (Map falha em recurso typeless).
                 bool fmtOk = (td.Format == DXGI_FORMAT_D24_UNORM_S8_UINT ||
                               td.Format == DXGI_FORMAT_D32_FLOAT ||
                               td.Format == DXGI_FORMAT_D16_UNORM ||
                               td.Format == DXGI_FORMAT_R24G8_TYPELESS ||
                               td.Format == DXGI_FORMAT_R32_TYPELESS ||
+                              td.Format == DXGI_FORMAT_R32G8X24_TYPELESS ||
                               td.Format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT);
+                DXGI_FORMAT stageFmt = (td.Format == DXGI_FORMAT_R32G8X24_TYPELESS)
+                    ? DXGI_FORMAT_D32_FLOAT_S8X24_UINT : td.Format;
                 if (fmtOk && td.Width >= 64 && td.Height >= 64 && td.Width <= 8192 && td.Height <= 8192) {
-                    if (!g_depthStaging || td.Width != g_depthW || td.Height != g_depthH || td.Format != g_depthFmt) {
+                    if (!g_depthStaging || td.Width != g_depthW || td.Height != g_depthH || stageFmt != g_depthFmt) {
                         if (g_depthStaging) { g_depthStaging->Release(); g_depthStaging = nullptr; }
                         D3D11_TEXTURE2D_DESC sd = {};
                         sd.Width = td.Width; sd.Height = td.Height;
                         sd.MipLevels = 1; sd.ArraySize = 1;
-                        sd.Format = td.Format;
+                        sd.Format = stageFmt;
                         sd.SampleDesc.Count = 1;
                         sd.Usage = D3D11_USAGE_STAGING;
                         sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
                         if (SUCCEEDED(g_pDevice->CreateTexture2D(&sd, nullptr, &g_depthStaging))) {
-                            g_depthW = td.Width; g_depthH = td.Height; g_depthFmt = td.Format;
+                            g_depthW = td.Width; g_depthH = td.Height; g_depthFmt = stageFmt;
                         }
                     }
                     if (g_depthStaging && td.SampleDesc.Count == 1) {
@@ -190,7 +196,7 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
                         g_pContext->CopyResource(g_depthStaging, depthTex);
                         float vw = (nvp > 0 && vp[0].Width > 0) ? vp[0].Width : (float)td.Width;
                         float vh = (nvp > 0 && vp[0].Height > 0) ? vp[0].Height : (float)td.Height;
-                        DepthVis::Publish(g_pContext, g_depthStaging, td.Width, td.Height, td.Format, vw, vh);
+                        DepthVis::Publish(g_pContext, g_depthStaging, td.Width, td.Height, stageFmt, vw, vh);
                     }
                     // MSAA: sem resolve dedicado nesta versao (log 1x, sem spam).
                     static bool s_msaaWarned = false;
@@ -230,12 +236,14 @@ namespace DepthVis {
         s_pubN++;
         LeaveCriticalSection(&g_depthCS);
     }
-    // Auditoria: de onde vem o DSV? Loga formato/dimensao/MSAA 1x (causa raiz).
-    void AuditTick(UINT w, UINT h, DXGI_FORMAT fmt, UINT samples, int hasDsv, int hasTex) {
-        if (s_statLogged >= 2) return;
-        s_statLogged++;
-        Log::Infof("[DEPTH-STAT] dsv=%d tex=%d %ux%u fmt=%d msaa=%u.",
-            hasDsv, hasTex, w, h, (int)fmt, samples);
+    // Auditoria: de onde vem o DSV? Loga formato do DSV (td) E da staging
+    // (stageFmt, sempre tipada apos BUG 2). Diferenca = conversao do fix.
+    void AuditTick2(UINT w, UINT h, int dsvFmt, int stageFmt, UINT samples, int hasDsv, int hasTex) {
+        static int n = 0;
+        if (n >= 2) return;
+        n++;
+        Log::Infof("[DEPTH-STAT] dsv=%d tex=%d %ux%u dsvFmt=%d stageFmt=%d msaa=%u.",
+            hasDsv, hasTex, w, h, dsvFmt, stageFmt, samples);
     }
     // Amostra o pixel (u,v em [0,1]) e retorna NDC decodificado por formato.
     // D24/D16: inteiro normalizado. D32: float direto. R24G8/R32: typeless views.
@@ -278,7 +286,9 @@ namespace DepthVis {
                 const unsigned short* rows = (const unsigned short*)((const unsigned char*)mp.pData + (size_t)y * mp.RowPitch);
                 float d = (float)rows[x] / 65535.0f;
                 if (d > 0.0f && d < 1.0f) { outNdc = d; ok = true; }
-            } else if (fmt == DXGI_FORMAT_D32_FLOAT_S8X24_UINT) {
+            } else if (fmt == DXGI_FORMAT_D32_FLOAT_S8X24_UINT || fmt == DXGI_FORMAT_R32G8X24_TYPELESS) {
+                // BUG 2: staging tipada (8 bytes/px: D32 + stencil). R32G8X24 tratado
+                // igual (mesmo layout na staging apos conversao no capture).
                 const float* rows = (const float*)((const unsigned char*)mp.pData + (size_t)y * mp.RowPitch);
                 // pitch em float: 8 bytes por pixel (D32 + stencil).
                 const unsigned char* b = (const unsigned char*)mp.pData + (size_t)y * mp.RowPitch;

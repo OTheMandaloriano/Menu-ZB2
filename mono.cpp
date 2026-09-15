@@ -351,7 +351,15 @@ namespace Mono {
             // mono_class_get_methods + assinatura, e casa por TIPOS. Fallback:
             // Linecast (start,end[,mask]) e descritor ":Raycast(...)".
             // NOTA: mLinecast/s_lineArgs sao statics de namespace (visiveis em BuildEsp).
-            MonoClass* cPhys = pClassFrom(s_unity, "UnityEngine", "Physics");
+            // BUG 1 fix: Physics NAO esta em CoreModule no Unity 6 — esta em
+            // UnityEngine.PhysicsModule. Tenta PhysicsModule 1o (log prova qual veio),
+            // fallback p/ CoreModule (builds antigas). Idem RaycastHit/Collider.
+            MonoImage* s_physmod = pImgLoaded("UnityEngine.PhysicsModule");
+            if (!s_physmod) s_physmod = pImgLoaded("UnityEngine.PhysicsModule.dll");
+            Log::Infof("[LOS-AUDIT] PhysicsModule=%s img=0x%p.",
+                s_physmod ? "OK" : "AUSENTE", s_physmod);
+            MonoImage* physImg = s_physmod ? s_physmod : s_unity;
+            MonoClass* cPhys = pClassFrom(physImg, "UnityEngine", "Physics");
             if (cPhys) {
                 s.resolvedClasses++;
                 // 1) Auditoria: enumera TODOS os metodos declarados e loga a
@@ -419,10 +427,12 @@ namespace Mono {
                     }
                 }
                 if (mRaycast) Log::Infof("LOS-SIG Physics.Raycast/%d resolvido.", s_rayArgs);
-                else Log::Warn("Metodo nao resolvido: Physics.Raycast (2-5)");
+                else Log::Warn("Metodo nao resolvido: Physics.Raycast (2-5 + descritor)");
                 if (mRaycast && !mLinecast) Log::Warn("Linecast ausente; Raycast e a unica via.");
+                if (!cPhys) Log::Warn("Physics NAO encontrado em PhysicsModule nem CoreModule (BUG 1 persiste).");
             }
-            cRayHit = pClassFrom(s_unity, "UnityEngine", "RaycastHit");
+            cRayHit = pClassFrom(physImg, "UnityEngine", "RaycastHit");
+            if (!cRayHit) cRayHit = pClassFrom(s_unity, "UnityEngine", "RaycastHit");
             if (cRayHit) {
                 s.resolvedClasses++;
                 fHitDist = pFieldFrom(cRayHit, "distance");
@@ -433,7 +443,8 @@ namespace Mono {
                 if (fHitCol) s.resolvedFields++;
                 else Log::Warn("Campo nao resolvido: RaycastHit.collider");
             }
-            cCollider = pClassFrom(s_unity, "UnityEngine", "Collider");
+            cCollider = pClassFrom(physImg, "UnityEngine", "Collider");
+            if (!cCollider) cCollider = pClassFrom(s_unity, "UnityEngine", "Collider");
             if (cCollider && cComp) {
                 MonoMethod* t = pMethodFrom(cCollider, "get_gameObject", 0);
                 if (t) { mGetHitGO = t; s.resolvedMethods++; }
