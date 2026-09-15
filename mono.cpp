@@ -40,8 +40,12 @@ typedef void* (__cdecl* FnClassGetMethods)(void*, void**);
 typedef void* (__cdecl* FnMethodSig)(void*);
 typedef const char* (__cdecl* FnMethodName)(void*);
 typedef int (__cdecl* FnSigParamCount)(void*);
-typedef void* (__cdecl* FnSigGetParam)(void*, int);
+typedef void* (__cdecl* FnSigGetParam)(void*, void**); // (sig, iter) — GeoArray-like, iter avanza
 typedef int (__cdecl* FnTypeGetType)(void*);
+typedef const char* (__cdecl* FnTypeGetName)(void*); // mono_type_get_name (auditoria [SIG])
+typedef void* (__cdecl* FnClassGetFields)(void*, void**); // mono_class_get_fields (auditoria [FIELDS])
+typedef const char* (__cdecl* FnFieldGetName)(void*); // mono_field_get_name
+typedef int (__cdecl* FnFieldGetOff)(void*); // mono_field_get_offset (pode nao existir)
 typedef MonoObject* (__cdecl* FnRuntimeInvoke)(MonoMethod*, void*, void**, MonoObject**);
 typedef void*       (__cdecl* FnObjectUnbox)(MonoObject*);
 typedef char*       (__cdecl* FnStringUtf8)(MonoObject*);
@@ -104,7 +108,11 @@ namespace Mono {
     static FnSigParamCount pSigCount = nullptr;
     static FnSigGetParam pSigParam = nullptr;
     static FnTypeGetType pTypeKind = nullptr;
+    static FnTypeGetName pTypeName = nullptr;
     static FnMethodName pMethodGetName = nullptr;
+    static FnClassGetFields pClassFields = nullptr;
+    static FnFieldGetName pFieldGetName = nullptr;
+    static FnFieldGetOff pFieldGetOff = nullptr;
     static FnRuntimeInvoke  pInvoke = nullptr;
     static FnObjectUnbox    pUnbox = nullptr;
     static FnStringUtf8     pStrUtf8 = nullptr;
@@ -299,7 +307,11 @@ namespace Mono {
             Bind(m, "mono_signature_get_param_count", pSigCount);
             Bind(m, "mono_signature_get_params", pSigParam);
             Bind(m, "mono_type_get_type", pTypeKind);
+            Bind(m, "mono_type_get_name", pTypeName);
             Bind(m, "mono_method_get_name", pMethodGetName);
+            Bind(m, "mono_class_get_fields", pClassFields);
+            Bind(m, "mono_field_get_name", pFieldGetName);
+            Bind(m, "mono_field_get_offset", pFieldGetOff); // pode nao existir no Unity 6 (nao-fatal)
             ok &= Bind(m, "mono_runtime_invoke", pInvoke);
             ok &= Bind(m, "mono_object_unbox", pUnbox);
             ok &= Bind(m, "mono_string_to_utf8", pStrUtf8);
@@ -362,11 +374,15 @@ namespace Mono {
             MonoClass* cPhys = pClassFrom(physImg, "UnityEngine", "Physics");
             if (cPhys) {
                 s.resolvedClasses++;
-                // 1) Auditoria: enumera TODOS os metodos declarados e loga a
-                // aridade de cada overload chamado "Raycast" (e "Linecast").
-                // Objetivo: saber se /5 casa com (Vector3,Vector3,RaycastHit&,Single,Int32)
-                // ou se o runtime so tem (Ray,out,...) — causa do LOS-COMBO-VERDE.
-                if (pClassMethods && pSigOf && pSigCount && pMethodGetName) {
+                // 1) Auditoria [SIG]: enumera TODOS os overloads de Raycast/Linecast
+                // com os TIPOS de cada parametro (nao so aridade). Regra: NUNCA
+                // confiar em pMethodFrom por aridade em metodos com overloads de
+                // mesma aridade (Unity 6 tem 2x Linecast/4: A=(V3,V3,out,int) e
+                // B=(V3,V3,int,QueryTrigger)). Invocar o errado = crash.
+                // Guarda o MonoMethod* exato de cada assinatura desejada.
+                static MonoMethod* s_rayV3 = nullptr; // (V3,V3,RaycastHit&,Single,Int32)
+                static MonoMethod* s_lineV3 = nullptr; // Linecast (V3,V3,RaycastHit&,Int32)
+                if (pClassMethods && pSigOf && pSigCount && pMethodGetName && pSigParam && pTypeName) {
                     void* iter = nullptr;
                     int nTotal = 0, nRay = 0, nLine = 0;
                     while (true) {
@@ -375,14 +391,46 @@ namespace Mono {
                         if (++nTotal > 256) break;
                         const char* nm = pMethodGetName(mm);
                         if (!nm) continue;
+                        bool isRay = !strcmp(nm, "Raycast");
+                        bool isLine = !strcmp(nm, "Linecast");
+                        if (!isRay && !isLine) continue;
                         void* sg = pSigOf(mm);
                         if (!sg) continue;
                         int ac = pSigCount(sg);
-                        if (!strcmp(nm, "Raycast")) { nRay++; Log::Infof("[LOS-AUDIT] Physics.Raycast overload argc=%d", ac); }
-                        else if (!strcmp(nm, "Linecast")) { nLine++; Log::Infof("[LOS-AUDIT] Physics.Linecast overload argc=%d", ac); }
+                        char p0[64] = "?", p1[64] = "?", p2[64] = "?", p3[64] = "?", p4[64] = "?", p5[64] = "?";
+                        char* slots[6] = { p0, p1, p2, p3, p4, p5 };
+                        void* piter = nullptr;
+                        for (int pi = 0; pi < ac && pi < 6; ++pi) {
+                            void* pt = nullptr;
+                            __try { pt = pSigParam(sg, &piter); } __except (EXCEPTION_EXECUTE_HANDLER) { pt = nullptr; }
+                            if (!pt) break;
+                            const char* tn = nullptr;
+                            __try { tn = pTypeName(pt); } __except (EXCEPTION_EXECUTE_HANDLER) { tn = nullptr; }
+                            if (tn) strncpy_s(slots[pi], 64, tn, _TRUNCATE);
+                        }
+                        Log::Infof("[SIG] %s argc=%d p0=%s p1=%s p2=%s p3=%s p4=%s p5=%s",
+                            nm, ac, p0, p1, p2, p3, p4, p5);
+                        // Casa pela assinatura STRING (byref = '&' no fim, padrao Mono):
+                        // A) Raycast(V3,V3,RaycastHit&,Single,Int32)
+                        // B) Linecast(V3,V3,RaycastHit&,Int32)
+                        if (isRay && ac == 5 && !strcmp(p0, "UnityEngine.Vector3")
+                            && !strcmp(p1, "UnityEngine.Vector3")
+                            && strstr(p2, "RaycastHit") && !strcmp(p4, "System.Int32")) {
+                            if (!s_rayV3) { s_rayV3 = mm; nRay += 100; Log::Info("[SIG] Raycast(V3,V3,Hit&,f,i) CONFIRMADO."); }
+                        }
+                        if (isLine && ac == 4 && !strcmp(p0, "UnityEngine.Vector3")
+                            && !strcmp(p1, "UnityEngine.Vector3")
+                            && strstr(p2, "RaycastHit") && !strcmp(p3, "System.Int32")) {
+                            if (!s_lineV3) { s_lineV3 = mm; nLine += 100; Log::Info("[SIG] Linecast(V3,V3,Hit&,i) CONFIRMADO."); }
+                        }
+                        if (isRay) nRay++;
+                        if (isLine) nLine++;
                     }
-                    Log::Infof("[LOS-AUDIT] Physics declarados=%d Raycast=%d Linecast=%d.", nTotal, nRay, nLine);
-                } else Log::Warn("LOS-AUDIT sem API de enumeracao (pClassMethods/pSigOf/pSigCount/pMethodGetName).");
+                    Log::Infof("[LOS-AUDIT] Physics declarados=%d Raycast~%d Linecast~%d (100+=assinatura confirmada).", nTotal, nRay, nLine);
+                } else Log::Warn("LOS-AUDIT sem API de assinatura completa (pClassMethods/pSigOf/pSigCount/pMethodGetName/pSigParam/pTypeName).");
+                // mRaycast = assinatura confirmada OU descritor exato; aridade sozinha = PROIBIDO.
+                mRaycast = s_rayV3;
+                if (mRaycast) { s_rayArgs = 5; s.resolvedMethods++; Log::Info("LOS-SIG Raycast/5 via assinatura confirmada [SIG]."); }
                 // 2) Tenta por descritor exato (origin,dir,hit,maxDist,mask).
                 // BUG 1 fix: pDescSearch(desc, klass) — estava invertido.
                 // BUG 2 fix: descritor precisa do nome da classe "Physics:Raycast(...)".
@@ -395,37 +443,16 @@ namespace Mono {
                         pDescFree(dd);
                     } else Log::Warn("LOS-SIG mono_method_desc_new retornou null.");
                 }
-                // 3) Fallback por aridade (comportamento anterior).
-                if (!mRaycast) {
-                    MonoMethod* t = pMethodFrom(cPhys, "Raycast", 5);
-                    if (t) { mRaycast = t; s_rayArgs = 5; s.resolvedMethods++; }
-                    else {
-                        t = pMethodFrom(cPhys, "Raycast", 4);
-                        if (t) { mRaycast = t; s_rayArgs = 4; s.resolvedMethods++; }
-                        else {
-                            t = pMethodFrom(cPhys, "Raycast", 3);
-                            if (t) { mRaycast = t; s_rayArgs = 3; s.resolvedMethods++; }
-                            else {
-                                t = pMethodFrom(cPhys, "Raycast", 2);
-                                if (t) { mRaycast = t; s_rayArgs = 2; s.resolvedMethods++; }
-                            }
-                        }
-                    }
-                }
-                // 4) Linecast como alternativa (start,end[,mask]) — sem ambiguidade Ray.
-                // Seguranca: /4 (start,end,out RaycastHit,int) = discriminante (ignora
-                // corpo do proprio alvo pela distancia). /3 e AMBIGUO entre
-                // (out RaycastHit) e (int) -> nunca invocar. /2 = seguro, porem nao
-                // discrimina corpo proprio: usar so como ultimo recurso.
-                if (pMethodFrom) {
-                    MonoMethod* t = pMethodFrom(cPhys, "Linecast", 4);
-                    if (t) { mLinecast = t; s_lineArgs = 4; s.resolvedMethods++; Log::Info("LOS-SIG Physics.Linecast/4 resolvido (discriminante)."); }
-                    else {
-                        t = pMethodFrom(cPhys, "Linecast", 2);
-                        if (t) { mLinecast = t; s_lineArgs = 2; s.resolvedMethods++; Log::Warn("LOS-SIG Linecast/2 (sem RaycastHit): corpo proprio nao discriminado."); }
-                        else Log::Warn("Metodo nao resolvido: Physics.Linecast (overload /3 ambiguo ignorado por seguranca).");
-                    }
-                }
+                // 3) Linecast DESABILITADO (PASSO 1 — parar o crash).
+                // Motivo: 2 overloads /4 com mesma aridade; pMethodFrom nao
+                // distingue (V3,V3,out,int) de (V3,V3,int,QueryTrigger). Invocar
+                // o B corrompe a pilha Mono. Reabilitar so apos [SIG] confirmar
+                // s_lineV3 com assinatura exata.
+                mLinecast = nullptr; s_lineArgs = 0;
+                if (s_lineV3) {
+                    mLinecast = s_lineV3; s_lineArgs = 4; s.resolvedMethods++;
+                    Log::Info("LOS-SIG Physics.Linecast/4 via assinatura confirmada [SIG].");
+                } else Log::Warn("Linecast DESABILITADO (assinatura (V3,V3,Hit&,i) nao confirmada — sem crash).");
                 if (mRaycast) Log::Infof("LOS-SIG Physics.Raycast/%d resolvido.", s_rayArgs);
                 else Log::Warn("Metodo nao resolvido: Physics.Raycast (2-5 + descritor)");
                 if (mRaycast && !mLinecast) Log::Warn("Linecast ausente; Raycast e a unica via.");
@@ -435,9 +462,32 @@ namespace Mono {
             if (!cRayHit) cRayHit = pClassFrom(s_unity, "UnityEngine", "RaycastHit");
             if (cRayHit) {
                 s.resolvedClasses++;
-                fHitDist = pFieldFrom(cRayHit, "distance");
-                if (fHitDist) s.resolvedFields++;
-                else Log::Warn("Campo nao resolvido: RaycastHit.distance");
+                // PASSO 3: auditoria [FIELDS] — enumera TODOS os campos com nome
+                // + offset (nome pode ser m_Distance; offset pode != 20).
+                if (pClassFields && pFieldGetName) {
+                    void* fiter = nullptr;
+                    int nF = 0;
+                    while (true) {
+                        MonoClassField* ff = (MonoClassField*)pClassFields(cRayHit, &fiter);
+                        if (!ff) break;
+                        if (++nF > 64) break;
+                        const char* fn = nullptr;
+                        __try { fn = pFieldGetName(ff); } __except (EXCEPTION_EXECUTE_HANDLER) { fn = nullptr; }
+                        int fo = -1;
+                        if (pFieldGetOff) { __try { fo = pFieldGetOff(ff); } __except (EXCEPTION_EXECUTE_HANDLER) { fo = -1; } }
+                        Log::Infof("[FIELDS] RaycastHit.%s @ %d", fn ? fn : "?", fo);
+                        // Registra o handle exato do campo de distancia (qualquer nome).
+                        if (fn && (strstr(fn, "istance") || strstr(fn, "ISTANCE"))) {
+                            if (!fHitDist) { fHitDist = ff; s.resolvedFields++; }
+                            if (fo >= 0) { s_hitDistOff = fo; Log::Infof("[FIELDS] distance offset=%d (via enumeracao).", fo); }
+                        }
+                    }
+                }
+                if (!fHitDist) {
+                    fHitDist = pFieldFrom(cRayHit, "distance");
+                    if (fHitDist) s.resolvedFields++;
+                    else Log::Warn("Campo nao resolvido: RaycastHit.distance (nem via [FIELDS])");
+                }
                 fHitCol = pFieldFrom(cRayHit, "m_Collider");
                 if (!fHitCol) fHitCol = pFieldFrom(cRayHit, "collider");
                 if (fHitCol) s.resolvedFields++;
