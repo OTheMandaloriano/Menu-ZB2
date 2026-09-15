@@ -550,6 +550,11 @@ namespace Mono {
     static int s_calDone = 0; // calibracao RaycastHit.distance (1x, ver LosCalibrate)
     static void LosCalibrate(const unsigned char* hitBuf, float knownDist) {
         if (s_calDone || !(knownDist > 1.0f)) return;
+        // FIX P1 (offset clobberado): autoridade é a API (pFieldOff, offset 44
+        // via [FIELDS]/mono_field_get_offset). A heurística casava m_Normal.x
+        // (off 28, valor ~0..1) por acaso na margem de 50% e sobrescrevia o 44
+        // correto. Só calibra quando a API não existe (mono antigo).
+        if (pFieldOff) { s_calDone = 1; return; }
         if (pFieldOff) return; // FIX P1: API (mono_field_get_offset) = autoridade.
         // Sem este gate, a heuristica sobrescrevia o offset correto (ex: 44 ->
         // 28 = m_Normal.x casando por acaso na margem de 50%). Roda so quando
@@ -612,6 +617,24 @@ namespace Mono {
             return !hit;
         } __except (EXCEPTION_EXECUTE_HANDLER) { return true; }
     }
+    // AUDIT SENIOR (P0 crash): wrapper de contenção do invoke físico.
+    // Regra de contenção: Raycast com assinatura de 5 args SÓ é invocado se o
+    // [SIG] provou (V3,V3,RaycastHit&,Single,Int32). Fora disso, fail-open
+    // silencioso (visível) — nunca invoca overload ambíguo. Isso elimina a
+    // classe inteira de AV por aridade errada, independente de s_rayArgs.
+    // H4 (alinhamento by-ref): buffer do RaycastHit em alignas(8) — o Mono x64
+    // exige alinhamento de 8 p/ structs by-ref; stack local char[] não garante.
+    // H3 (origem dentro do collider): margem de 0.30m na origem ao longo do dir
+    // (o ray parte 30cm à frente da câmera — fora do capsule do player local).
+    // H2 (QueryTrigger): overload confirmado NÃO tem QueryTriggerInteraction —
+    // triggers filtrados pela própria mask quando calibrada (Passo 2.2).
+    static bool LosPoint(const Vec3& from, const Vec3& to, float* outHit, int* outLayer); // fwd
+    static bool LosPointSafe(const Vec3& from, const Vec3& to, float* outHit, int* outLayer) {
+        if (outHit) *outHit = 0;
+        if (outLayer) *outLayer = -1;
+        if (!s_losOk || !mRaycast || s_rayArgs != 5) return true; // contenção P0
+        return LosPoint(from, to, outHit, outLayer);
+    }
     static bool LosPoint(const Vec3& from, const Vec3& to, float* outHit, int* outLayer) {
         if (outHit) *outHit = 0;
         if (outLayer) *outLayer = -1;
@@ -620,9 +643,11 @@ namespace Mono {
         float dist = sqrtf(dx * dx + dy * dy + dz * dz);
         if (!(dist > 0.5f) || !(dist < 10000.0f)) return true;
         Vec3 dir = { dx / dist, dy / dist, dz / dist };
-        unsigned char hitBuf[128] = { 0 };
+        // H3: origem 0.30m à frente (fora do capsule do player local).
+        Vec3 org = { from.x + dir.x * 0.30f, from.y + dir.y * 0.30f, from.z + dir.z * 0.30f };
+        alignas(8) unsigned char hitBuf[128] = { 0 }; // H4: by-ref exige align 8
         void* args[5];
-        args[0] = (void*)&from;
+        args[0] = (void*)&org;
         args[1] = (void*)&dir;
         __try {
             // Assinaturas Unity (ordens testadas no init: s_rayArgs):
@@ -1274,9 +1299,9 @@ namespace Mono {
                         for (int pi = 0; pi < 5; ++pi) {
                             bool exp;
                             if (s_losOk) {
-                                // Raycast primario (resolve assinatura correta agora)
+                                // Raycast primario (assinatura confirmada via [SIG])
                                 float dummy; int dumL;
-                                exp = LosPoint(camW, pts[pi], &dummy, &dumL);
+                                exp = LosPointSafe(camW, pts[pi], &dummy, &dumL);
                                 // DIAG Fase 1D (temporario): from/to do 1o ponto 3D, 1x/sessao.
                                 if (pi == 0) {
                                     static bool s_call3DLogged = false;
@@ -1408,7 +1433,7 @@ namespace Mono {
                     bool exp;
                     if (s_losOk) {
                         float dummy; int dumL;
-                        exp = LosPoint(camW, pts[pi], &dummy, &dumL);
+                        exp = LosPointSafe(camW, pts[pi], &dummy, &dumL);
                         // DIAG Fase 1B (temporario): from/to do 1o ponto, 1x/sessao.
                         if (pi == 0) {
                             static bool s_call2DLogged = false;

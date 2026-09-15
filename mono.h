@@ -41,6 +41,10 @@ namespace Mono {
         // DIVIDA TECNICA: se um dia houver entidade com nome variavel, cachear
         // entPtr->name (tabela hash, 1a aparicao, memcpy direto + SEH). Nunca
         // invocar Object.get_name no caminho quente (P0 crash pos-kill).
+        // AUDIT SENIOR 15/09: RaycastHit.m_Distance @ 44 (Unity 6.0.3, [FIELDS]
+        // + mono_field_get_offset concordam). Raycast/5 confirmado via [SIG]
+        // (V3,V3,RaycastHit&,Single,Int32). Linecast/4 AMBIGUO (2 overloads de
+        // mesma aridade) — manter DESABILITADO ate [SIG] provar o handle exato.
         float losDepth[5];  // item 14/Passo5: profundidade NDC do osso (depth buffer)
         int   skN;          // juntas validas (item 12 Skeleton real)
         float skX[20], skY[20]; // pixels Unity (y p/ cima, igual px/py)
