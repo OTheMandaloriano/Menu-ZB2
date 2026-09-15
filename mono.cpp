@@ -147,9 +147,12 @@ namespace Mono {
     // 50+ zumbis, centenas de invokes por ciclo de 33ms viram corrida com o
     // LODController:UpdatePhysics (ver crash 15/09 15:51). Estoura o teto?
     // O resto do ciclo usa o último valor conhecido (fail-open, sem flicker).
+    // Camada 1 (broadphase, padrao UC): perto (<45m) = LOS real todo ciclo;
+    // longe = 1 de 3 ciclos (rodizio). Teto 96 ent/ciclo. Ritmo 33-66ms.
     static int  s_budgetLeft = 0;
-    static int  s_budgetMax = 220;
+    static int  s_budgetMax = 200; // max_raycasts_padrao ~= 200 (briefing §6)
     static bool s_budgetLogged = false;
+    static int  s_losSkipped = 0; // telemetria: quantos pontos o teto pulou
     static int  s_losCursor = 0; // legado: rodizio removido (piscava em porta/janela).
     // Manter o campo evita diff gigante; o ciclo so o incrementa.
     static inline bool BudgetTake(int n = 1) {
@@ -643,8 +646,9 @@ namespace Mono {
         // Linecast: hit => ocluido. /4 le o RaycastHit e ignora o corpo do proprio
         // alvo (hd ~= dist => exposto); /2 (sem hitInfo) e fail-conservador p/ corpo
         // proprio: hit de qualquer coisa = ocluido. Seguro em ambos (nunca grava no int).
+        // Sem saldo ou distancia invalida: retorna "sem dado" (o chamador mantem
+        // a cor anterior — NUNCA verde forcado, ver Camada 2/3 do briefing §6).
         if (!mLinecast || s_lineArgs == 0) return true;
-        if (!BudgetTake(1)) return true; // sem saldo: exposto (fail-open)
         float dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
         float dist = sqrtf(dx * dx + dy * dy + dz * dz);
         if (!(dist > 0.5f) || !(dist < 10000.0f)) return true;
@@ -679,14 +683,17 @@ namespace Mono {
             return !hit;
         } __except (EXCEPTION_EXECUTE_HANDLER) { return true; }
     }
-    static bool LosPoint(const Vec3& from, const Vec3& to, float* outHit, int* outLayer) {
+    // Tri-estado do ponto (briefing §6 Camada 2/3): 1=exposto, 0=ocluido,
+    // -1=sem dado (sem saldo, distancia invalida, invoke falhou). O chamador
+    // decide: sem dado em TODOS os pontos = mantem a cor anterior (decay),
+    // nunca verde forcado. Verde forcado era o pisca-pisca em porta/janela.
+    static int LosPointV(const Vec3& from, const Vec3& to, float* outHit, int* outLayer = nullptr) {
         if (outHit) *outHit = 0;
-        if (outLayer) *outLayer = -1;
-        if (!s_losOk) return true;
-        if (!BudgetTake(1)) return true; // sem saldo: exposto (fail-open)
+        if (!s_losOk) return -1;
+        if (!BudgetTake(1)) { s_losSkipped++; return -1; }
         float dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
         float dist = sqrtf(dx * dx + dy * dy + dz * dz);
-        if (!(dist > 0.5f) || !(dist < 10000.0f)) return true;
+        if (!(dist > 0.5f) || !(dist < 10000.0f)) return -1;
         Vec3 dir = { dx / dist, dy / dist, dz / dist };
         unsigned char hitBuf[128] = { 0 };
         void* args[5];
@@ -705,47 +712,53 @@ namespace Mono {
                 args[3] = (void*)&maxD;
                 args[4] = (void*)&mask;
                 ret = pInvoke(mRaycast, nullptr, args, &exc);
-                if (exc || !ret) return true;
+                if (exc || !ret) return -1;
                 hit = (*(unsigned char*)pUnbox(ret)) != 0;
             } else if (s_rayArgs == 4) {
                 args[2] = (void*)hitBuf;
                 args[3] = (void*)&maxD;
                 ret = pInvoke(mRaycast, nullptr, args, &exc);
-                if (exc || !ret) return true;
+                if (exc || !ret) return -1;
                 hit = (*(unsigned char*)pUnbox(ret)) != 0;
             } else if (s_rayArgs == 3) {
                 args[2] = (void*)&maxD;
                 args[3] = (void*)&mask;
                 ret = pInvoke(mRaycast, nullptr, args, &exc);
-                if (exc || !ret) return true;
+                if (exc || !ret) return -1;
                 hit = (*(unsigned char*)pUnbox(ret)) != 0;
-                if (hit) { if (outHit) *outHit = maxD; return false; }
-                return true;
+                if (hit) { if (outHit) *outHit = maxD; return 0; }
+                return 1;
             } else if (s_rayArgs == 2) {
                 args[2] = (void*)&maxD;
                 ret = pInvoke(mRaycast, nullptr, args, &exc);
-                if (exc || !ret) return true;
+                if (exc || !ret) return -1;
                 hit = (*(unsigned char*)pUnbox(ret)) != 0;
-                if (hit) { if (outHit) *outHit = maxD; return false; }
-                return true;
-            } else return true;
-            if (!hit) return true; // sem hit = exposto
+                if (hit) { if (outHit) *outHit = maxD; return 0; }
+                return 1;
+            } else return -1;
+            if (!hit) return 1; // sem hit = exposto
             if (!s_calDone) LosCalibrate(hitBuf, dist);
             float hd = 0;
             __try { memcpy(&hd, hitBuf + s_hitDistOff, sizeof(hd)); }
-            __except (EXCEPTION_EXECUTE_HANDLER) { return true; }
+            __except (EXCEPTION_EXECUTE_HANDLER) { return -1; }
             if (outHit) *outHit = hd;
-            if (!(hd == hd) || hd <= 0) return true;
-            if (hd >= dist - 0.15f) return true; // encosto no corpo
+            if (!(hd == hd) || hd <= 0) return -1;
+            if (hd >= dist - 0.15f) return 1; // encosto no corpo
             // Log HIT DESABILITADO (P0 crash em aproximacao 15/09): invocar
             // Collider.get_gameObject / GameObject.get_layer num collider que o
             // jogo pode estar destruindo (LODController.SetColliding/GameObject.
             // SetActive na mesma janela — ver crash dump 10:57) = AV dentro do
-            // runtime Mono. Layer fica -1 (desconhecida); a decisao visivel/
-            // invisivel NAO usa layer, so a distancia. Zero mudança visual.
+            // runtime Mono. A decisao visivel/invisivel NAO usa layer, so distancia.
             if (outLayer) *outLayer = -1;
-            return false;
-        } __except (EXCEPTION_EXECUTE_HANDLER) { return true; }
+            return 0;
+        } __except (EXCEPTION_EXECUTE_HANDLER) { return -1; }
+    }
+    // Compat: LosPoint antigo (bool) vira LosPointV (o chamador termico ignora -1).
+    static bool LosPoint(const Vec3& from, const Vec3& to, float* outHit, int* outLayer) {
+        float hd = 0; int dumL = -1;
+        int v = LosPointV(from, to, outHit ? outHit : &hd);
+        if (outLayer) *outLayer = dumL;
+        return v >= 0 ? (v == 1) : true;
     }
     // REGRA PROPORCIONAL: 5 pontos (cabeca/peito/quadril/coxaL/coxaR).
     // visivel = hits >= 2 (40%) OU cabeca exposta (headshot viavel).
@@ -1311,56 +1324,71 @@ namespace Mono {
                         pts[2] = { bb.center.x, bb.center.y - bb.extents.y * 0.35f, bb.center.z }; // quadril
                         pts[3] = { bb.center.x - bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z }; // coxaL
                         pts[4] = { bb.center.x + bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z }; // coxaR
-                        // LOS real SEMPRE no caminho 3D (box ja validada = perto).
-                        // Camada 1 (broadphase): so chega aqui quem passou frustum/
-                        // distancia. Rodizio/skip causava pisca-pisca em porta e
-                        // janela (bug 16/09) — removido deste caminho.
-                        bool doLos = true; (void)n;
-                        if (!doLos) {
-                            tmpEn.losVis = LosStable(e, true, true); // skip: mantem cor
-                            tmpEn.losHits = -1; // -1 = ciclo pulado (log distingue)
-                        } else {
-                            int h = 0; bool he = false;
+                        // Camada 2+3 (briefing §6): multi-point tri-estado + decay.
+                        // h=expostos, o=ocluidos, u=sem dado. Regra:
+                        // - tem ocluido (o>0) e nenhum exposto -> vermelho;
+                        // - tem exposto (h>=2 ou cabeca) -> verde;
+                        // - so sem-dado (u==5) -> mantem cor anterior (skip).
+                        // Sem dado NUNCA vira verde: era o pisca-pisca/churn.
+                        {
+                            int h = 0, o = 0, u = 0; bool he = false;
+                            float dummy;
                             for (int pi = 0; pi < 5; ++pi) {
-                                bool exp;
-                                if (s_losOk) {
-                                    float dummy; int dumL;
-                                    exp = LosPoint(camW, pts[pi], &dummy, &dumL);
-                                } else if (mLinecast && s_lineArgs >= 2) {
-                                    exp = LosPointLinecast(camW, pts[pi]);
+                                int v = -1;
+                                if (s_losOk) v = LosPointV(camW, pts[pi], &dummy);
+                                else if (mLinecast && s_lineArgs >= 2) {
+                                    float d2; int l2;
+                                    v = LosPoint(camW, pts[pi], &d2, &l2) ? 1 : 0;
                                 } else {
-                                    float ndc = 0, u = 0, v = 0;
-                                    bool hasNdc = BoneNdc(pts[pi], ndc, u, v);
+                                    float ndc = 0, uu = 0, vv = 0;
+                                    bool hasNdc = BoneNdc(pts[pi], ndc, uu, vv);
                                     float scene = 0;
-                                    bool hasDepth = hasNdc && DepthVisShim::Sample(u, v, scene);
-                                    if (hasDepth) {
-                                        if (scene >= 0.999f) exp = true;
-                                        else {
-                                            float eps = 0.5f / (dist * dist + 1.0f) + 0.001f;
-                                            exp = ndc <= scene + eps;
+                                    bool hasDepth = hasNdc && DepthVisShim::Sample(uu, vv, scene);
+                                    if (!hasDepth) v = -1;
+                                    else if (scene >= 0.999f) v = 1;
+                                    else {
+                                        float eps = 0.5f / (dist * dist + 1.0f) + 0.001f;
+                                        v = (ndc <= scene + eps) ? 1 : 0;
+                                    }
+                                }
+                                if (v > 0) { h++; if (pi == 0) he = true; }
+                                else if (v == 0) o++;
+                                else u++;
+                            }
+                            tmpEn.losHits = (u == 5) ? -1 : h;
+                            if (u == 5) {
+                                tmpEn.losVis = LosStable(e, true, true); // skip: mantem cor
+                            } else {
+                                bool rawVis = (h >= 2) || he;
+                                // Ocluido sem exposto: forca vermelho estavel (bypass
+                                // da histerese p/ dentro de casa nao ficar verde).
+                                if (o > 0 && h == 0 && !he) {
+                                    for (int i = 0; i < 256; ++i) {
+                                        if (s_hystEnt[i] == e || !s_hystEnt[i]) {
+                                            s_hystEnt[i] = e;
+                                            s_hystStreak[i] = -5;
+                                            s_hystShown[i] = false;
+                                            break;
                                         }
-                                    } else exp = true; // fail-open
+                                    }
+                                    tmpEn.losVis = false;
+                                    rawVis = false;
+                                } else tmpEn.losVis = LosStable(e, rawVis);
+                                // DIAG 2.1C (temporario): resultado sempre (1x/sessao).
+                                {
+                                    static bool s_resLogged = false;
+                                    if (!s_resLogged) {
+                                        s_resLogged = true;
+                                        Log::Infof("[LOS-RESULT] 3D ent=0x%p losVis=%d losHits=%d",
+                                            e, tmpEn.losVis ? 1 : 0, h);
+                                    }
                                 }
-                                if (exp) { h++; if (pi == 0) he = true; }
-                            }
-                            tmpEn.losHits = h;
-                            // Histerese: cor exibida estavel (anti-flicker). Log mostra crua+estavel.
-                            bool rawVis = (h >= 2) || he;
-                            tmpEn.losVis = LosStable(e, rawVis);
-                            // DIAG 2.1C (temporario): resultado sempre (1x/sessao) — prova que o bloco roda.
-                            {
-                                static bool s_resLogged = false;
-                                if (!s_resLogged) {
-                                    s_resLogged = true;
-                                    Log::Infof("[LOS-RESULT] 3D ent=0x%p losVis=%d losHits=%d",
-                                        e, tmpEn.losVis ? 1 : 0, h);
+                                if (s_losLogN < 40) {
+                                    s_losLogN++;
+                                    const char* via = s_losOk ? "ray" : (mLinecast ? "line" : "depth");
+                                    Log::Infof("[LOS] id=0x%p dist=%.1f hits=%d/5 visivel=%d(raw=%d) via=%s",
+                                        e, (double)dist, h, tmpEn.losVis ? 1 : 0, rawVis ? 1 : 0, via);
                                 }
-                            }
-                            if (s_losLogN < 40) {
-                                s_losLogN++;
-                                const char* via = s_losOk ? "ray" : (mLinecast ? "line" : "depth");
-                                Log::Infof("[LOS] id=0x%p dist=%.1f hits=%d/5 visivel=%d(raw=%d) via=%s",
-                                    e, (double)dist, h, tmpEn.losVis ? 1 : 0, rawVis ? 1 : 0, via);
                             }
                         }
                     }
@@ -1453,26 +1481,34 @@ namespace Mono {
                 pts[2] = { (wh.x + wf.x) * 0.5f, wh.y + (wf.y - wh.y) * 0.5f, (wh.z + wf.z) * 0.5f };  // quadril
                 pts[3] = { (wh.x + wf.x) * 0.5f, wh.y + (wf.y - wh.y) * 0.75f, (wh.z + wf.z) * 0.5f }; // coxa
                 pts[4] = wf; // pes
-                int h = 0; bool he = false;
-                // SEM rodizio no 2D (mesmo motivo do 3D: skip piscava em porta/
-                // janela). O orcamento de invokes continua valendo por ponto.
+                // Tri-estado igual ao 3D (h=exposto, o=ocluido, u=sem dado).
+                int h = 0, o = 0, u = 0; bool he = false;
+                float dummy;
                 for (int pi = 0; pi < 5; ++pi) {
-                    bool exp;
-                    if (s_losOk) {
-                        float dummy; int dumL;
-                        exp = LosPoint(camW, pts[pi], &dummy, &dumL);
-                    } else if (mLinecast && s_lineArgs >= 2) {
-                        exp = LosPointLinecast(camW, pts[pi]);
-                    } else {
-                        exp = DepthExposed(pts[pi], dist);
-                    }
-                    if (exp) { h++; if (pi == 0) he = true; }
+                    int v = -1;
+                    if (s_losOk) v = LosPointV(camW, pts[pi], &dummy);
+                    else if (mLinecast && s_lineArgs >= 2) {
+                        float d2; int l2;
+                        v = LosPoint(camW, pts[pi], &d2, &l2) ? 1 : 0;
+                    } else v = DepthExposed(pts[pi], dist) ? 1 : 0;
+                    if (v > 0) { h++; if (pi == 0) he = true; }
+                    else if (v == 0) o++;
+                    else u++;
                     float ndc = 0, uu = 0, vv = 0;
                     tmpEn.losDepth[pi] = BoneNdc(pts[pi], ndc, uu, vv) ? ndc : -1.0f;
                 }
                 DepthDiagRow(pts, dist);
-                tmpEn.losHits = h;
-                tmpEn.losVis = LosStable(e, (h >= 2) || he); // histerese (igual 3D)
+                tmpEn.losHits = (u == 5) ? -1 : h;
+                if (u == 5) tmpEn.losVis = LosStable(e, true, true); // skip: mantem cor
+                else if (o > 0 && h == 0 && !he) {
+                    for (int i = 0; i < 256; ++i) {
+                        if (s_hystEnt[i] == e || !s_hystEnt[i]) {
+                            s_hystEnt[i] = e; s_hystStreak[i] = -5; s_hystShown[i] = false; break;
+                        }
+                    }
+                    tmpEn.losVis = false;
+                }
+                else tmpEn.losVis = LosStable(e, (h >= 2) || he);
                 // DIAG 2.1C-2D (temporario): resultado do 2D, 1x/sessao.
                 {
                     static bool s_resLogged2 = false;
