@@ -1100,6 +1100,13 @@ namespace Mono {
         if (!StaticInstance(cMC, fInst, mcObj)) return;
         void* cam = ReadP(mcObj, Off::MC_cam);
         if (!cam) return;
+        // FIX P0-2 (crash em transicao de cena 15/09): valida o wrapper da camera
+        // antes de qualquer invoke. Se a cena trocou (morte/troca de mapa), o
+        // MainCamera.instance pode apontar p/ objeto destruido. Probe de 1 byte
+        // com SEH: wrapper morto = AV capturado aqui, fora do JIT do Mono.
+        { volatile char probe = 0;
+          __try { memcpy((void*)&probe, cam, 1); }
+          __except (EXCEPTION_EXECUTE_HANDLER) { return; } }
         // VP proprio 1x por ciclo (2 invokes): todas as projecoes do ciclo usam a mesma matriz.
         s_vpOk = false;
         {
