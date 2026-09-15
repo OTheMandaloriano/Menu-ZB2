@@ -550,15 +550,6 @@ namespace Mono {
     static int s_calDone = 0; // calibracao RaycastHit.distance (1x, ver LosCalibrate)
     static void LosCalibrate(const unsigned char* hitBuf, float knownDist) {
         if (s_calDone || !(knownDist > 1.0f)) return;
-        // FIX P1 (offset clobberado): autoridade é a API (pFieldOff, offset 44
-        // via [FIELDS]/mono_field_get_offset). A heurística casava m_Normal.x
-        // (off 28, valor ~0..1) por acaso na margem de 50% e sobrescrevia o 44
-        // correto. Só calibra quando a API não existe (mono antigo).
-        if (pFieldOff) { s_calDone = 1; return; }
-        if (pFieldOff) return; // FIX P1: API (mono_field_get_offset) = autoridade.
-        // Sem este gate, a heuristica sobrescrevia o offset correto (ex: 44 ->
-        // 28 = m_Normal.x casando por acaso na margem de 50%). Roda so quando
-        // a API nao exporta a funcao (builds antigas do Mono).
         // Procura o slot float cujo valor ~= knownDist (hit confirmado pelo bool).
         for (int off = 0; off + 4 <= 128; off += 4) {
             float v = 0;
@@ -617,30 +608,6 @@ namespace Mono {
             return !hit;
         } __except (EXCEPTION_EXECUTE_HANDLER) { return true; }
     }
-    // AUDIT SENIOR (P0 crash): wrapper de contenção do invoke físico.
-    // Regra de contenção: Raycast com assinatura de 5 args SÓ é invocado se o
-    // [SIG] provou (V3,V3,RaycastHit&,Single,Int32). Fora disso, fail-open
-    // silencioso (visível) — nunca invoca overload ambíguo. Isso elimina a
-    // classe inteira de AV por aridade errada, independente de s_rayArgs.
-    // H4 (alinhamento by-ref): buffer do RaycastHit em alignas(8) — o Mono x64
-    // exige alinhamento de 8 p/ structs by-ref; stack local char[] não garante.
-    // H3 (origem dentro do collider): margem de 0.30m na origem ao longo do dir
-    // (o ray parte 30cm à frente da câmera — fora do capsule do player local).
-    // H2 (QueryTrigger): overload confirmado NÃO tem QueryTriggerInteraction —
-    // triggers filtrados pela própria mask quando calibrada (Passo 2.2).
-    static bool LosPoint(const Vec3& from, const Vec3& to, float* outHit, int* outLayer); // fwd
-    static bool LosPointSafe(const Vec3& from, const Vec3& to, float* outHit, int* outLayer) {
-        if (outHit) *outHit = 0;
-        if (outLayer) *outLayer = -1;
-        // REV 15/09: contenção total REMOVIDA. Evidência do operador: sessão 23:07
-        // (Raycast/5 via invoke da worker) tinha visible check FUNCIONANDO
-        // (vermelho/verde corretos); o único crash era pós-kill no soco — já
-        // corrigido pelo Fix P0 (GetName removido, commit 828ccc4). O AV em
-        // UnityPlayer.dll veio do hook DrawIndexed (commit 3204cc9), não do Raycast.
-        // Volta a invocar com assinatura confirmada via [SIG] (s_rayArgs==5).
-        if (!s_losOk || !mRaycast || s_rayArgs != 5) return true;
-        return LosPoint(from, to, outHit, outLayer);
-    }
     static bool LosPoint(const Vec3& from, const Vec3& to, float* outHit, int* outLayer) {
         if (outHit) *outHit = 0;
         if (outLayer) *outLayer = -1;
@@ -649,11 +616,9 @@ namespace Mono {
         float dist = sqrtf(dx * dx + dy * dy + dz * dz);
         if (!(dist > 0.5f) || !(dist < 10000.0f)) return true;
         Vec3 dir = { dx / dist, dy / dist, dz / dist };
-        // H3: origem 0.30m à frente (fora do capsule do player local).
-        Vec3 org = { from.x + dir.x * 0.30f, from.y + dir.y * 0.30f, from.z + dir.z * 0.30f };
-        alignas(8) unsigned char hitBuf[128] = { 0 }; // H4: by-ref exige align 8
+        unsigned char hitBuf[128] = { 0 };
         void* args[5];
-        args[0] = (void*)&org;
+        args[0] = (void*)&from;
         args[1] = (void*)&dir;
         __try {
             // Assinaturas Unity (ordens testadas no init: s_rayArgs):
@@ -668,22 +633,6 @@ namespace Mono {
                 args[3] = (void*)&maxD;
                 args[4] = (void*)&mask;
                 ret = pInvoke(mRaycast, nullptr, args, &exc);
-                // DIAG Fase 1C (temporario): resultado cru do invoke, 1x/sessao.
-                {
-                    static bool s_rayLogged = false;
-                    if (!s_rayLogged) {
-                        s_rayLogged = true;
-                        float raw = 0;
-                        if (ret && !exc) {
-                            __try { memcpy(&raw, hitBuf + s_hitDistOff, sizeof(raw)); }
-                            __except (EXCEPTION_EXECUTE_HANDLER) { raw = -999.0f; }
-                        }
-                        Log::Infof("[AUDIT-RAY] ret=0x%p exc=0x%p hit=%d hd_off=%d hd_raw=%.4f maxD=%.1f mask=0x%X",
-                            ret, (void*)exc,
-                            (ret && !exc) ? ((*(unsigned char*)pUnbox(ret)) != 0 ? 1 : 0) : -1,
-                            s_hitDistOff, (double)raw, (double)maxD, (unsigned)mask);
-                    }
-                }
                 if (exc || !ret) return true;
                 hit = (*(unsigned char*)pUnbox(ret)) != 0;
             } else if (s_rayArgs == 4) {
@@ -910,10 +859,8 @@ namespace Mono {
     }
     static int s_glitchLogged = 0; // log diagnostico (Passo 7), sem spam
 
-    // DESATIVADA (P0 crash pos-kill): Object.get_name em wrapper marcado p/
-    // Destroy() = AV dentro do JIT do Mono — SEH nao captura, jogo fecha.
-    // Caminho quente usa "Zombie" fixo. Mantida p/ referencia futura (cache
-    // entPtr->name na 1a aparicao, se um dia houver nome variavel).
+    // Nome via Object.get_name (GameObject). Fallback "Zumbi".
+    // DESATIVADA (P0 crash pos-kill no soco). Caminho quente usa "Zombie" fixo.
     static void GetName(void* obj, char* out, size_t cap) {
         (void)obj;
         strncpy_s(out, cap, "Zombie", _TRUNCATE);
@@ -1174,23 +1121,11 @@ namespace Mono {
         // Posicao da camera 1x por ciclo p/ cull por distancia (poupa 2 invokes de W2S nos longe).
         Vec3 camW = { 0, 0, 0 };
         bool hasCamW = false;
-        MonoObject* camTr = nullptr; // DIAG Fase 1A: guardar p/ [AUDIT-CAM]
         if (mGetTrans) {
             MonoObject* exc = nullptr;
             MonoObject* tr = nullptr;
             __try { tr = pInvoke(mGetTrans, cam, nullptr, &exc); } __except (EXCEPTION_EXECUTE_HANDLER) { tr = nullptr; exc = (MonoObject*)1; }
             if (tr && !exc) hasCamW = GetPos(tr, camW);
-            camTr = tr;
-        }
-        // DIAG Fase 1A (temporario, remover no commit final): camW e a camera real?
-        {
-            static bool s_camLogged = false;
-            if (!s_camLogged) {
-                s_camLogged = true;
-                Log::Infof("[AUDIT-CAM] cam=0x%p tr=0x%p hasCamW=%d pos=(%.2f,%.2f,%.2f) vpOk=%d",
-                    cam, camTr, hasCamW ? 1 : 0,
-                    (double)camW.x, (double)camW.y, (double)camW.z, s_vpOk ? 1 : 0);
-            }
         }
         float maxD = Config::fMaxDistance;
         float maxD2 = maxD * maxD;
@@ -1213,11 +1148,7 @@ namespace Mono {
             if (!alive) { s_ghostDead++; return; }
             void* zo = ReadP(e, Off::Z_obj);
             if (!zo) return;
-            EspEntry tmpEn = {};
-            // FIX P0 crash pos-kill: Object.get_name em wrapper marcado p/ Destroy()
-            // = AV dentro do JIT do Mono (SEH nao captura). Nome e cosmetico e
-            // uniforme ("Zombie") — zero invokes no caminho quente. Se um dia houver
-            // entidade com nome variavel: cache entPtr->name na 1a aparicao (ver mono.h).
+            EspEntry tmpEn = {}; // FIX P0 soco: sem invoke de nome (wrapper pode estar morto)
             strncpy_s(tmpEn.name, sizeof(tmpEn.name), "Zombie", _TRUNCATE);
             for (int k = 0; k < 8; ++k) { tmpEn.pv[k] = false; tmpEn.px[k] = tmpEn.py[k] = 0; }
             tmpEn.has3d = false;
@@ -1305,15 +1236,15 @@ namespace Mono {
                         for (int pi = 0; pi < 5; ++pi) {
                             bool exp;
                             if (s_losOk) {
-                                // Raycast primario (assinatura confirmada via [SIG])
+                                // Raycast primario (resolve assinatura correta agora)
                                 float dummy; int dumL;
-                                exp = LosPointSafe(camW, pts[pi], &dummy, &dumL);
-                                // DIAG Fase 1D (temporario): from/to do 1o ponto 3D, 1x/sessao.
+                                exp = LosPoint(camW, pts[pi], &dummy, &dumL);
+                                // DIAG 2.1B (temporario): 1o ponto 1x por sessao.
                                 if (pi == 0) {
-                                    static bool s_call3DLogged = false;
-                                    if (!s_call3DLogged) {
-                                        s_call3DLogged = true;
-                                        Log::Infof("[AUDIT-CALL-3D] ent=0x%p from=(%.1f,%.1f,%.1f) to=(%.1f,%.1f,%.1f) exp=%d hd=%.1f",
+                                    static bool s_callLogged = false;
+                                    if (!s_callLogged) {
+                                        s_callLogged = true;
+                                        Log::Infof("[LOS-CALL] 3D ent=0x%p from=(%.1f,%.1f,%.1f) to=(%.1f,%.1f,%.1f) exp=%d hd=%.1f",
                                             e, (double)camW.x, (double)camW.y, (double)camW.z,
                                             (double)pts[0].x, (double)pts[0].y, (double)pts[0].z,
                                             exp ? 1 : 0, (double)dummy);
@@ -1439,18 +1370,7 @@ namespace Mono {
                     bool exp;
                     if (s_losOk) {
                         float dummy; int dumL;
-                        exp = LosPointSafe(camW, pts[pi], &dummy, &dumL);
-                        // DIAG Fase 1B (temporario): from/to do 1o ponto, 1x/sessao.
-                        if (pi == 0) {
-                            static bool s_call2DLogged = false;
-                            if (!s_call2DLogged) {
-                                s_call2DLogged = true;
-                                Log::Infof("[AUDIT-CALL-2D] ent=0x%p from=(%.1f,%.1f,%.1f) to=(%.1f,%.1f,%.1f) s_rayArgs=%d mask=0x%X maxD=%.1f",
-                                    e, (double)camW.x, (double)camW.y, (double)camW.z,
-                                    (double)pts[0].x, (double)pts[0].y, (double)pts[0].z,
-                                    s_rayArgs, (unsigned)s_geomMask, (double)(dist - 0.15f));
-                            }
-                        }
+                        exp = LosPoint(camW, pts[pi], &dummy, &dumL);
                     } else if (mLinecast && s_lineArgs >= 2) {
                         exp = LosPointLinecast(camW, pts[pi]);
                     } else {

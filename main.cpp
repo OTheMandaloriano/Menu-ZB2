@@ -23,12 +23,6 @@ extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 
 static Present_t       oPresent = nullptr;
 static ResizeBuffers_t oResizeBuffers = nullptr;
-// REV 15/09: hook DrawIndexed REMOVIDO — crashava o jogo no inject.
-// Causa: MinHook no slot 12 da vtable do immediate context compete com o
-// worker de render do Unity (kGfxThreadingModeClientWorkerJobs, ver Player.log)
-// + deferred contexts;jgambiarras no contexto imediato durante draws da cena =
-// AV em UnityPlayer.dll. Depth segue via Present (pass de composição), com o
-// Raycast como via primária do LOS (funcionava na sessão 23:07).
 static WNDPROC         oWndProc = nullptr;
 static HWND            g_hWindow = nullptr;
 static bool            g_bInit = false;
