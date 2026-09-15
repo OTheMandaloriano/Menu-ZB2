@@ -150,7 +150,8 @@ namespace Mono {
     static int  s_budgetLeft = 0;
     static int  s_budgetMax = 220;
     static bool s_budgetLogged = false;
-    static int  s_losCursor = 0; // rodízio: LOS pesado alterna entre entidades
+    static int  s_losCursor = 0; // legado: rodizio removido (piscava em porta/janela).
+    // Manter o campo evita diff gigante; o ciclo so o incrementa.
     static inline bool BudgetTake(int n = 1) {
         if (s_budgetLeft < n) return false;
         s_budgetLeft -= n;
@@ -1301,18 +1302,20 @@ namespace Mono {
                                 (void*)mLinecast, s_rayArgs);
                         }
                     }
-                    if (Config::bVisibleCheck && hasCamW) {
+                    // Camada 1 (broadphase): distancia invalida = sem LOS (entidade
+                    // descartada; snapshot segura a cor anterior no render).
+                    if (Config::bVisibleCheck && hasCamW && dist > 0.5f && dist < 10000.0f) {
                         Vec3 pts[5];
                         pts[0] = { bb.center.x, bb.center.y + bb.extents.y, bb.center.z }; // cabeca
                         pts[1] = bb.center;                                                 // peito
                         pts[2] = { bb.center.x, bb.center.y - bb.extents.y * 0.35f, bb.center.z }; // quadril
                         pts[3] = { bb.center.x - bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z }; // coxaL
                         pts[4] = { bb.center.x + bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z }; // coxaR
-                        // Rodizio anti-horda: LOS pesado (5 raycasts) alterna entre
-                        // perto (sempre) e longe (1 de 3 ciclos). Ciclo pulado =
-                        // mantem a cor exibida anterior (skip=true na histerese).
-                        // NUNCA forca verde no pulo (bug 16/09: !doLos virava verde).
-                        bool doLos = (dist < 45.0f) || (((s_losCursor + n) % 3) == 0);
+                        // LOS real SEMPRE no caminho 3D (box ja validada = perto).
+                        // Camada 1 (broadphase): so chega aqui quem passou frustum/
+                        // distancia. Rodizio/skip causava pisca-pisca em porta e
+                        // janela (bug 16/09) — removido deste caminho.
+                        bool doLos = true; (void)n;
                         if (!doLos) {
                             tmpEn.losVis = LosStable(e, true, true); // skip: mantem cor
                             tmpEn.losHits = -1; // -1 = ciclo pulado (log distingue)
@@ -1442,7 +1445,8 @@ namespace Mono {
                         Config::bVisibleCheck ? 1 : 0, hasCamW ? 1 : 0, s_losOk ? 1 : 0);
                 }
             }
-            if (Config::bVisibleCheck && hasCamW) {
+            // Broadphase 2D: sem distancia valida nao ha LOS (igual ao 3D).
+            if (Config::bVisibleCheck && hasCamW && dist > 0.5f && dist < 10000.0f) {
                 Vec3 pts[5];
                 pts[0] = wh; // cabeca (olho)
                 pts[1] = { (wh.x + wf.x) * 0.5f, wh.y + (wf.y - wh.y) * 0.25f, (wh.z + wf.z) * 0.5f }; // peito
@@ -1450,29 +1454,25 @@ namespace Mono {
                 pts[3] = { (wh.x + wf.x) * 0.5f, wh.y + (wf.y - wh.y) * 0.75f, (wh.z + wf.z) * 0.5f }; // coxa
                 pts[4] = wf; // pes
                 int h = 0; bool he = false;
-                bool doLos2 = (dist < 45.0f) || (((s_losCursor + n) % 3) == 0); // rodizio (igual 3D)
-                if (!doLos2) {
-                    tmpEn.losVis = LosStable(e, true, true); // skip: mantem cor
-                    tmpEn.losHits = -1;
-                } else {
-                    for (int pi = 0; pi < 5; ++pi) {
-                        bool exp;
-                        if (s_losOk) {
-                            float dummy; int dumL;
-                            exp = LosPoint(camW, pts[pi], &dummy, &dumL);
-                        } else if (mLinecast && s_lineArgs >= 2) {
-                            exp = LosPointLinecast(camW, pts[pi]);
-                        } else {
-                            exp = DepthExposed(pts[pi], dist);
-                        }
-                        if (exp) { h++; if (pi == 0) he = true; }
-                        float ndc = 0, uu = 0, vv = 0;
-                        tmpEn.losDepth[pi] = BoneNdc(pts[pi], ndc, uu, vv) ? ndc : -1.0f;
+                // SEM rodizio no 2D (mesmo motivo do 3D: skip piscava em porta/
+                // janela). O orcamento de invokes continua valendo por ponto.
+                for (int pi = 0; pi < 5; ++pi) {
+                    bool exp;
+                    if (s_losOk) {
+                        float dummy; int dumL;
+                        exp = LosPoint(camW, pts[pi], &dummy, &dumL);
+                    } else if (mLinecast && s_lineArgs >= 2) {
+                        exp = LosPointLinecast(camW, pts[pi]);
+                    } else {
+                        exp = DepthExposed(pts[pi], dist);
                     }
-                    DepthDiagRow(pts, dist);
-                    tmpEn.losHits = h;
-                    tmpEn.losVis = LosStable(e, (h >= 2) || he); // histerese (igual 3D)
+                    if (exp) { h++; if (pi == 0) he = true; }
+                    float ndc = 0, uu = 0, vv = 0;
+                    tmpEn.losDepth[pi] = BoneNdc(pts[pi], ndc, uu, vv) ? ndc : -1.0f;
                 }
+                DepthDiagRow(pts, dist);
+                tmpEn.losHits = h;
+                tmpEn.losVis = LosStable(e, (h >= 2) || he); // histerese (igual 3D)
                 // DIAG 2.1C-2D (temporario): resultado do 2D, 1x/sessao.
                 {
                     static bool s_resLogged2 = false;
