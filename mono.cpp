@@ -168,7 +168,12 @@ namespace Mono {
     static MonoMethod* mGetHitGO = nullptr; // Collider.get_gameObject (log HIT)
     static MonoMethod* mGetLayer = nullptr; // GameObject.get_layer (log HIT)
     static FnFieldOffset pFieldOff = nullptr; // mono_field_get_offset
-    static int s_hitDistOff = 20; // fallback; corrigido no Init via API
+    static int s_hitDistOff = 28; // RAW (sem header MonoObject). Era 20 (chute) e
+    // 44 (api COM header +16) — ambos errados p/ o hitBuf cru; ver [FIELDS].
+    static bool s_distRawOk = false; // true quando o raw foi derivado na enumeracao
+    static void* s_hystEnt[256];      // histerese LOS: entidade -> cor exibida estavel
+    static signed char s_hystStreak[256]; // +exposto / -ocluido (satura em +/-5)
+    static bool  s_hystShown[256];    // cor exibida atual (vira após ~3 ciclos iguais)
     static int s_losLogN = 0; // log [LOS] por entidade (1x cada, sem spam)
     static int s_geomMask = -1; // layer mask (auditoria Passo 2; default = tudo)
     static bool      s_losOk = false; // Physics.Raycast resolvido e funcional
@@ -477,9 +482,16 @@ namespace Mono {
                         if (pFieldGetOff) { __try { fo = pFieldGetOff(ff); } __except (EXCEPTION_EXECUTE_HANDLER) { fo = -1; } }
                         Log::Infof("[FIELDS] RaycastHit.%s @ %d", fn ? fn : "?", fo);
                         // Registra o handle exato do campo de distancia (qualquer nome).
+                        // CORRECAO offset-16: mono_field_get_offset inclui o header
+                        // MonoObject (16 bytes no x64: vtable+sync). Nosso hitBuf e
+                        // cru (sem header), entao RAW = API - 16. Ex: 44 -> 28.
                         if (fn && (strstr(fn, "istance") || strstr(fn, "ISTANCE"))) {
                             if (!fHitDist) { fHitDist = ff; s.resolvedFields++; }
-                            if (fo >= 0) { s_hitDistOff = fo; Log::Infof("[FIELDS] distance offset=%d (via enumeracao).", fo); }
+                            if (fo >= 16) {
+                                s_hitDistOff = fo - 16;
+                                s_distRawOk = true;
+                                Log::Infof("[FIELDS] distance api=%d raw=%d (hitBuf cru, sem header).", fo, s_hitDistOff);
+                            } else if (fo >= 0) { s_hitDistOff = fo; Log::Infof("[FIELDS] distance offset=%d (via enumeracao).", fo); }
                         }
                     }
                 }
@@ -513,8 +525,10 @@ namespace Mono {
                 HMODULE mm = GetModuleHandleW(L"mono-2.0-bdwgc.dll");
                 if (mm) pFieldOff = (FnFieldOffset)GetProcAddress(mm, "mono_field_get_offset");
                 if (pFieldOff && fHitDist) {
-                    s_hitDistOff = (int)pFieldOff(fHitDist);
-                    Log::Infof("LOS RaycastHit.distance offset=%d (via API).", s_hitDistOff);
+                    int apiOff = (int)pFieldOff(fHitDist);
+                    s_hitDistOff = (apiOff >= 16) ? apiOff - 16 : apiOff; // raw: sem header
+                    s_distRawOk = true;
+                    Log::Infof("LOS RaycastHit.distance api=%d raw=%d.", apiOff, s_hitDistOff);
                 } else {
                     Log::Warnf("mono_field_get_offset ausente; distance usa fallback +%d (LosCalibrate corrige).", s_hitDistOff);
                 }
@@ -548,8 +562,30 @@ namespace Mono {
     // o init) — todo LosPoint retorna true pelo gate acima. Quando resolver,
     // a calibracao do offset de distance sai do proprio [LOS-CAL] abaixo.
     static int s_calDone = 0; // calibracao RaycastHit.distance (1x, ver LosCalibrate)
+    // Histerese LOS: a cor exibida so vira apos ~3 ciclos iguais da mesma
+    // entidade (anti-flicker). Retorna a cor ESTAVEL; atualiza o streak.
+    static bool LosStable(void* ent, bool rawVis) {
+        for (int i = 0; i < 256; ++i) {
+            if (s_hystEnt[i] == ent) {
+                int s = (int)s_hystStreak[i] + (rawVis ? 1 : -1);
+                if (s > 5) s = 5; if (s < -5) s = -5;
+                s_hystStreak[i] = (signed char)s;
+                if (s >= 3) s_hystShown[i] = true;      // 3x exposto -> vira verde
+                else if (s <= -3) s_hystShown[i] = false; // 3x ocluido -> vira vermelho
+                return s_hystShown[i];
+            }
+            if (!s_hystEnt[i]) { // slot livre: nasce na cor crua
+                s_hystEnt[i] = ent;
+                s_hystStreak[i] = rawVis ? 1 : -1;
+                s_hystShown[i] = rawVis;
+                return rawVis;
+            }
+        }
+        return rawVis; // tabela cheia: sem histerese
+    }
     static void LosCalibrate(const unsigned char* hitBuf, float knownDist) {
         if (s_calDone || !(knownDist > 1.0f)) return;
+        if (s_distRawOk) { s_calDone = 1; return; } // raw ja derivado: nao sobrescrever
         // Procura o slot float cujo valor ~= knownDist (hit confirmado pelo bool).
         for (int off = 0; off + 4 <= 128; off += 4) {
             float v = 0;
@@ -1267,7 +1303,9 @@ namespace Mono {
                             if (exp) { h++; if (pi == 0) he = true; }
                         }
                         tmpEn.losHits = h;
-                        tmpEn.losVis = (h >= 2) || he;
+                        // Histerese: cor exibida estavel (anti-flicker). Log mostra crua+estavel.
+                        bool rawVis = (h >= 2) || he;
+                        tmpEn.losVis = LosStable(e, rawVis);
                         // DIAG 2.1C (temporario): resultado sempre (1x/sessao) — prova que o bloco roda.
                         {
                             static bool s_resLogged = false;
@@ -1280,8 +1318,8 @@ namespace Mono {
                         if (s_losLogN < 40) {
                             s_losLogN++;
                             const char* via = s_losOk ? "ray" : (mLinecast ? "line" : "depth");
-                            Log::Infof("[LOS] id=0x%p dist=%.1f hits=%d/5 visivel=%d via=%s",
-                                e, (double)dist, h, tmpEn.losVis ? 1 : 0, via);
+                            Log::Infof("[LOS] id=0x%p dist=%.1f hits=%d/5 visivel=%d(raw=%d) via=%s",
+                                e, (double)dist, h, tmpEn.losVis ? 1 : 0, rawVis ? 1 : 0, via);
                         }
                     }
                     if (!s_skelLogged && tmpEn.skN == SkJoint::SK_COUNT) {
@@ -1380,7 +1418,7 @@ namespace Mono {
                 }
                 DepthDiagRow(pts, dist);
                 tmpEn.losHits = h;
-                tmpEn.losVis = (h >= 2) || he;
+                tmpEn.losVis = LosStable(e, (h >= 2) || he); // histerese (igual 3D)
                 // DIAG 2.1C-2D (temporario): resultado do 2D, 1x/sessao.
                 {
                     static bool s_resLogged2 = false;
