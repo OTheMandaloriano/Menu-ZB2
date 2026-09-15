@@ -247,9 +247,11 @@ namespace DepthVis {
     }
     // Amostra o pixel (u,v em [0,1]) e retorna NDC decodificado por formato.
     // D24/D16: inteiro normalizado. D32: float direto. R24G8/R32: typeless views.
+    // FIX hang 15/09: TryEnter em vez de Enter — se a thread do Present estiver
+    // no meio do Publish, a worker NAO trava o jogo: pula a amostra (fail-open).
     bool Sample(float u, float v, float& outNdc) {
         if (!g_depthCSInit) return false;
-        EnterCriticalSection(&g_depthCS);
+        if (!TryEnterCriticalSection(&g_depthCS)) return false; // Present ocupado: pula
         ID3D11DeviceContext* ctx = s_ctx;
         ID3D11Texture2D* tex = s_tex;
         UINT w = s_w, h = s_h;
@@ -264,7 +266,9 @@ namespace DepthVis {
         if ((UINT)y >= h) y = (int)h - 1;
         D3D11_MAPPED_SUBRESOURCE mp = {};
         // Map em staging com READ e sem flags extras (dado do frame anterior e valido).
-        if (FAILED(ctx->Map(tex, 0, D3D11_MAP_READ, 0, &mp))) {
+        // FIX hang 15/09: DO_NOT_WAIT — Map com GPU ocupada retorna DXGI_ERROR_WAS_STILL
+        // DRAWING em vez de travar a worker (e o jogo junto, tela branca).
+        if (FAILED(ctx->Map(tex, 0, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &mp))) {
             long f = 0;
             if (g_depthCSInit) { EnterCriticalSection(&g_depthCS); f = ++s_mapFail; LeaveCriticalSection(&g_depthCS); }
             if (f <= 2) Log::Warn("Depth Map falhou (dispositivo/staging).");

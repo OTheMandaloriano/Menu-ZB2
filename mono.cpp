@@ -1417,7 +1417,9 @@ namespace Mono {
             en.onScreen = true; en.isAlly = false;
         });
         // Diagnostico P1: transicoes add/remove com identidade (causa raiz, nao supressao).
-        EnterCriticalSection(&s_espCS);
+        // FIX hang 15/09: TryEnter — se o Present estiver lendo o snapshot no
+        // GetEsp, a worker pula a publicacao deste ciclo em vez de travar o jogo.
+        if (!TryEnterCriticalSection(&s_espCS)) return;
         {
             int logged = 0;
             for (int i = 0; i < n && logged < 6; ++i) {
@@ -1579,7 +1581,9 @@ namespace Mono {
     const State& Get() { return s; }
     int GetEsp(EspEntry* out, int max) {
         if (!out || max <= 0) return 0;
-        EnterCriticalSection(&s_espCS);
+        // FIX hang 15/09: TryEnter — Present nunca espera a worker (a worker
+        // que espera, e so por 1 ciclo). Sem isso, deadlock = tela branca.
+        if (!TryEnterCriticalSection(&s_espCS)) return 0;
         int n = s_espN < max ? s_espN : max;
         for (int i = 0; i < n; ++i) out[i] = s_esp[i];
         LeaveCriticalSection(&s_espCS);
