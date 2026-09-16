@@ -146,11 +146,20 @@ namespace Mono {
     // e falhas por ciclo na worker; o agregado sai 1x/5s no [PI-CALL], e so
     // loga se fail>0 OU media>500us. Leitura atômica nao precisa (worker unica
     // escreve, Present so le via GetEsp com TryEnter).
-    struct PiSite { long n; long fail; long long dt_us; };
+    // Fase 1b: fail discriminado por sub-causa (exc = exc||!ret, hd = hd
+    // NaN/<=0, seh = __except). Budget negado NAO conta (nao e falha do jogo).
+    struct PiSite { long n; long fail; long exc; long hd; long seh; long long dt_us; };
     static PiSite s_piPos, s_piRot, s_piBnd, s_piTrC, s_piRay, s_piHas;
     static long long s_piWinStart;
     static inline void PiAdd(PiSite& s, long long dt, bool ok) {
         s.n++; s.dt_us += dt; if (!ok) s.fail++;
+    }
+    // Discriminador: 0=exc, 1=hd, 2=seh. Mesma assinatura, zero custo extra.
+    static inline void PiAddEx(PiSite& s, long long dt, int kind) {
+        s.n++; s.dt_us += dt; s.fail++;
+        if (kind == 0) s.exc++;
+        else if (kind == 1) s.hd++;
+        else s.seh++;
     }
     static inline long long PiNow() {
         LARGE_INTEGER t, f; QueryPerformanceCounter(&t); QueryPerformanceFrequency(&f);
@@ -169,9 +178,9 @@ namespace Mono {
             if (!s->n) continue;
             long long avg = s->dt_us / s->n;
             if (force || s->fail > 0 || avg > 500)
-                Log::Infof("[PI-CALL] site=%s n=%ld fail=%ld dt_avg_us=%lld",
-                    sites[i].nm, s->n, s->fail, avg);
-            s->n = 0; s->fail = 0; s->dt_us = 0;
+                Log::Infof("[PI-CALL] site=%s n=%ld fail=%ld exc=%ld hd=%ld seh=%ld dt_avg_us=%lld",
+                    sites[i].nm, s->n, s->fail, s->exc, s->hd, s->seh, avg);
+            s->n = 0; s->fail = 0; s->exc = 0; s->hd = 0; s->seh = 0; s->dt_us = 0;
         }
     }
     // Orçamento de invokes por ciclo de BuildEsp (anti-crash em horda).
@@ -210,6 +219,7 @@ namespace Mono {
     static MonoMethod* mGetTrans = nullptr;
     static Vec3 s_camW = { 0, 0, 0 }; // posicao da camera do ciclo (gate skeleton)
     static bool s_camWok = false;
+    static float s_skDist2 = -1.0f; // dist2 da entidade atual (gate skeleton, sem invoke)
     // Item 14 LOS: Physics dota o teste de oclusao sem custo de disposicao.
     typedef unsigned int (__cdecl* FnFieldOffset)(void*); // mono_field_get_offset
     static MonoMethod* mRaycast = nullptr; // Physics.Raycast(Vector3,Vector3,RaycastHit&,Single,Int32)
@@ -680,16 +690,15 @@ namespace Mono {
             }
         }
     }
-    static bool LosPointLinecast(const Vec3& from, const Vec3& to) {
-        // Linecast: hit => ocluido. /4 le o RaycastHit e ignora o corpo do proprio
-        // alvo (hd ~= dist => exposto); /2 (sem hitInfo) e fail-conservador p/ corpo
-        // proprio: hit de qualquer coisa = ocluido. Seguro em ambos (nunca grava no int).
-        // Sem saldo ou distancia invalida: retorna "sem dado" (o chamador mantem
-        // a cor anterior — NUNCA verde forcado, ver Camada 2/3 do briefing §6).
-        if (!mLinecast || s_lineArgs == 0) return true;
+    // Linecast tri-estado (fia de verdade: 1=exposto, 0=ocluido, -1=sem dado).
+    // /4 le o RaycastHit e ignora o corpo do proprio alvo (hd ~= dist); /2 sem
+    // hitInfo e fail-conservador. Sem dado NUNCA vira verde (igual LosPointV).
+    static int LosPointLineV(const Vec3& from, const Vec3& to) {
+        if (!mLinecast || s_lineArgs == 0) return -1;
         float dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
         float dist = sqrtf(dx * dx + dy * dy + dz * dz);
-        if (!(dist > 0.5f) || !(dist < 10000.0f)) return true;
+        if (!(dist > 0.5f) || !(dist < 10000.0f)) return -1;
+        long long t0 = PiNow();
         __try {
             int mask = s_geomMask;
             MonoObject* exc = nullptr;
@@ -702,24 +711,27 @@ namespace Mono {
                 args[2] = (void*)hitBuf;
                 args[3] = (void*)&mask;
                 ret = pInvoke(mLinecast, nullptr, args, &exc);
-                if (exc || !ret) return true;
+                if (exc || !ret) { PiAddEx(s_piRay, PiNow() - t0, 0); return -1; }
                 bool hit = (*(unsigned char*)pUnbox(ret)) != 0;
-                if (!hit) return true; // nada no caminho = exposto
+                if (!hit) { PiAdd(s_piRay, PiNow() - t0, true); return 1; }
                 float hd = 0;
-                __try { memcpy(&hd, hitBuf + s_hitDistOff, sizeof(hd)); } __except (EXCEPTION_EXECUTE_HANDLER) { return true; }
-                if (!(hd == hd) || hd <= 0) return true;
-                if (hd >= dist - 0.15f) return true; // hit no proprio corpo = exposto
-                return false; // parede/outro objeto bloqueia
+                __try { memcpy(&hd, hitBuf + s_hitDistOff, sizeof(hd)); }
+                __except (EXCEPTION_EXECUTE_HANDLER) { PiAddEx(s_piRay, PiNow() - t0, 2); return -1; }
+                if (!(hd == hd) || hd <= 0) { PiAddEx(s_piRay, PiNow() - t0, 1); return -1; }
+                if (hd >= dist - 0.15f) { PiAdd(s_piRay, PiNow() - t0, true); return 1; }
+                PiAdd(s_piRay, PiNow() - t0, true);
+                return 0;
             }
             // s_lineArgs == 2: (start,end) — hit de qualquer coisa = ocluido.
             void* args[2];
             args[0] = (void*)&from;
             args[1] = (void*)&to;
             ret = pInvoke(mLinecast, nullptr, args, &exc);
-            if (exc || !ret) return true;
+            if (exc || !ret) { PiAddEx(s_piRay, PiNow() - t0, 0); return -1; }
             bool hit = (*(unsigned char*)pUnbox(ret)) != 0;
-            return !hit;
-        } __except (EXCEPTION_EXECUTE_HANDLER) { return true; }
+            PiAdd(s_piRay, PiNow() - t0, true);
+            return !hit ? 1 : 0;
+        } __except (EXCEPTION_EXECUTE_HANDLER) { PiAddEx(s_piRay, PiNow() - t0, 2); return -1; }
     }
     // Tri-estado do ponto (briefing §6 Camada 2/3): 1=exposto, 0=ocluido,
     // -1=sem dado (sem saldo, distancia invalida, invoke falhou). O chamador
@@ -752,37 +764,37 @@ namespace Mono {
                 args[3] = (void*)&maxD;
                 args[4] = (void*)&mask;
                 ret = pInvoke(mRaycast, nullptr, args, &exc);
-                if (exc || !ret) { PiAdd(s_piRay, PiNow() - t0, false); return -1; }
+                if (exc || !ret) { PiAddEx(s_piRay, PiNow() - t0, 0); return -1; }
                 hit = (*(unsigned char*)pUnbox(ret)) != 0;
             } else if (s_rayArgs == 4) {
                 args[2] = (void*)hitBuf;
                 args[3] = (void*)&maxD;
                 ret = pInvoke(mRaycast, nullptr, args, &exc);
-                if (exc || !ret) { PiAdd(s_piRay, PiNow() - t0, false); return -1; }
+                if (exc || !ret) { PiAddEx(s_piRay, PiNow() - t0, 0); return -1; }
                 hit = (*(unsigned char*)pUnbox(ret)) != 0;
             } else if (s_rayArgs == 3) {
                 args[2] = (void*)&maxD;
                 args[3] = (void*)&mask;
                 ret = pInvoke(mRaycast, nullptr, args, &exc);
-                if (exc || !ret) { PiAdd(s_piRay, PiNow() - t0, false); return -1; }
+                if (exc || !ret) { PiAddEx(s_piRay, PiNow() - t0, 0); return -1; }
                 hit = (*(unsigned char*)pUnbox(ret)) != 0;
                 if (hit) { if (outHit) *outHit = maxD; PiAdd(s_piRay, PiNow() - t0, true); return 0; }
                 PiAdd(s_piRay, PiNow() - t0, true); return 1;
             } else if (s_rayArgs == 2) {
                 args[2] = (void*)&maxD;
                 ret = pInvoke(mRaycast, nullptr, args, &exc);
-                if (exc || !ret) { PiAdd(s_piRay, PiNow() - t0, false); return -1; }
+                if (exc || !ret) { PiAddEx(s_piRay, PiNow() - t0, 0); return -1; }
                 hit = (*(unsigned char*)pUnbox(ret)) != 0;
                 if (hit) { if (outHit) *outHit = maxD; PiAdd(s_piRay, PiNow() - t0, true); return 0; }
                 PiAdd(s_piRay, PiNow() - t0, true); return 1;
-            } else { PiAdd(s_piRay, PiNow() - t0, false); return -1; }
+            } else { PiAddEx(s_piRay, PiNow() - t0, 0); return -1; }
             if (!hit) { PiAdd(s_piRay, PiNow() - t0, true); return 1; } // sem hit = exposto
             if (!s_calDone) LosCalibrate(hitBuf, dist);
             float hd = 0;
             __try { memcpy(&hd, hitBuf + s_hitDistOff, sizeof(hd)); }
-            __except (EXCEPTION_EXECUTE_HANDLER) { PiAdd(s_piRay, PiNow() - t0, false); return -1; }
+            __except (EXCEPTION_EXECUTE_HANDLER) { PiAddEx(s_piRay, PiNow() - t0, 2); return -1; }
             if (outHit) *outHit = hd;
-            if (!(hd == hd) || hd <= 0) { PiAdd(s_piRay, PiNow() - t0, false); return -1; }
+            if (!(hd == hd) || hd <= 0) { PiAddEx(s_piRay, PiNow() - t0, 1); return -1; }
             if (hd >= dist - 0.15f) { PiAdd(s_piRay, PiNow() - t0, true); return 1; } // encosto no corpo
             // Log HIT DESABILITADO (P0 crash em aproximacao 15/09): invocar
             // Collider.get_gameObject / GameObject.get_layer num collider que o
@@ -792,7 +804,7 @@ namespace Mono {
             if (outLayer) *outLayer = -1;
             PiAdd(s_piRay, PiNow() - t0, true);
             return 0;
-        } __except (EXCEPTION_EXECUTE_HANDLER) { PiAdd(s_piRay, PiNow() - t0, false); return -1; }
+        } __except (EXCEPTION_EXECUTE_HANDLER) { PiAddEx(s_piRay, PiNow() - t0, 2); return -1; }
     }
     // Compat: LosPoint antigo (bool) vira LosPointV (o chamador termico ignora -1).
     static bool LosPoint(const Vec3& from, const Vec3& to, float* outHit, int* outLayer) {
@@ -1154,19 +1166,10 @@ namespace Mono {
         // por zumbi x 96 = ~1700 invokes/ciclo — e o LOD mexe nesses mesmos
         // Transforms. Longe (>50m) nao precisa de osso: pula o loop inteiro.
         // A flag bZombieSkeleton continua mandando (respeita o menu).
-        // Sem eye (sem invoke extra): usa o 1o bone como proxy de distancia.
-        {
-            void* b0 = nullptr;
-            __try { memcpy(&b0, (char*)arr + Off::A_data + (size_t)kBoneIdx[0] * 8, 8); }
-            __except (EXCEPTION_EXECUTE_HANDLER) { b0 = nullptr; }
-            if (b0 && s_camWok) {
-                Vec3 bp;
-                if (GetPos(b0, bp)) {
-                    float dx = bp.x - s_camW.x, dy = bp.y - s_camW.y, dz = bp.z - s_camW.z;
-                    if (dx * dx + dy * dy + dz * dz > 50.0f * 50.0f) { out.skN = 0; return; }
-                }
-            }
-        }
+        // Probe com distancia JA conhecida no ciclo (eye/foot do 2D ou center
+        // da AABB do 3D) — nunca invoke extra (o probe com GetPos batia justo
+        // no objeto mais fragil: armature se formando no spawn).
+        if (s_skDist2 >= 0 && s_skDist2 > 50.0f * 50.0f) { out.skN = 0; return; }
         for (int k = 0; k < SkJoint::SK_PHYS; ++k) {
             if (!bones[k]) continue;
             Vec3 w, s3;
@@ -1357,6 +1360,8 @@ namespace Mono {
                     for (int k = 0; k < 8; ++k) if (tmpEn.pv[k]) nv++;
                     if (nv < 6) return;
                     // Maos ja calculadas em CollectJoints (fix bugs 1-2, 4) — vale p/ 2D e 3D.
+                    // s_skDist2 alimenta o gate de skeleton longe (sem invoke extra).
+                    s_skDist2 = hasCamW ? (dist * dist) : -1.0f;
                     CollectJoints(zo, cam, tmpEn);
                     // Item 14/Passo 5: depth buffer nos 5 pontos (cabeca/peito/quadril/coxas).
                     // Raycast (LosMulti) = fallback se depth indisponivel.
@@ -1410,10 +1415,8 @@ namespace Mono {
                             for (int pi = 0; pi < 5; ++pi) {
                                 int v = -1;
                                 if (s_losOk) v = LosPointV(camW, pts[pi], &dummy);
-                                else if (mLinecast && s_lineArgs >= 2) {
-                                    float d2; int l2;
-                                    v = LosPoint(camW, pts[pi], &d2, &l2) ? 1 : 0;
-                                } else {
+                                else if (mLinecast && s_lineArgs >= 2) v = LosPointLineV(camW, pts[pi]);
+                                else {
                                     float ndc = 0, uu = 0, vv = 0;
                                     bool hasNdc = BoneNdc(pts[pi], ndc, uu, vv);
                                     float scene = 0;
@@ -1533,6 +1536,7 @@ namespace Mono {
                         return;
                     }
             if (n == 0) { s_dbgEyeY = wh.y; s_dbgFootY = wf.y; }
+            s_skDist2 = hasCamW ? (dist * dist) : -1.0f;
             CollectJoints(zo, cam, tmpEn);
             // Item 14/Passo 5 (fallback 2D): mesma logica do 3D —
             // Raycast primario, Linecast secundario, Depth ultimo recurso.
@@ -1561,10 +1565,8 @@ namespace Mono {
                 for (int pi = 0; pi < 5; ++pi) {
                     int v = -1;
                     if (s_losOk) v = LosPointV(camW, pts[pi], &dummy);
-                    else if (mLinecast && s_lineArgs >= 2) {
-                        float d2; int l2;
-                        v = LosPoint(camW, pts[pi], &d2, &l2) ? 1 : 0;
-                    } else v = DepthExposed(pts[pi], dist) ? 1 : 0;
+                    else if (mLinecast && s_lineArgs >= 2) v = LosPointLineV(camW, pts[pi]);
+                    else v = DepthExposed(pts[pi], dist) ? 1 : 0;
                     if (v > 0) { h++; if (pi == 0) he = true; }
                     else if (v == 0) o++;
                     else u++;
