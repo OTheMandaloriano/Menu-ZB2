@@ -77,6 +77,8 @@ namespace Config {
     extern bool  bZombieSkeleton;
     extern bool  bZombieSnap;
     extern bool  bZombieHeadDot;
+    extern bool  bZombieClass;      // mostra classe (Comum/Riot/Queen/Reaper)
+    extern float colZombieClass[4]; // cor da classe
     extern float colZombieVis[4];
     extern float colZombieInv[4];
     extern float colZombieNameVis[4];

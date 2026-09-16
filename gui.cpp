@@ -84,6 +84,8 @@ namespace Config {
     bool  bZombieSkeleton = false;
     bool  bZombieSnap = false;
     bool  bZombieHeadDot = false;
+    bool  bZombieClass = true;
+    float colZombieClass[4] = { 1, 0.85f, 0.2f, 1 };
     float colZombieVis[4] = { 1, 0, 0, 1 };
     float colZombieInv[4] = { 0.5f, 0, 0, 1 };
     float colZombieNameVis[4] = { 1, 1, 1, 1 };
@@ -624,6 +626,7 @@ namespace GUI {
         JF(fAlongN); JF(fAlongD); JF(fAlongH); JF(fAlongP); JF(fGapN); JF(fGapD); JF(fGapH); JF(fGapP);
         JI(iOrderN); JI(iOrderD); JI(iOrderH); JI(iOrderP); JF(fBarLength); JF(fBarThickness);
         JB(bZombieSkeleton); JB(bZombieSnap); JB(bZombieHeadDot);
+        JB(bZombieClass); JV(colZombieClass);
         JV(colZombieVis); JV(colZombieInv); JV(colZombieNameVis); JV(colZombieNameInv);
         JV(colZombieDistVis); JV(colZombieDistInv); JV(colZombieHpVis); JV(colZombieHpInv);
         JB(bAllyEsp); JI(iAllyBox); JB(bAllyName); JB(bAllyDist); JB(bAllyHp);
@@ -708,6 +711,7 @@ namespace GUI {
         LB(bZombieEsp); LI(iZombieBox); LB(bZombieName); LB(bZombieDist); LB(bZombieHp); LB(bZombiePct); LF(fPctX); LF(fPctY); LI(iNameA); LI(iDistA); LI(iHpA); LI(iPctA); LF(fPropN); LF(fPropD); LF(fPropH); LF(fPropP);
         LI(iSideN); LI(iSideD); LI(iSideH); LI(iSideP); LI(iAlinN); LI(iAlinD); LI(iAlinH); LI(iAlinP);
         LB(bZombieSkeleton); LB(bZombieSnap); LB(bZombieHeadDot);
+        LB(bZombieClass); LV(colZombieClass);
         LV(colZombieVis); LV(colZombieInv); LV(colZombieNameVis); LV(colZombieNameInv);
         LV(colZombieDistVis); LV(colZombieDistInv); LV(colZombieHpVis); LV(colZombieHpInv);
         LB(bAllyEsp); LI(iAllyBox); LB(bAllyName); LB(bAllyDist); LB(bAllyHp);
@@ -803,7 +807,12 @@ namespace GUI {
             dl->AddText(ImVec2(10, 26), IM_COL32(160, 255, 160, 200), b);
         }
         // ESP Zumbis Box (Fase 3 itens 7/11): head/pes ja em pixels Unity; inverte Y.
+        // Ciclo 2 (spec VISUAL §1+§3.13): toggles do menu mandam junto com o
+        // layout (OR). Editor drag-drop continua valendo p/ posicao.
         if (Config::bZombieEsp) {
+            const bool showSkel = layout.skeleton || Config::bZombieSkeleton;
+            const bool showSnap = layout.snapline || Config::bZombieSnap;
+            const bool showDot = layout.headDot || Config::bZombieHeadDot;
             Mono::EspEntry es[128];
             int n = Mono::GetEsp(es, 128);
             float H = io.DisplaySize.y;
@@ -896,7 +905,7 @@ namespace GUI {
                 }
                 // Item 12 Skeleton real: juntas auditadas ([BONE] 14/09), articulado.
                 // Segmentos: coluna, pernas (quadril->pe), bracos (ombro->mao).
-                if (layout.skeleton && es[i].skN == Mono::SK_COUNT) {
+                if (showSkel && es[i].skN == Mono::SK_COUNT) {
                     using MJ = Mono::SkJoint;
                     static const int SEG[][2] = {
                         { MJ::SK_HEAD, MJ::SK_NECK }, { MJ::SK_NECK, MJ::SK_SP3 },
@@ -924,14 +933,14 @@ namespace GUI {
                     // Sem circulo na cabeca: Head Dot (item 13) e funcao separada do menu.
                 }
                 // Item 13 Snapline: base da tela -> centro do pe da box (padrao grandes cheats).
-                if (layout.snapline && w > 2.0f && h > 2.0f) {
+                if (showSnap && w > 2.0f && h > 2.0f) {
                     ImVec2 base = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y);
                     ImVec2 tgt = ImVec2((r0.x + r1.x) * 0.5f, r1.y);
                     if (tgt.x > -10000 && tgt.x < 10000 && tgt.y > -10000 && tgt.y < 10000)
                         dl->AddLine(base, tgt, col, 1.0f);
                 }
                 // Item 13 Head Dot: ponto na junta HEAD (projetada, nao fixa no box).
-                if (layout.headDot && es[i].skN == Mono::SK_COUNT && es[i].skV[Mono::SK_HEAD]) {
+                if (showDot && es[i].skN == Mono::SK_COUNT && es[i].skV[Mono::SK_HEAD]) {
                     ImVec2 hp = ImVec2(es[i].skX[Mono::SK_HEAD], H - es[i].skY[Mono::SK_HEAD]);
                     if (hp.x > -10000 && hp.x < 10000 && hp.y > -10000 && hp.y < 10000) {
                         float hr = h * 0.03f; if (hr < 2.0f) hr = 2.0f; if (hr > 6.0f) hr = 6.0f;
@@ -1025,6 +1034,29 @@ namespace GUI {
             // A05: UM EndTabItem incondicional por BeginTabItem (transicao nao controla pareamento).
             if (ImGui::BeginTabItem("VISUAL")) {
                 DrawLayoutEditor();
+                // Ciclo 2 (spec VISUAL §1): toggles por elemento do ZUMBI —
+                // 1 linha = 1 checkbox + 1 cor (padrao CS2_External). O editor
+                // drag-drop acima continua valendo p/ posicao; aqui liga/desliga.
+                if (ImGui::CollapsingHeader("Zumbis", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    ImGui::Checkbox("Box", &Config::bZombieEsp);
+                    ImGui::SameLine(); ImGui::SetNextItemWidth(110.0f);
+                    ImGui::Combo("Tipo##ZB", &Config::iZombieBox, kBoxType, 3);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##CorBoxZ", Config::colZombieVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::Checkbox("Nome", &Config::bZombieName);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##CorNomeZ", Config::colZombieNameVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::Checkbox("Distancia", &Config::bZombieDist);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##CorDistZ", Config::colZombieDistVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::Checkbox("Vida", &Config::bZombieHp);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##CorVidaZ", Config::colZombieHpVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::Checkbox("Skeleton", &Config::bZombieSkeleton);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##CorSkelZ", Config::colZombieVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::Checkbox("Linha", &Config::bZombieSnap);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##CorLinhaZ", Config::colZombieVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::Checkbox("HeadDot", &Config::bZombieHeadDot);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##CorDotZ", Config::colZombieVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::Checkbox("Classe", &Config::bZombieClass);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##CorClasseZ", Config::colZombieClass, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                }
                 if (ImGui::CollapsingHeader("Cores, aliados e itens")) {
                 ImGui::ColorEdit4("Cor Visivel", Config::colZombieVis);
                 ImGui::ColorEdit4("Cor Invisivel", Config::colZombieInv);
@@ -1034,7 +1066,7 @@ namespace GUI {
                 if (!Config::bAllyEsp) {
                     ImGui::Checkbox("ESP Aliados (azul)", &Config::bAllyEsp);
                 } else {
-                    ImGui::Checkbox("ESP Aliados (azul) [ON]", &Config::bAllyEsp);
+                    ImGui::Checkbox("ESP Aliados (azul)", &Config::bAllyEsp);
                     ImGui::Combo("Box Aliado", &Config::iAllyBox, kBoxType, 3);
                     ImGui::Checkbox("Nome##A", &Config::bAllyName); ImGui::SameLine();
                     ImGui::Checkbox("Dist##A", &Config::bAllyDist); ImGui::SameLine();
@@ -1048,7 +1080,7 @@ namespace GUI {
                 if (!Config::bChams) {
                     ImGui::Checkbox("Chams (corpo)", &Config::bChams);
                 } else {
-                    ImGui::Checkbox("Chams (corpo) [ON]", &Config::bChams);
+                    ImGui::Checkbox("Chams (corpo)", &Config::bChams);
                     ImGui::ColorEdit4("Chams Vis", Config::colChamsVis);
                     ImGui::ColorEdit4("Chams Inv", Config::colChamsInv);
                 }
@@ -1057,7 +1089,7 @@ namespace GUI {
                 if (!Config::bItemEsp) {
                     ImGui::Checkbox("ESP Itens", &Config::bItemEsp);
                 } else {
-                    ImGui::Checkbox("ESP Itens [ON]", &Config::bItemEsp);
+                    ImGui::Checkbox("ESP Itens", &Config::bItemEsp);
                     ImGui::Checkbox("Armas", &Config::bItemWeapons); ImGui::SameLine();
                     ImGui::Checkbox("Raros", &Config::bItemRare); ImGui::SameLine();
                     ImGui::Checkbox("Municao", &Config::bItemAmmo); ImGui::SameLine();

@@ -1185,6 +1185,9 @@ namespace Mono {
     static void CollectJoints(void* zo, void* cam, EspEntry& out) {
         out.skN = SkJoint::SK_COUNT;
         for (int k = 0; k < SkJoint::SK_COUNT; ++k) { out.skV[k] = false; out.skX[k] = out.skY[k] = 0; }
+        // Ciclo 2 (spec VISUAL §4.2): worker respeita Config::bZombieSkeleton
+        // (menu VISUAL manda; ReadLayout nao decide mais sozinho). Aliados usam
+        // a mesma flag por enquanto (item 15 define a separacao).
         if (!Config::bZombieSkeleton) { out.skN = 0; return; }
         void* arr = ReadP(zo, Off::ZO_armature);
         if (!arr) { out.skN = 0; return; }
