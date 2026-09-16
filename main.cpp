@@ -401,10 +401,25 @@ static DWORD WINAPI MainThread(LPVOID lpReserved) {
     // Motivo (fix v0.2.1): o bind do Present ativa o hkPresent a cada frame;
     // se a janela ainda e nullptr, o ImGui inicializa com HWND nulo e o
     // DisplaySize fica (0,0) -> menu invisivel (so o cursor aparece).
-    do {
-        g_hWindow = GetProcessWindow();
-        if (!g_hWindow) Sleep(50);
-    } while (g_hWindow == nullptr);
+    // FIX crash-no-inject (16/09): injetar no LOADING (MapHash gerando celulas)
+    // = kiero::init + hooks no meio da remontagem do LOD = AV 0xc0000005.
+    // Espera a janela existir E estabilizar (2 leituras iguais = mensagem
+    // loop rodando, nao splash estatico) antes de tocar em D3D.
+    {
+        HWND prev = nullptr;
+        int stable = 0;
+        for (int i = 0; i < 200 && stable < 4; ++i) { // ~10s max
+            g_hWindow = GetProcessWindow();
+            if (g_hWindow && g_hWindow == prev) stable++;
+            else stable = 0;
+            prev = g_hWindow;
+            if (stable < 4) Sleep(50);
+        }
+        if (!g_hWindow) {
+            Log::Error("Sem janela apos 10s — MainThread aborta (tente injetar em partida).");
+            return 0;
+        }
+    }
     Log::Infof("Janela encontrada: 0x%p.", g_hWindow);
 
     // ETAPA 2: com a janela resolvida, instala os hooks.
