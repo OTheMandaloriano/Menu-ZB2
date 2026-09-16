@@ -142,6 +142,38 @@ namespace Mono {
     static MonoClassField* fZLInst = nullptr;
     static MonoClassField* fPCInst = nullptr;
     static MonoMethod* mHasLocal = nullptr;
+    // Telemetria por site de pInvoke (Fase 1, SEM mudar logica): conta chamadas
+    // e falhas por ciclo na worker; o agregado sai 1x/5s no [PI-CALL], e so
+    // loga se fail>0 OU media>500us. Leitura atômica nao precisa (worker unica
+    // escreve, Present so le via GetEsp com TryEnter).
+    struct PiSite { long n; long fail; long long dt_us; };
+    static PiSite s_piPos, s_piRot, s_piBnd, s_piTrC, s_piRay, s_piHas;
+    static long long s_piWinStart;
+    static inline void PiAdd(PiSite& s, long long dt, bool ok) {
+        s.n++; s.dt_us += dt; if (!ok) s.fail++;
+    }
+    static inline long long PiNow() {
+        LARGE_INTEGER t, f; QueryPerformanceCounter(&t); QueryPerformanceFrequency(&f);
+        return t.QuadPart * 1000000LL / f.QuadPart;
+    }
+    static void PiFlush(bool force) {
+        long long now = PiNow();
+        if (!force && now - s_piWinStart < 5000000LL) return;
+        s_piWinStart = now;
+        const struct { const char* nm; PiSite* s; } sites[6] = {
+            { "getPos", &s_piPos }, { "getRot", &s_piRot }, { "getBounds", &s_piBnd },
+            { "getTransCam", &s_piTrC }, { "raycast", &s_piRay }, { "hasLocal", &s_piHas },
+        };
+        for (int i = 0; i < 6; ++i) {
+            PiSite* s = sites[i].s;
+            if (!s->n) continue;
+            long long avg = s->dt_us / s->n;
+            if (force || s->fail > 0 || avg > 500)
+                Log::Infof("[PI-CALL] site=%s n=%ld fail=%ld dt_avg_us=%lld",
+                    sites[i].nm, s->n, s->fail, avg);
+            s->n = 0; s->fail = 0; s->dt_us = 0;
+        }
+    }
     // Orçamento de invokes por ciclo de BuildEsp (anti-crash em horda).
     // Cada invoke cruza para o Mono e compete com o PhysX/LOD do jogo; com
     // 50+ zumbis, centenas de invokes por ciclo de 33ms viram corrida com o
@@ -313,13 +345,17 @@ namespace Mono {
 
     static bool InvokeBool(MonoMethod* m, void* obj) {
         if (!m || !obj) return false;
+        long long t0 = PiNow();
+        bool out = false;
         __try {
             MonoObject* exc = nullptr;
             MonoObject* ret = pInvoke(m, obj, nullptr, &exc);
-            if (exc || !ret) return false;
+            if (exc || !ret) { PiAdd(s_piHas, PiNow() - t0, false); return false; }
             unsigned char v = *(unsigned char*)pUnbox(ret);
-            return v != 0;
-        } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+            out = v != 0;
+        } __except (EXCEPTION_EXECUTE_HANDLER) { PiAdd(s_piHas, PiNow() - t0, false); return false; }
+        PiAdd(s_piHas, PiNow() - t0, true);
+        return out;
     }
 
     bool Init() {
@@ -694,6 +730,8 @@ namespace Mono {
         float dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
         float dist = sqrtf(dx * dx + dy * dy + dz * dz);
         if (!(dist > 0.5f) || !(dist < 10000.0f)) return -1;
+        long long t0 = PiNow();
+        bool piOk = true;
         Vec3 dir = { dx / dist, dy / dist, dz / dist };
         unsigned char hitBuf[128] = { 0 };
         void* args[5];
@@ -712,46 +750,47 @@ namespace Mono {
                 args[3] = (void*)&maxD;
                 args[4] = (void*)&mask;
                 ret = pInvoke(mRaycast, nullptr, args, &exc);
-                if (exc || !ret) return -1;
+                if (exc || !ret) { PiAdd(s_piRay, PiNow() - t0, false); return -1; }
                 hit = (*(unsigned char*)pUnbox(ret)) != 0;
             } else if (s_rayArgs == 4) {
                 args[2] = (void*)hitBuf;
                 args[3] = (void*)&maxD;
                 ret = pInvoke(mRaycast, nullptr, args, &exc);
-                if (exc || !ret) return -1;
+                if (exc || !ret) { PiAdd(s_piRay, PiNow() - t0, false); return -1; }
                 hit = (*(unsigned char*)pUnbox(ret)) != 0;
             } else if (s_rayArgs == 3) {
                 args[2] = (void*)&maxD;
                 args[3] = (void*)&mask;
                 ret = pInvoke(mRaycast, nullptr, args, &exc);
-                if (exc || !ret) return -1;
+                if (exc || !ret) { PiAdd(s_piRay, PiNow() - t0, false); return -1; }
                 hit = (*(unsigned char*)pUnbox(ret)) != 0;
-                if (hit) { if (outHit) *outHit = maxD; return 0; }
-                return 1;
+                if (hit) { if (outHit) *outHit = maxD; PiAdd(s_piRay, PiNow() - t0, true); return 0; }
+                PiAdd(s_piRay, PiNow() - t0, true); return 1;
             } else if (s_rayArgs == 2) {
                 args[2] = (void*)&maxD;
                 ret = pInvoke(mRaycast, nullptr, args, &exc);
-                if (exc || !ret) return -1;
+                if (exc || !ret) { PiAdd(s_piRay, PiNow() - t0, false); return -1; }
                 hit = (*(unsigned char*)pUnbox(ret)) != 0;
-                if (hit) { if (outHit) *outHit = maxD; return 0; }
-                return 1;
-            } else return -1;
-            if (!hit) return 1; // sem hit = exposto
+                if (hit) { if (outHit) *outHit = maxD; PiAdd(s_piRay, PiNow() - t0, true); return 0; }
+                PiAdd(s_piRay, PiNow() - t0, true); return 1;
+            } else { PiAdd(s_piRay, PiNow() - t0, false); return -1; }
+            if (!hit) { PiAdd(s_piRay, PiNow() - t0, true); return 1; } // sem hit = exposto
             if (!s_calDone) LosCalibrate(hitBuf, dist);
             float hd = 0;
             __try { memcpy(&hd, hitBuf + s_hitDistOff, sizeof(hd)); }
-            __except (EXCEPTION_EXECUTE_HANDLER) { return -1; }
+            __except (EXCEPTION_EXECUTE_HANDLER) { PiAdd(s_piRay, PiNow() - t0, false); return -1; }
             if (outHit) *outHit = hd;
-            if (!(hd == hd) || hd <= 0) return -1;
-            if (hd >= dist - 0.15f) return 1; // encosto no corpo
+            if (!(hd == hd) || hd <= 0) { PiAdd(s_piRay, PiNow() - t0, false); return -1; }
+            if (hd >= dist - 0.15f) { PiAdd(s_piRay, PiNow() - t0, true); return 1; } // encosto no corpo
             // Log HIT DESABILITADO (P0 crash em aproximacao 15/09): invocar
             // Collider.get_gameObject / GameObject.get_layer num collider que o
             // jogo pode estar destruindo (LODController.SetColliding/GameObject.
             // SetActive na mesma janela — ver crash dump 10:57) = AV dentro do
             // runtime Mono. A decisao visivel/invisivel NAO usa layer, so distancia.
             if (outLayer) *outLayer = -1;
+            PiAdd(s_piRay, PiNow() - t0, true);
             return 0;
-        } __except (EXCEPTION_EXECUTE_HANDLER) { return -1; }
+        } __except (EXCEPTION_EXECUTE_HANDLER) { PiAdd(s_piRay, PiNow() - t0, false); return -1; }
     }
     // Compat: LosPoint antigo (bool) vira LosPointV (o chamador termico ignora -1).
     static bool LosPoint(const Vec3& from, const Vec3& to, float* outHit, int* outLayer) {
@@ -791,13 +830,17 @@ namespace Mono {
     // horda e o de entidades/ciclo + LOS em rodizio, nao este.
     static bool GetPos(void* trans, Vec3& out) {
         if (!mGetPos || !trans) return false;
+        long long t0 = PiNow();
+        bool ok = false;
         __try {
             MonoObject* exc = nullptr;
             MonoObject* ret = pInvoke(mGetPos, trans, nullptr, &exc);
-            if (exc || !ret) return false;
+            if (exc || !ret) { PiAdd(s_piPos, PiNow() - t0, false); return false; }
             memcpy(&out, pUnbox(ret), sizeof(out));
-            return true;
-        } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+            ok = true;
+        } __except (EXCEPTION_EXECUTE_HANDLER) { ok = false; }
+        PiAdd(s_piPos, PiNow() - t0, ok);
+        return ok;
     }
 
     void SetViewport(float w, float h) {
@@ -917,16 +960,20 @@ namespace Mono {
     // bracos e cabeca, qualquer tamanho/tipo). Com validacao de sanidade.
     static bool GetBounds(void* rend, Bnd& out) {
         if (!mGetBounds || !rend) return false;
+        long long t0 = PiNow();
+        bool ok = false;
         __try {
             MonoObject* exc = nullptr;
             MonoObject* ret = pInvoke(mGetBounds, rend, nullptr, &exc);
-            if (exc || !ret) return false;
+            if (exc || !ret) { PiAdd(s_piBnd, PiNow() - t0, false); return false; }
             memcpy(&out, pUnbox(ret), sizeof(out));
-            if (!(out.extents.x > 0.05f && out.extents.x < 6.0f)) return false;
-            if (!(out.extents.y > 0.05f && out.extents.y < 6.0f)) return false;
-            if (!(out.extents.z > 0.05f && out.extents.z < 6.0f)) return false;
-            return true;
-        } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+            ok = true;
+            if (!(out.extents.x > 0.05f && out.extents.x < 6.0f)) ok = false;
+            else if (!(out.extents.y > 0.05f && out.extents.y < 6.0f)) ok = false;
+            else if (!(out.extents.z > 0.05f && out.extents.z < 6.0f)) ok = false;
+            PiAdd(s_piBnd, PiNow() - t0, ok);
+            return ok;
+        } __except (EXCEPTION_EXECUTE_HANDLER) { PiAdd(s_piBnd, PiNow() - t0, false); return false; }
     }
 
     static bool Fin(float v) { return v == v && v > -3.4028235e38f && v < 3.4028235e38f; }
@@ -959,16 +1006,20 @@ namespace Mono {
     static bool GetQuat(void* trans, float q[4]) {
         if (!mGetRot || !trans) return false;
         if (!BudgetTake(1)) return false; // maos viram fallback colinear sem saldo
+        long long t0 = PiNow();
+        bool ok = false;
         __try {
             MonoObject* exc = nullptr;
             MonoObject* ret = pInvoke(mGetRot, trans, nullptr, &exc);
-            if (exc || !ret) return false;
+            if (exc || !ret) { PiAdd(s_piRot, PiNow() - t0, false); return false; }
             memcpy(q, pUnbox(ret), sizeof(float) * 4);
-            for (int i = 0; i < 4; ++i) if (!(q[i] == q[i])) return false;
+            for (int i = 0; i < 4; ++i) if (!(q[i] == q[i])) { PiAdd(s_piRot, PiNow() - t0, false); return false; }
             float n = sqrtf(q[0]*q[0]+q[1]*q[1]+q[2]*q[2]+q[3]*q[3]);
-            if (n < 0.001f) return false;
-            return true;
-        } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+            if (n < 0.001f) { PiAdd(s_piRot, PiNow() - t0, false); return false; }
+            ok = true;
+        } __except (EXCEPTION_EXECUTE_HANDLER) { ok = false; }
+        PiAdd(s_piRot, PiNow() - t0, ok);
+        return ok;
     }
     static void QuatToMat3(const float q[4], float R[9]) {
         float x=q[0], y=q[1], z=q[2], w=q[3];
@@ -1209,10 +1260,12 @@ namespace Mono {
         Vec3 camW = { 0, 0, 0 };
         bool hasCamW = false;
         if (mGetTrans) {
+            long long t0c = PiNow();
             MonoObject* exc = nullptr;
             MonoObject* tr = nullptr;
             __try { tr = pInvoke(mGetTrans, cam, nullptr, &exc); } __except (EXCEPTION_EXECUTE_HANDLER) { tr = nullptr; exc = (MonoObject*)1; }
             if (tr && !exc) hasCamW = GetPos(tr, camW);
+            PiAdd(s_piTrC, PiNow() - t0c, hasCamW);
         }
         float maxD = Config::fMaxDistance;
         float maxD2 = maxD * maxD;
@@ -1628,6 +1681,7 @@ namespace Mono {
                 }
                 if (s_deadN > 0) { s_deadN = 0; Log::Info("[SCENE] loader vivo — worker retomada."); }
                 BuildEsp();
+                PiFlush(false); // agregado [PI-CALL] 1x/5s (so sai se fail>0 ou >500us)
                 // Adapta pelo custo medido no ciclo (s.espMs, media movel).
                 int want = (s.espMs > 25.0f) ? 66 : (s.espMs < 12.0f ? 33 : 50);
                 if (want != s_sleepMs) {
