@@ -1461,7 +1461,12 @@ namespace Mono {
                     // descartada; snapshot segura a cor anterior no render).
                     // NOTA: o gate on-screen ja rodou acima (centroide dos 8
                     // cantos); aqui entra direto no LOS real.
-                    if (Config::bVisibleCheck && hasCamW && dist > 0.5f && dist < 10000.0f) {
+                    // RODIZIO LOS (auditoria 16/09, hang 02:44): 5 raycasts por
+                    // entidade é o custo que estoura o ciclo (1438ms com 86).
+                    // Perto (<25m) = todo ciclo; longe = 1 de 3 ciclos. A
+                    // histerese segura a cor no meio — sem pisca-pisca.
+                    if (Config::bVisibleCheck && hasCamW && dist > 0.5f && dist < 10000.0f &&
+                        (dist < 25.0f || (((s_losCursor + n) % 3) == 0))) {
                         Vec3 pts[5];
                         pts[0] = { bb.center.x, bb.center.y + bb.extents.y, bb.center.z }; // cabeca
                         pts[1] = bb.center;                                                 // peito
@@ -1617,7 +1622,9 @@ namespace Mono {
                 }
             }
             // Broadphase 2D: sem distancia valida nao ha LOS (igual ao 3D).
-            if (Config::bVisibleCheck && hasCamW && dist > 0.5f && dist < 10000.0f) {
+            // RODIZIO (igual ao 3D): longe = 1 de 3 ciclos, perto todo ciclo.
+            if (Config::bVisibleCheck && hasCamW && dist > 0.5f && dist < 10000.0f &&
+                (dist < 25.0f || (((s_losCursor + n) % 3) == 0))) {
                 Vec3 pts[5];
                 pts[0] = wh; // cabeca (olho)
                 pts[1] = { (wh.x + wf.x) * 0.5f, wh.y + (wf.y - wh.y) * 0.25f, (wh.z + wf.z) * 0.5f }; // peito
@@ -1828,10 +1835,19 @@ namespace Mono {
                     Sleep(500);
                     continue;
                 }
+                // AUDITORIA 16/09 (hang 02:44, PERF 1438ms): BuildEsp inteiro
+                // (posicao+skeleton+LOS) rodava no MESMO ciclo. Com 86 zumbis,
+                // o ciclo estourava 1.4s e o ritmo adaptativo so reagia DEPOIS.
+                // Novo ritmo: posicao+skeleton TODO ciclo (barato, ~2ms), LOS
+                // pesado (5 raycasts) em RODIZIO: 1/3 das entidades por ciclo.
+                // Cada entidade ganha LOS real a cada ~100ms — imperceptivel,
+                // e o pico de invokes cai 3x. Histerese segura a cor no meio.
                 BuildEsp();
                 PiFlush(false); // agregado [PI-CALL] 1x/5s (so sai se fail>0 ou >500us)
                 // Adapta pelo custo medido no ciclo (s.espMs, media movel).
-                int want = (s.espMs > 25.0f) ? 66 : (s.espMs < 12.0f ? 33 : 50);
+                // Teto duro: ciclo >100ms = respira 200ms (antes o max era 66ms
+                // e o hang vinha com ciclo de 1438ms sem freio).
+                int want = (s.espMs > 100.0f) ? 200 : (s.espMs > 25.0f) ? 66 : (s.espMs < 12.0f ? 33 : 50);
                 if (want != s_sleepMs) {
                     s_sleepMs = want;
                     Log::Infof("[PERF] ciclo %.1fms -> intervalo %dms.", (double)s.espMs, want);
