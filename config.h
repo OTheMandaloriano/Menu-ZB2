@@ -67,24 +67,26 @@ namespace Config {
     extern float fRollMult;
 
     // ---- VISUAL / Zumbis ----
-    extern bool  bZombieEsp;      // master do ESP (worker + draw)
-    extern bool  bZombieBoxShow;  // R4: Box tem flag propria (desmarca so o box)
+    extern bool  bZombieEsp;        // master do ESP (worker + draw)
+    extern bool  bZombieBoxShow;    // Box tem flag propria (desmarca so o box)
     extern int   iZombieBox;        // 0=2D 1=3D 2=Corners
     extern bool  bZombieName;
     extern bool  bZombieDist;
-    extern bool  bZombieHp;
-    extern bool  bZombiePct;      // % arrastavel independente (P5)
-    extern float fPctX, fPctY;    // offset do % em relacao a ancora
+    extern bool  bZombieHp;         // barra de vida
+    extern bool  bZombiePct;        // % arrastavel independente
+    extern float fPctX, fPctY;      // offset do % em relacao a ancora
     extern bool  bZombieSkeleton;
     extern bool  bZombieSnap;
     extern bool  bZombieHeadDot;
-    extern bool  bZombieClass;      // mostra classe (Comum/Riot/Queen/Reaper)
+    extern bool  bZombieClass;      // mostra classe (tipo real via type+20, ciclo 6)
+    extern int   iSnapFrom;         // 0=Base 1=Topo 2=Centro (origem da snapline)
+    extern bool  bEspVisibleOnly;   // filtro: so desenha visiveis (custo zero)
     extern float colZombieClass[4]; // cor da classe
-    extern float colZombieSkel[4];  // cor propria do Skeleton (spec §3.2)
+    extern float colZombieSkel[4];  // cor propria do Skeleton
     extern float colZombieSnap[4];  // cor propria da Linha
     extern float colZombieDot[4];   // cor propria do HeadDot
-    extern float colZombieVis[4];
-    extern float colZombieInv[4];
+    extern float colZombieVis[4];   // cor do box/nome quando visivel
+    extern float colZombieInv[4];   // cor do box/nome quando oculto
     extern float colZombieNameVis[4];
     extern float colZombieNameInv[4];
     extern float colZombieDistVis[4];
@@ -101,21 +103,45 @@ namespace Config {
     extern bool  bAllySkeleton;
     extern bool  bAllySnap;
     extern bool  bAllyHeadDot;
-    extern float colAllyVis[4];     // azul por padrao
-    extern float colAllyInv[4];
+    extern float colAllyVis[4];     // azul por padrao (unica cor â€” aliado sempre visivel)
 
-    // ---- VISUAL / Chams + Itens ----
+    // ---- VISUAL / Chams ----
     extern bool  bChams;
     extern float colChamsVis[4];
     extern float colChamsInv[4];
+
+    // ---- VISUAL / Itens ----
     extern bool  bItemEsp;
     extern bool  bItemWeapons;
     extern bool  bItemRare;
     extern bool  bItemAmmo;
     extern bool  bItemSupply;
-    extern bool  bPoiEsp;           // helicoptero/chefes/missao
-    extern float colItem[4];
+    extern float colItem[4];        // cor Armas (default laranja)
+    extern float colItemRare[4];    // cor Raros (roxo)
+    extern float colItemAmmo[4];    // cor Municao (cinza)
+    extern float colItemSupply[4];  // cor Suprimento (verde)
     extern float fItemRadius;
+
+    // ---- VISUAL / POI ----
+    extern bool  bPoiEsp;           // master POI
+    extern bool  bPoiHeli;
+    extern bool  bPoiBoss;
+    extern bool  bPoiMission;
+    extern bool  bPoiWave;
+    extern bool  bPoiLootFix;
+    extern bool  bPoiBench;
+    extern bool  bPoiFire;
+    extern bool  bPoiShop;
+    extern bool  bPoiRespawn;
+    extern float colPoiHeli[4];
+    extern float colPoiBoss[4];
+    extern float colPoiMission[4];
+    extern float colPoiWave[4];
+    extern float colPoiLootFix[4];
+    extern float colPoiBench[4];
+    extern float colPoiFire[4];
+    extern float colPoiShop[4];
+    extern float colPoiRespawn[4];
 
     // ---- VISUAL / Preview interativo (drag-and-drop) ----
     // Fixos: Box, Skeleton, HeadDot, Snapline. Arrastaveis: Nome, Dist, Vida.

@@ -75,7 +75,7 @@ namespace Config {
     float fRollMult = 1.5f;
 
     bool  bZombieEsp = false;
-    bool  bZombieBoxShow = true;   // R4: Box ligada por padrao
+    bool  bZombieBoxShow = true;
     int   iZombieBox = 0;
     bool  bZombieName = true;
     bool  bZombieDist = true;
@@ -86,6 +86,8 @@ namespace Config {
     bool  bZombieSnap = false;
     bool  bZombieHeadDot = false;
     bool  bZombieClass = true;
+    int   iSnapFrom = 0;           // 0=Base 1=Topo 2=Centro
+    bool  bEspVisibleOnly = false;  // filtro: so desenha visiveis
     float colZombieClass[4] = { 1, 0.85f, 0.2f, 1 };
     float colZombieSkel[4] = { 0, 1, 1, 1 };
     float colZombieSnap[4] = { 0, 1, 0, 1 };
@@ -108,19 +110,41 @@ namespace Config {
     bool  bAllySnap = false;
     bool  bAllyHeadDot = false;
     float colAllyVis[4] = { 0.2f, 0.5f, 1.0f, 1 };
-    float colAllyInv[4] = { 0.1f, 0.25f, 0.6f, 1 };
 
     bool  bChams = false;
     float colChamsVis[4] = { 1, 0, 0, 1 };
     float colChamsInv[4] = { 1, 1, 0, 1 };
+
     bool  bItemEsp = false;
     bool  bItemWeapons = true;
     bool  bItemRare = true;
     bool  bItemAmmo = true;
     bool  bItemSupply = true;
-    bool  bPoiEsp = true;
     float colItem[4] = { 1, 0.85f, 0.2f, 1 };
+    float colItemRare[4] = { 0.7f, 0.2f, 1, 1 };
+    float colItemAmmo[4] = { 0.7f, 0.7f, 0.7f, 1 };
+    float colItemSupply[4] = { 0.2f, 1, 0.4f, 1 };
     float fItemRadius = 150.0f;
+
+    bool  bPoiEsp = true;
+    bool  bPoiHeli = true;
+    bool  bPoiBoss = true;
+    bool  bPoiMission = true;
+    bool  bPoiWave = true;
+    bool  bPoiLootFix = true;
+    bool  bPoiBench = true;
+    bool  bPoiFire = true;
+    bool  bPoiShop = true;
+    bool  bPoiRespawn = true;
+    float colPoiHeli[4]     = { 0, 0.8f, 1, 1 };
+    float colPoiBoss[4]     = { 1, 0.2f, 0.2f, 1 };
+    float colPoiMission[4]  = { 1, 1, 0, 1 };
+    float colPoiWave[4]     = { 1, 0.5f, 0, 1 };
+    float colPoiLootFix[4]  = { 0.6f, 0.9f, 0.3f, 1 };
+    float colPoiBench[4]    = { 0.8f, 0.6f, 0.2f, 1 };
+    float colPoiFire[4]     = { 1, 0.4f, 0, 1 };
+    float colPoiShop[4]     = { 0, 1, 0.6f, 1 };
+    float colPoiRespawn[4]  = { 0.5f, 0.5f, 1, 1 };
 
     float fNameX = 0.0f, fNameY = -16.0f;
     float fDistX = 0.0f, fDistY = 4.0f;
@@ -390,13 +414,6 @@ namespace GUI {
             } else model.preset = 0;
             s_editor.dirty = true;
         }
-        if (ImGui::GetContentRegionAvail().x >= 540.0f) ImGui::SameLine();
-        if (ImGui::Button("Salvar layout")) {
-            SaveLayoutDraft();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancelar")) EspLayout::Reset(s_editor, ReadLayout());
-        ImGui::TextDisabled("%s", s_editor.dirty ? "Rascunho: alteracoes ainda nao salvas" : "Layout salvo");
         if (s_cfgStatus[0]) ImGui::TextWrapped("%s", s_cfgStatus);
 
         float maxExtra = 0.0f;
@@ -463,7 +480,7 @@ namespace GUI {
             EspLayout::Normalize(model);
             auto content = LayoutContent(s_previewName, s_previewDistance, Config::fPreviewHp, 100.0f);
             auto candidate = EspLayout::Resolve(model, s_previewBox, s_previewViewport, content, LayoutStyle(content.health));
-            if (candidate.valid) { s_editor.dirty = true; model.preset = 0; }
+            if (candidate.valid) { s_editor.dirty = true; model.preset = 0; SaveLayoutDraft(); }
             else { model = beforeControls; _snprintf_s(s_cfgStatus, _TRUNCATE, "Sem espaco nessa combinacao. Amplie o canvas ou reduza o afastamento."); }
         }
         if (columns) ImGui::EndTable();
@@ -630,13 +647,15 @@ namespace GUI {
         JF(fAlongN); JF(fAlongD); JF(fAlongH); JF(fAlongP); JF(fGapN); JF(fGapD); JF(fGapH); JF(fGapP);
         JI(iOrderN); JI(iOrderD); JI(iOrderH); JI(iOrderP); JF(fBarLength); JF(fBarThickness);
         JB(bZombieSkeleton); JB(bZombieSnap); JB(bZombieHeadDot); JV(colZombieSkel); JV(colZombieSnap); JV(colZombieDot);
-        JB(bZombieClass); JV(colZombieClass);
+        JB(bZombieClass); JV(colZombieClass); JI(iSnapFrom); JB(bEspVisibleOnly);
         JV(colZombieVis); JV(colZombieInv); JV(colZombieNameVis); JV(colZombieNameInv);
         JV(colZombieDistVis); JV(colZombieDistInv); JV(colZombieHpVis); JV(colZombieHpInv);
         JB(bAllyEsp); JI(iAllyBox); JB(bAllyName); JB(bAllyDist); JB(bAllyHp);
-        JB(bAllySkeleton); JB(bAllySnap); JB(bAllyHeadDot); JV(colAllyVis); JV(colAllyInv);
+        JB(bAllySkeleton); JB(bAllySnap); JB(bAllyHeadDot); JV(colAllyVis);
         JB(bChams); JV(colChamsVis); JV(colChamsInv); JB(bItemEsp); JB(bItemWeapons);
-        JB(bItemRare); JB(bItemAmmo); JB(bItemSupply); JB(bPoiEsp); JV(colItem); JF(fItemRadius);
+        JB(bItemRare); JB(bItemAmmo); JB(bItemSupply); JV(colItem); JV(colItemRare); JV(colItemAmmo); JV(colItemSupply); JF(fItemRadius);
+        JB(bPoiEsp); JB(bPoiHeli); JB(bPoiBoss); JB(bPoiMission); JB(bPoiWave); JB(bPoiLootFix); JB(bPoiBench); JB(bPoiFire); JB(bPoiShop); JB(bPoiRespawn);
+        JV(colPoiHeli); JV(colPoiBoss); JV(colPoiMission); JV(colPoiWave); JV(colPoiLootFix); JV(colPoiBench); JV(colPoiFire); JV(colPoiShop); JV(colPoiRespawn);
         JF(fNameX); JF(fNameY); JF(fDistX); JF(fDistY); JF(fHpX); JF(fHpY);
         JI(iLayoutMode); JI(iLayoutSide); JF(fLayoutOffset); JF(fLayoutSpacing);
         JB(bSnapGrid); JF(fSnapSize); JB(bShowGuides); JB(bAlignList); JI(iListDir);
@@ -715,13 +734,15 @@ namespace GUI {
         LB(bZombieEsp); LB(bZombieBoxShow); LI(iZombieBox); LB(bZombieName); LB(bZombieDist); LB(bZombieHp); LB(bZombiePct); LF(fPctX); LF(fPctY); LI(iNameA); LI(iDistA); LI(iHpA); LI(iPctA); LF(fPropN); LF(fPropD); LF(fPropH); LF(fPropP);
         LI(iSideN); LI(iSideD); LI(iSideH); LI(iSideP); LI(iAlinN); LI(iAlinD); LI(iAlinH); LI(iAlinP);
         LB(bZombieSkeleton); LB(bZombieSnap); LB(bZombieHeadDot); LV(colZombieSkel); LV(colZombieSnap); LV(colZombieDot);
-        LB(bZombieClass); LV(colZombieClass);
+        LB(bZombieClass); LV(colZombieClass); LI(iSnapFrom); LB(bEspVisibleOnly);
         LV(colZombieVis); LV(colZombieInv); LV(colZombieNameVis); LV(colZombieNameInv);
         LV(colZombieDistVis); LV(colZombieDistInv); LV(colZombieHpVis); LV(colZombieHpInv);
         LB(bAllyEsp); LI(iAllyBox); LB(bAllyName); LB(bAllyDist); LB(bAllyHp);
-        LB(bAllySkeleton); LB(bAllySnap); LB(bAllyHeadDot); LV(colAllyVis); LV(colAllyInv);
+        LB(bAllySkeleton); LB(bAllySnap); LB(bAllyHeadDot); LV(colAllyVis);
         LB(bChams); LV(colChamsVis); LV(colChamsInv); LB(bItemEsp); LB(bItemWeapons);
-        LB(bItemRare); LB(bItemAmmo); LB(bItemSupply); LB(bPoiEsp); LV(colItem); LF(fItemRadius);
+        LB(bItemRare); LB(bItemAmmo); LB(bItemSupply); LV(colItem); LV(colItemRare); LV(colItemAmmo); LV(colItemSupply); LF(fItemRadius);
+        LB(bPoiEsp); LB(bPoiHeli); LB(bPoiBoss); LB(bPoiMission); LB(bPoiWave); LB(bPoiLootFix); LB(bPoiBench); LB(bPoiFire); LB(bPoiShop); LB(bPoiRespawn);
+        LV(colPoiHeli); LV(colPoiBoss); LV(colPoiMission); LV(colPoiWave); LV(colPoiLootFix); LV(colPoiBench); LV(colPoiFire); LV(colPoiShop); LV(colPoiRespawn);
         LF(fNameX); LF(fNameY); LF(fDistX); LF(fDistY); LF(fHpX); LF(fHpY);
         LI(iLayoutMode); LI(iLayoutSide); LF(fLayoutOffset); LF(fLayoutSpacing);
         LB(bSnapGrid); LF(fSnapSize); LB(bShowGuides); LB(bAlignList); LI(iListDir);
@@ -814,7 +835,7 @@ namespace GUI {
         // Ciclo 2 (spec VISUAL §1+§3.13): toggles do menu mandam junto com o
         // layout (OR). Editor drag-drop continua valendo p/ posicao.
         if (Config::bZombieEsp) {
-            // R2 (spec VISUAL �3.13): 1 fonte � o MENU manda. Sem OR com o
+            // R2 (spec VISUAL �3.13): 1 fonte � o MENU manda. Sem OR com o
             // layout (desligar tem que desligar). O editor drag-drop continua
             // valendo p/ posicao; liga/desliga e aqui.
             const bool showSkel = Config::bZombieSkeleton;
@@ -825,7 +846,7 @@ namespace GUI {
             float H = io.DisplaySize.y;
             ImU32 colVis = ImGui::GetColorU32(ImVec4(Config::colZombieVis[0], Config::colZombieVis[1], Config::colZombieVis[2], Config::colZombieVis[3]));
             ImU32 colInv = ImGui::GetColorU32(ImVec4(Config::colZombieInv[0], Config::colZombieInv[1], Config::colZombieInv[2], Config::colZombieInv[3]));
-            // R3 (spec �3.2): 1 cor por elemento � Skeleton/Linha/Dot nao usam mais a cor do Box.
+            // R3 (spec �3.2): 1 cor por elemento � Skeleton/Linha/Dot nao usam mais a cor do Box.
             ImU32 colSkel = ImGui::GetColorU32(ImVec4(Config::colZombieSkel[0], Config::colZombieSkel[1], Config::colZombieSkel[2], Config::colZombieSkel[3]));
             ImU32 colSnap = ImGui::GetColorU32(ImVec4(Config::colZombieSnap[0], Config::colZombieSnap[1], Config::colZombieSnap[2], Config::colZombieSnap[3]));
             ImU32 colDot = ImGui::GetColorU32(ImVec4(Config::colZombieDot[0], Config::colZombieDot[1], Config::colZombieDot[2], Config::colZombieDot[3]));
@@ -836,7 +857,7 @@ namespace GUI {
                 ImU32 col = vis ? colVis : colInv;
                 float h = 0, w = 0, cx = 0, hy = 0, fy = 0;
                 ImVec2 r0, r1;
-                // R4 (spec �1): Box tem flag propria � bZombieEsp e master,
+                // R4 (spec �1): Box tem flag propria � bZombieEsp e master,
                 // bZombieBoxShow desenha o retangulo. Desmarcar Box nao mata o ESP.
                 const bool showBox = Config::bZombieBoxShow;
                 bool is3d = (layout.boxStyle == 1 && es[i].has3d);
@@ -966,18 +987,17 @@ namespace GUI {
                     envelope.min.y -= h * 0.10f;
                     envelope.max.x += w * 0.28f;
                 }
-                auto content = LayoutContent(es[i].name, es[i].dist, es[i].hp, es[i].maxHp);
-                auto style = LayoutStyle(content.health, vis);
-                // R5 (spec �1/�3.7): Classe na mesma linha do Nome (zero invoke
-                // novo � usa o nome ja resolvido; tipo real via type+20 no ciclo 6).
+                // FIX 1: Classe SUBSTITUI o Nome no LayoutContent — nunca AddText separado.
+                // Tipo real via type+20 no ciclo 6; ate la usa nome original ("Zombie").
+                const char* displayName = es[i].name;
+                char clsBuf[96];
                 if (Config::bZombieClass) {
-                    ImU32 colCls = ImGui::GetColorU32(ImVec4(Config::colZombieClass[0], Config::colZombieClass[1], Config::colZombieClass[2], Config::colZombieClass[3]));
-                    ImVec2 anchor = ImVec2((r0.x + r1.x) * 0.5f, hy - 14.0f);
-                    const char* cls = (es[i].hp >= es[i].maxHp && es[i].maxHp > 200.0f) ? "CHEFAO" : "Zumbi";
-                    char cb[96]; _snprintf_s(cb, _TRUNCATE, "%s [%s]", es[i].name, cls);
-                    ImVec2 tsz = ImGui::CalcTextSize(cb);
-                    dl->AddText(ImVec2(anchor.x - tsz.x * 0.5f, anchor.y - tsz.y), colCls, cb);
+                    const char* cls = "Zumbi"; // placeholder ate type+20 real (ciclo 6)
+                    _snprintf_s(clsBuf, _TRUNCATE, "%s [%s]", es[i].name, cls);
+                    displayName = clsBuf;
                 }
+                auto content = LayoutContent(displayName, es[i].dist, es[i].hp, es[i].maxHp);
+                auto style = LayoutStyle(content.health, vis);
                 auto geometry = EspLayout::Resolve(layout, envelope, { ImVec2(2.0f, 2.0f), ImVec2(io.DisplaySize.x - 2.0f, io.DisplaySize.y - 2.0f) }, content, style, true);
                 EspLayout::Draw(dl, geometry, content, style);
             }
@@ -1055,13 +1075,13 @@ namespace GUI {
                 ImGui::EndTabItem();
             }
             // ---- 2 VISUAL ----
-            // A05: UM EndTabItem incondicional por BeginTabItem (transicao nao controla pareamento).
             if (ImGui::BeginTabItem("VISUAL")) {
-                DrawLayoutEditor();
-                // Ciclo 2 (spec VISUAL §1): toggles por elemento do ZUMBI —
-                // 1 linha = 1 checkbox + 1 cor (padrao CS2_External). O editor
-                // drag-drop acima continua valendo p/ posicao; aqui liga/desliga.
-                if (ImGui::CollapsingHeader("Zumbis", ImGuiTreeNodeFlags_DefaultOpen)) {
+                // FIX 2: funcoes rapidas no topo, Layout Avancado colapsado no fundo.
+                // ======== ZUMBIS ========
+                ImGui::Checkbox("ESP Zumbis", &Config::bZombieEsp); ImGui::SameLine();
+                ImGui::TextDisabled("(master)");
+                if (Config::bZombieEsp) {
+                    static const char* kSnapFrom[] = { "Base", "Topo", "Centro" };
                     ImGui::Checkbox("Box", &Config::bZombieBoxShow);
                     ImGui::SameLine(); ImGui::SetNextItemWidth(110.0f);
                     ImGui::Combo("Tipo##ZB", &Config::iZombieBox, kBoxType, 3);
@@ -1070,59 +1090,89 @@ namespace GUI {
                     ImGui::SameLine(); ImGui::ColorEdit4("##CorNomeZ", Config::colZombieNameVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                     ImGui::Checkbox("Distancia", &Config::bZombieDist);
                     ImGui::SameLine(); ImGui::ColorEdit4("##CorDistZ", Config::colZombieDistVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::Checkbox("Vida", &Config::bZombieHp);
+                    ImGui::Checkbox("Barra", &Config::bZombieHp);
+                    ImGui::SameLine(); ImGui::Checkbox("%%##pct", &Config::bZombiePct);
                     ImGui::SameLine(); ImGui::ColorEdit4("##CorVidaZ", Config::colZombieHpVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                     ImGui::Checkbox("Skeleton", &Config::bZombieSkeleton);
                     ImGui::SameLine(); ImGui::ColorEdit4("##CorSkelZ", Config::colZombieSkel, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                     ImGui::Checkbox("Linha", &Config::bZombieSnap);
+                    ImGui::SameLine(); ImGui::SetNextItemWidth(90.0f);
+                    ImGui::Combo("##SnapOrig", &Config::iSnapFrom, kSnapFrom, 3);
                     ImGui::SameLine(); ImGui::ColorEdit4("##CorLinhaZ", Config::colZombieSnap, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                     ImGui::Checkbox("HeadDot", &Config::bZombieHeadDot);
                     ImGui::SameLine(); ImGui::ColorEdit4("##CorDotZ", Config::colZombieDot, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                     ImGui::Checkbox("Classe", &Config::bZombieClass);
                     ImGui::SameLine(); ImGui::ColorEdit4("##CorClasseZ", Config::colZombieClass, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::Separator();
+                    ImGui::Checkbox("Visible Check", &Config::bVisibleCheck);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##Vis", Config::colZombieVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##Inv", Config::colZombieInv, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::Checkbox("Somente visiveis", &Config::bEspVisibleOnly);
+                    ImGui::SliderFloat("Dist max", &Config::fMaxDistance, 10, 500, "%.0fm");
                 }
-                if (ImGui::CollapsingHeader("Cores, aliados e itens")) {
-                ImGui::Text("Cor Visivel:"); ImGui::SameLine(); ImGui::ColorEdit4("##Cor Visivel", Config::colZombieVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                ImGui::Text("Cor Invisivel:"); ImGui::SameLine(); ImGui::ColorEdit4("##Cor Invisivel", Config::colZombieInv, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                 ImGui::Separator();
-                // Ciclo 1 (spec §4.1): ESP Aliados vira master — resto da seção
-                // (sempre visíveis, sem LOS/Somente/Dist por decisão PvE coop).
-                if (!Config::bAllyEsp) {
-                    ImGui::Checkbox("ESP Aliados (azul)", &Config::bAllyEsp);
-                } else {
-                    ImGui::Checkbox("ESP Aliados (azul)", &Config::bAllyEsp);
+                // ======== ALIADOS ========
+                ImGui::Checkbox("ESP Aliados", &Config::bAllyEsp); ImGui::SameLine();
+                ImGui::TextDisabled("(azul, sempre visivel)");
+                if (Config::bAllyEsp) {
                     ImGui::Combo("Box Aliado", &Config::iAllyBox, kBoxType, 3);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##CorAlly", Config::colAllyVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                     ImGui::Checkbox("Nome##A", &Config::bAllyName); ImGui::SameLine();
                     ImGui::Checkbox("Dist##A", &Config::bAllyDist); ImGui::SameLine();
                     ImGui::Checkbox("Vida##A", &Config::bAllyHp);
-                    ImGui::Text("Aliado Visivel:"); ImGui::SameLine(); ImGui::ColorEdit4("##Aliado Visivel", Config::colAllyVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::Text("Aliado Invisivel:"); ImGui::SameLine(); ImGui::ColorEdit4("##Aliado Invisivel", Config::colAllyInv, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::Checkbox("Skeleton##A", &Config::bAllySkeleton); ImGui::SameLine();
+                    ImGui::Checkbox("Linha##A", &Config::bAllySnap); ImGui::SameLine();
+                    ImGui::Checkbox("HeadDot##A", &Config::bAllyHeadDot);
                 }
                 ImGui::Separator();
-                // Ciclo 1 (spec §4.1): Chams sem master — o próprio checkbox é o
-                // enable (XQZ pode ficar ligado com ESP desligado).
-                if (!Config::bChams) {
-                    ImGui::Checkbox("Chams (corpo)", &Config::bChams);
-                } else {
-                    ImGui::Checkbox("Chams (corpo)", &Config::bChams);
-                    ImGui::Text("Chams Vis:"); ImGui::SameLine(); ImGui::ColorEdit4("##Chams Vis", Config::colChamsVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::Text("Chams Inv:"); ImGui::SameLine(); ImGui::ColorEdit4("##Chams Inv", Config::colChamsInv, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                // ======== CHAMS ========
+                ImGui::Checkbox("Chams (corpo)", &Config::bChams);
+                if (Config::bChams) {
+                    ImGui::SameLine(); ImGui::ColorEdit4("##ChVis", Config::colChamsVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##ChInv", Config::colChamsInv, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                 }
-                // Ciclo 1 (spec §4.1): ESP Itens vira master — sub-itens só
-                // aparecem com ele ligado (menos poluição, padrão Gamesense).
-                if (!Config::bItemEsp) {
-                    ImGui::Checkbox("ESP Itens", &Config::bItemEsp);
-                } else {
-                    ImGui::Checkbox("ESP Itens", &Config::bItemEsp);
-                    ImGui::Checkbox("Armas", &Config::bItemWeapons); ImGui::SameLine();
-                    ImGui::Checkbox("Raros", &Config::bItemRare); ImGui::SameLine();
-                    ImGui::Checkbox("Municao", &Config::bItemAmmo); ImGui::SameLine();
-                    ImGui::Checkbox("Suprimento", &Config::bItemSupply);
-                    ImGui::Checkbox("Pontos (heli/chefe/missao)", &Config::bPoiEsp);
-                    ImGui::Text("Cor Item:"); ImGui::SameLine(); ImGui::ColorEdit4("##Cor Item", Config::colItem, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                ImGui::Separator();
+                // ======== ITENS ========
+                ImGui::Checkbox("ESP Itens", &Config::bItemEsp);
+                if (Config::bItemEsp) {
+                    ImGui::Checkbox("Armas", &Config::bItemWeapons);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##CArma", Config::colItem, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::SameLine(); ImGui::Checkbox("Raros", &Config::bItemRare);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##CRaro", Config::colItemRare, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::Checkbox("Municao", &Config::bItemAmmo);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##CMunic", Config::colItemAmmo, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::SameLine(); ImGui::Checkbox("Suprimento", &Config::bItemSupply);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##CSupri", Config::colItemSupply, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                     ImGui::SliderFloat("Raio Item", &Config::fItemRadius, 10, 500, "%.0fm");
                 }
-                } // fecha CollapsingHeader "Cores, aliados e itens"
+                ImGui::Separator();
+                // ======== PONTOS / MUNDO ========
+                ImGui::Checkbox("ESP Pontos / Mundo", &Config::bPoiEsp);
+                if (Config::bPoiEsp) {
+                    ImGui::Checkbox("Helicoptero", &Config::bPoiHeli);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##PHeli", Config::colPoiHeli, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::SameLine(); ImGui::Checkbox("Chefao", &Config::bPoiBoss);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##PBoss", Config::colPoiBoss, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::Checkbox("Missao", &Config::bPoiMission);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##PMiss", Config::colPoiMission, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::SameLine(); ImGui::Checkbox("Onda/Wave", &Config::bPoiWave);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##PWave", Config::colPoiWave, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::Checkbox("Loot fixo", &Config::bPoiLootFix);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##PLoot", Config::colPoiLootFix, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::SameLine(); ImGui::Checkbox("Bancadas", &Config::bPoiBench);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##PBench", Config::colPoiBench, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::Checkbox("Fogueira", &Config::bPoiFire);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##PFire", Config::colPoiFire, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::SameLine(); ImGui::Checkbox("Mercador", &Config::bPoiShop);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##PShop", Config::colPoiShop, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::Checkbox("Respawn", &Config::bPoiRespawn);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##PResp", Config::colPoiRespawn, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                }
+                ImGui::Separator();
+                // ======== LAYOUT AVANCADO (colapsado) ========
+                if (ImGui::CollapsingHeader("Avancado (layout drag-drop)")) {
+                    DrawLayoutEditor();
+                }
                 ImGui::EndTabItem();
             }
             // ---- 3 MISC (sempre 3a aba) ----
