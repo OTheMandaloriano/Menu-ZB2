@@ -183,6 +183,25 @@ print com ~40 boxes (metade fora da tela, atrás da câmera).
 - Crash 03:05: mesmo stack LOD `UpdatePhysics` offset `0x19eee86` (6º dump).
   O LOD crasha sozinho sob carga; nosso trabalho é não estar invocando junto.
 
+## Crash 03:15 no tiro em multidão — stack novo + oscilação (16/09)
+
+- Stack managed NOVO (7º dump, outro modo): `PlayerArms:ShootGun` →
+  `PhysicalGun:Shoot` → `ShootSingleProjectile` → `PlayerShot` →
+  `OnPlayerShot` → `StartCollidersByLine` → `StartColliding` →
+  `ZombieLimbColliders:SetColliding` → `Collider:set_enabled` → AV
+  `0xc0000005` offset `0x19eee86` (mesma região LOD, outro gatilho).
+  O TIRO liga colliders em massa; nosso raycast testa os mesmos colliders
+  na mesma janela = corrida.
+- `[PI-CALL] raycast n=6119 fail=700 seh dt_avg 2358µs` → `n=340 fail=340`
+  (100% SEH no fim) + `[PERF] ciclo 1438ms`. PhysX saturado: raycast de
+  5µs foi pra 2358µs.
+- Oscilação verde/vermelho: histerese de 3 ciclos com ciclo de 200ms–1.4s
+  nunca estabiliza. Fix: verde exige 5 ciclos, vermelho 3 (assimetria
+  intencional), entidade nova nasce vermelha.
+- Fix (commit `727e105`, DLL `670FF792…` 612864 bytes): histerese dura +
+  budget 96→64 raycasts/ciclo.
+- Item 0 segue fechado: crash log `size 741376` = `SizeOfImage 0xB5000` do PE.
+
 ## Anomalias para REVALIDAR (não corrigir neste ciclo)
 
 - `stam=-20` fixo e `eyeY/footY` congelados no `Mono live` — cheiro de campo com offset
