@@ -191,7 +191,11 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
                             g_depthW = td.Width; g_depthH = td.Height; g_depthFmt = stageFmt;
                         }
                     }
-                    if (g_depthStaging && td.SampleDesc.Count == 1) {
+                    // Causa B (item 14b): CopyResource a cada Present = GPU ocupada
+                    // justo quando o LOD recalcula celulas. Throttle 1/3 Presents
+                    // (depth ja e fallback — Raycast e a primaria). Sem custo visual.
+                    static int s_copyDiv = 0;
+                    if (g_depthStaging && td.SampleDesc.Count == 1 && ((++s_copyDiv % 3) == 0)) {
                         // Somente nao-MSAA aqui (CopyResource exige mesma amostragem).
                         g_pContext->CopyResource(g_depthStaging, depthTex);
                         float vw = (nvp > 0 && vp[0].Width > 0) ? vp[0].Width : (float)td.Width;
