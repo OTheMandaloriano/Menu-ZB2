@@ -84,6 +84,28 @@ Comandos (só leitura, nenhum invoke/escrita no combate):
   DLL do rebuild. Init limpo (`LOS OK`, `[BUDGET] 0/200`). Jogo PID 21952.
 - Pendente: 10 kills multidão 40+ com `[PI-CALL]` discriminado no log.
 
+## Item 0 SizeOfImage fantasma — causa raiz: git corrompia a DLL
+
+- Crash logs 01:53 e 02:00 reportavam `size: 741376`; disco = 611840.
+- Prova: `git cat-file -p <blob DLL>` = 1233214 bytes (blob maior que o
+  arquivo!) e `git cat-file -s` = 611840. Com `core.autocrlf=true` e sem
+  `.gitattributes`, o git aplicava conversão CRLF no binário na ida/volta:
+  `SizeOfImage` 611840 virava 741376 no módulo carregado. Não eram "4 cópias"
+  nem injetor errado — `FindDll` só tem 1 DLL no disco (varredura completa:
+  projeto + Documents + Desktop + Downloads).
+- Fix (commit `63027ef`): DLL e injector.exe REMOVIDOS do git
+  (`git rm --cached`) + `.gitignore` com `build/ *.obj *.ipdb *.tlog
+  *.dll.old *.iobj *.pdb`. Fingerprint passa a ser SHA256 +
+  `injector_state.txt` (size-mtime), nunca git.
+- Injetor agora loga `DLL caminho[N]: <PATH> (SizeOfImage=0x...)` por inject
+  (função `PeSizeOfImage`, lê do PE no disco antes do inject).
+- `SceneAlive` real: além do loader, checa `MainCamera.instance` +
+  `cam+32 != null` + lista de zumbis com size 0..512. Transição (kill =
+  Destroy, loading = troca de cena) = worker dorme 500ms.
+- DLL `CD3AF6E1…` 612352 bytes (rebuild pós-remoção) + injector rebuildado.
+- Terceiro modo mapeado: hang-kill, AV-kill, AV-loading — comum: invoke sem
+  vivacidade em transição. `Raycast n=360 fail=140 seh` no loading confirma.
+
 ## Anomalias para REVALIDAR (não corrigir neste ciclo)
 
 - `stam=-20` fixo e `eyeY/footY` congelados no `Mono live` — cheiro de campo com offset
