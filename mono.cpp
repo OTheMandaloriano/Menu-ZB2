@@ -771,6 +771,16 @@ namespace Mono {
         float dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
         float dist = sqrtf(dx * dx + dy * dy + dz * dz);
         if (!(dist > 0.5f) || !(dist < 10000.0f)) return -1;
+        // AUDITORIA 16/09 (crash 04:20, offset 0x19f43c7, SEM frame managed):
+        // o AV acontece DENTRO do PhysX, fora do nosso __try. A defesa e NAO
+        // invocar quando o PhysX esta sob carga: se o dt medio do raycast
+        // passar de 500us, o PhysX esta saturado — pula o ponto (sem dado =
+        // mantem a cor) em vez de empilhar invoke em cima de PhysX travado.
+        // Limite UC: raycast sao custa <50us; >500us = PhysX em UpdatePhysics.
+        if (s_piRay.n >= 10 && (s_piRay.dt_us / s_piRay.n) > 500) {
+            s_losSkipped++;
+            return -1;
+        }
         long long t0 = PiNow();
         bool piOk = true;
         Vec3 dir = { dx / dist, dy / dist, dz / dist };
@@ -1471,49 +1481,34 @@ namespace Mono {
                     // descartada; snapshot segura a cor anterior no render).
                     // NOTA: o gate on-screen ja rodou acima (centroide dos 8
                     // cantos); aqui entra direto no LOS real.
-                    // SEM RODIZIO (auditoria 16/09, pisca-pisca): o rodizio 1/3
-                    // alternava a cor entre ciclos — entidade longe piscava
-                    // verde/vermelho a cada 3 ciclos. Custo controlado pelo
-                    // budget (64 raycasts/ciclo) + orcamento por ponto: sem
-                    // saldo = sem dado = mantem a cor (nunca verde forcado).
-                    // Padrao UC/Unity: 1 raycast cabeca->camera por entidade,
-                    // QueryTriggerInteraction.Ignore, layer so de mundo.
+                    // PADRAO UC (auditoria 16/09, crash 04:20): 1 raycast por
+                    // entidade (CABECA), nao 5. 5 raycasts x N zumbis saturam o
+                    // PhysX (dt 5us -> 2358us) e o AV acontece DENTRO do PhysX,
+                    // fora do nosso __try. 1 raio na cabeca = decisao binaria
+                    // (ocluido/exposto), histerese estabiliza. Custo cai 5x.
                     if (Config::bVisibleCheck && hasCamW && dist > 0.5f && dist < 10000.0f) {
-                        Vec3 pts[5];
-                        pts[0] = { bb.center.x, bb.center.y + bb.extents.y, bb.center.z }; // cabeca
-                        pts[1] = bb.center;                                                 // peito
-                        pts[2] = { bb.center.x, bb.center.y - bb.extents.y * 0.35f, bb.center.z }; // quadril
-                        pts[3] = { bb.center.x - bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z }; // coxaL
-                        pts[4] = { bb.center.x + bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z }; // coxaR
-                        // Camada 2+3 (briefing §6): multi-point tri-estado + decay.
-                        // h=expostos, o=ocluidos, u=sem dado. Regra:
-                        // - tem ocluido (o>0) e nenhum exposto -> vermelho;
-                        // - tem exposto (h>=2 ou cabeca) -> verde;
-                        // - so sem-dado (u==5) -> mantem cor anterior (skip).
-                        // Sem dado NUNCA vira verde: era o pisca-pisca/churn.
+                        Vec3 head = { bb.center.x, bb.center.y + bb.extents.y, bb.center.z };
                         {
                             int h = 0, o = 0, u = 0; bool he = false;
                             float dummy;
-                            for (int pi = 0; pi < 5; ++pi) {
-                                int v = -1;
-                                if (s_losOk) v = LosPointV(camW, pts[pi], &dummy);
-                                else if (mLinecast && s_lineArgs >= 2) v = LosPointLineV(camW, pts[pi]);
+                            int v = -1;
+                            if (s_losOk) v = LosPointV(camW, head, &dummy);
+                            else if (mLinecast && s_lineArgs >= 2) v = LosPointLineV(camW, head);
+                            else {
+                                float ndc = 0, uu = 0, vv = 0;
+                                bool hasNdc = BoneNdc(head, ndc, uu, vv);
+                                float scene = 0;
+                                bool hasDepth = hasNdc && DepthVisShim::Sample(uu, vv, scene);
+                                if (!hasDepth) v = -1;
+                                else if (scene >= 0.999f) v = 1;
                                 else {
-                                    float ndc = 0, uu = 0, vv = 0;
-                                    bool hasNdc = BoneNdc(pts[pi], ndc, uu, vv);
-                                    float scene = 0;
-                                    bool hasDepth = hasNdc && DepthVisShim::Sample(uu, vv, scene);
-                                    if (!hasDepth) v = -1;
-                                    else if (scene >= 0.999f) v = 1;
-                                    else {
-                                        float eps = 0.5f / (dist * dist + 1.0f) + 0.001f;
-                                        v = (ndc <= scene + eps) ? 1 : 0;
-                                    }
+                                    float eps = 0.5f / (dist * dist + 1.0f) + 0.001f;
+                                    v = (ndc <= scene + eps) ? 1 : 0;
                                 }
-                                if (v > 0) { h++; if (pi == 0) he = true; }
-                                else if (v == 0) o++;
-                                else u++;
                             }
+                            if (v > 0) { h = 5; he = true; }
+                            else if (v == 0) o = 5;
+                            else u = 5;
                             tmpEn.losHits = (u == 5) ? -1 : h;
                             if (u == 5) {
                                 tmpEn.losVis = LosStable(e, true, true); // skip: mantem cor
@@ -1634,29 +1629,27 @@ namespace Mono {
                 }
             }
             // Broadphase 2D: sem distancia valida nao ha LOS (igual ao 3D).
-            // SEM RODIZIO (igual ao 3D): custo controlado pelo budget.
+            // 1 RAYCAST NA CABECA (igual ao 3D): 5 pontos saturavam o PhysX.
             if (Config::bVisibleCheck && hasCamW && dist > 0.5f && dist < 10000.0f) {
-                Vec3 pts[5];
-                pts[0] = wh; // cabeca (olho)
-                pts[1] = { (wh.x + wf.x) * 0.5f, wh.y + (wf.y - wh.y) * 0.25f, (wh.z + wf.z) * 0.5f }; // peito
-                pts[2] = { (wh.x + wf.x) * 0.5f, wh.y + (wf.y - wh.y) * 0.5f, (wh.z + wf.z) * 0.5f };  // quadril
-                pts[3] = { (wh.x + wf.x) * 0.5f, wh.y + (wf.y - wh.y) * 0.75f, (wh.z + wf.z) * 0.5f }; // coxa
-                pts[4] = wf; // pes
+                Vec3 head = wh; // cabeca (olho)
                 // Tri-estado igual ao 3D (h=exposto, o=ocluido, u=sem dado).
                 int h = 0, o = 0, u = 0; bool he = false;
                 float dummy;
-                for (int pi = 0; pi < 5; ++pi) {
+                {
                     int v = -1;
-                    if (s_losOk) v = LosPointV(camW, pts[pi], &dummy);
-                    else if (mLinecast && s_lineArgs >= 2) v = LosPointLineV(camW, pts[pi]);
-                    else v = DepthExposed(pts[pi], dist) ? 1 : 0;
-                    if (v > 0) { h++; if (pi == 0) he = true; }
-                    else if (v == 0) o++;
-                    else u++;
+                    if (s_losOk) v = LosPointV(camW, head, &dummy);
+                    else if (mLinecast && s_lineArgs >= 2) v = LosPointLineV(camW, head);
+                    else v = DepthExposed(head, dist) ? 1 : 0;
+                    if (v > 0) { h = 5; he = true; }
+                    else if (v == 0) o = 5;
+                    else u = 5;
                     float ndc = 0, uu = 0, vv = 0;
-                    tmpEn.losDepth[pi] = BoneNdc(pts[pi], ndc, uu, vv) ? ndc : -1.0f;
+                    tmpEn.losDepth[0] = BoneNdc(head, ndc, uu, vv) ? ndc : -1.0f;
                 }
-                DepthDiagRow(pts, dist);
+                {
+                    Vec3 dpts[5] = { head, head, head, head, head };
+                    DepthDiagRow(dpts, dist);
+                }
                 tmpEn.losHits = (u == 5) ? -1 : h;
                 if (u == 5) tmpEn.losVis = LosStable(e, true, true); // skip: mantem cor
                 else if (o > 0 && h == 0 && !he) {
