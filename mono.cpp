@@ -1382,8 +1382,43 @@ namespace Mono {
                     if (nv < 6) return;
                     // Maos ja calculadas em CollectJoints (fix bugs 1-2, 4) — vale p/ 2D e 3D.
                     // s_skDist2 alimenta o gate de skeleton longe (sem invoke extra).
+                    // Kill-window melee: a entidade pode morrer ENTRE CollectJoints
+                    // (18 GetPos em bones) e os 5 raycasts do LOS. Revalida HP/
+                    // isAlive aqui; mudou = publica box+skeleton e pula o LOS
+                    // (mantem a cor anterior, sem invocar no objeto em Destroy).
                     s_skDist2 = hasCamW ? (dist * dist) : -1.0f;
                     CollectJoints(zo, cam, tmpEn);
+                    {
+                        float hp3 = 0; unsigned char alive3 = 0;
+                        __try {
+                            memcpy(&hp3, (char*)h + Off::ZH_amount, sizeof(hp3));
+                            memcpy(&alive3, (char*)h + Off::ZH_alive, 1);
+                        } __except (EXCEPTION_EXECUTE_HANDLER) { hp3 = 0; alive3 = 0; }
+                        if (!alive3 || hp3 <= 0 || hp3 != hp) {
+                            s_ghostDead++;
+                            tmpEn.losVis = LosStable(e, true, true); // skip: mantem cor
+                            tmpEn.losHits = -1;
+                            EspEntry& en = tmp[n++];
+                            memcpy(en.name, tmpEn.name, sizeof(en.name));
+                            en.has3d = false;
+                            en.dist = dist;
+                            memcpy(en.px, tmpEn.px, sizeof(en.px));
+                            memcpy(en.py, tmpEn.py, sizeof(en.py));
+                            memcpy(en.pv, tmpEn.pv, sizeof(en.pv));
+                            en.skN = tmpEn.skN;
+                            memcpy(en.skX, tmpEn.skX, sizeof(en.skX));
+                            memcpy(en.skY, tmpEn.skY, sizeof(en.skY));
+                            memcpy(en.skV, tmpEn.skV, sizeof(en.skV));
+                            en.has3d = true;
+                            en.losVis = tmpEn.losVis;
+                            en.losHits = tmpEn.losHits;
+                            en.ent = e; en.ex = bb.extents.x; en.ey = bb.extents.y; en.ez = bb.extents.z;
+                            en.headX = en.headY = en.footX = en.footY = 0;
+                            en.hp = hp; en.maxHp = mx;
+                            en.onScreen = true; en.isAlly = false;
+                            return;
+                        }
+                    }
                     // Item 14/Passo 5: depth buffer nos 5 pontos (cabeca/peito/quadril/coxas).
                     // Raycast (LosMulti) = fallback se depth indisponivel.
                     // Auditoria: DEPTH-ROW 1x no caminho 3D + UV vs viewport real.
