@@ -51,6 +51,24 @@ Comandos (só leitura, nenhum invoke/escrita no combate):
 - Fix correspondente: snapshot double-buffer sem lock no Present
   (commit `8faf6d3`, DLL `C128BC8F…`, item 1 do PROMPT P0-BISSECÇÃO §4).
 
+## Hang 01:39–01:43 (PID 18704, DLL C128BC8F) + fix kill-window melee
+
+- Tail: `[PI-CALL] raycast n=11495–12730 fail=100% seh dt_avg 39–66µs`
+  (12k unwinds/5s) → worker viva invocando, Present travou (delta CPU ~0,5s,
+  50 threads em Wait). Snapshot sem lock inocentado como causa.
+- Diagnóstico: kill-window do `7650f54` estreita demais — cobre topo do ciclo,
+  mas o zumbi morre ENTRE `CollectJoints` (18 GetPos) e os 5 raycasts do LOS.
+  `hp2 != hp` ainda skippa dano normal (60→40→20), aceitável: entidade em
+  transição sai do LOS por 1 ciclo e volta (histerese segura a cor).
+- CE §2 no hang: bridge vivo, `enum_modules` OK (104, `kiero size 688128`),
+  53 threads, `ASM_COUNT=142`, `CLASSES=1358`, nomes indisponíveis nesta
+  build do CE (limitação registrada, sem invoke no hang).
+- Fix (commit `acff2c8`, DLL `4B170D90…` 611840 bytes): revalidação
+  HP/isAlive entre skeleton e LOS no caminho 3D; morrendo = publica
+  box+skeleton e pula os 5 raycasts (cor anterior mantida).
+- `injector_state.txt` = `611840-134340076975175614` = DLL do fix ✅.
+- Jogo PID 18904 + injetor disparado; pendente: 10 kills multidão 40+.
+
 ## Anomalias para REVALIDAR (não corrigir neste ciclo)
 
 - `stam=-20` fixo e `eyeY/footY` congelados no `Mono live` — cheiro de campo com offset
