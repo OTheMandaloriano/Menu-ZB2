@@ -1314,6 +1314,17 @@ namespace Mono {
             unsigned char alive = 0; // Fix A: isAlive (morte dura ~1s com HP>0 = fantasma)
             __try { memcpy(&alive, (char*)h + Off::ZH_alive, 1); } __except (EXCEPTION_EXECUTE_HANDLER) {}
             if (!alive) { s_ghostDead++; return; }
+            // Kill-window (item 14b): HP/isAlive lidos no topo do ciclo, mas o
+            // zumbi pode morrer ENTRE a leitura e o invoke (soco = 1 frame).
+            // Revalida imediatamente antes de qualquer invoke na entidade:
+            // mudou de estado = skip, sem tocar no objeto (wrapper pode estar
+            // em Destroy). Custo: 2 memcpy com SEH, zero invoke.
+            float hp2 = 0; unsigned char alive2 = 0;
+            __try {
+                memcpy(&hp2, (char*)h + Off::ZH_amount, sizeof(hp2));
+                memcpy(&alive2, (char*)h + Off::ZH_alive, 1);
+            } __except (EXCEPTION_EXECUTE_HANDLER) { return; }
+            if (!alive2 || hp2 <= 0 || hp2 != hp) { s_ghostDead++; return; }
             void* zo = ReadP(e, Off::Z_obj);
             if (!zo) return;
             // Anti-horda: teto de 96 entidades por ciclo. O resto fica p/ o
