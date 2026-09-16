@@ -1726,10 +1726,12 @@ namespace Mono {
         }
     }
 
-    // Watchdog anti-hang no respawn: se a cena trocou (morte do player) o
-    // Mono pode estar recarregando o domain enquanto a worker invoca. Sinais:
-    // imagem C# sumiu, ZombieLoader morto, ou camera sem posicao. Nesses casos
-    // a worker dorme 500ms e tenta de novo — nunca invoca no escuro.
+    // Watchdog anti-hang no respawn/loading (item 14b, 3 modos de crash com o
+    // mesmo denominador: invoke sem vivacidade em transicao). Checa TUDO que o
+    // ciclo precisa ANTES de qualquer invoke: imagem C#, ZombieLoader vivo,
+    // MainCamera.instance + cam+32 nao-nulo, lista de zumbis legivel. Falhou
+    // qualquer um = transicao (kill = Destroy, loading = troca de cena):
+    // worker dorme 500ms e tenta de novo — nunca invoca no escuro.
     static bool SceneAlive() {
         __try {
             if (!s_img || !s_dom) return false;
@@ -1741,6 +1743,22 @@ namespace Mono {
             if (!zl) return false;
             volatile char probe = 0;
             memcpy((void*)&probe, zl, 1);
+            // MainCamera.instance + cam+32 (a camera some no loading/respawn).
+            MonoClass* cMC = pClassFrom(s_img, "", "MainCamera");
+            if (!cMC) return false;
+            MonoClassField* fI = pFieldFrom(cMC, "instance");
+            if (!fI) return false;
+            void* mcObj = nullptr;
+            if (!StaticInstance(cMC, fI, mcObj) || !mcObj) return false;
+            void* cam = ReadP(mcObj, Off::MC_cam);
+            if (!cam) return false;
+            memcpy((void*)&probe, cam, 1);
+            // Lista de zumbis legivel (size dentro do teto).
+            void* list = ReadP(zl, Off::ZL_zombies);
+            if (!list) return false;
+            int size = 0;
+            memcpy(&size, (char*)list + Off::L_size, sizeof(size));
+            if (size < 0 || size > 512) return false;
             return true;
         } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
     }

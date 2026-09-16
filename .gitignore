@@ -1,0 +1,10 @@
+# Build output — nunca versionar binário (o git com core.autocrlf corrompe
+# a DLL na ida/volta: SizeOfImage 611840 virava 741376 no crash log).
+# Fingerprint por sessão: SHA256 + injector_state.txt (size-mtime), nunca git.
+build/
+*.obj
+*.ipdb
+*.tlog
+*.dll.old
+*.iobj
+*.pdb

@@ -120,6 +120,25 @@ static bool DllIs64(const std::wstring& path) {
 // ORIGEM: caminhos relativos ao exe do injetor; fallback: build\Release_x64.
 //   "Atualizada?": compara size+mtime com o registro da ultima injecao
 //   em %USERPROFILE%\Documents\ZB2 Menu\injector_state.txt.
+//   Item 0 (16/09): loga o PATH COMPLETO resolvido + SizeOfImage lido do PE.
+//   Se o crash log reportar outro SizeOfImage, o path aqui diz qual build entrou.
+static DWORD PeSizeOfImage(const std::wstring& path) {
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return 0;
+    IMAGE_DOS_HEADER dos = { 0 };
+    DWORD r = 0;
+    DWORD soi = 0;
+    if (ReadFile(f, &dos, sizeof(dos), &r, nullptr) && r == sizeof(dos) && dos.e_magic == IMAGE_DOS_SIGNATURE) {
+        SetFilePointer(f, dos.e_lfanew, nullptr, FILE_BEGIN);
+        IMAGE_NT_HEADERS64 nt = { 0 };
+        if (ReadFile(f, &nt, sizeof(nt), &r, nullptr) && r == sizeof(nt) &&
+            nt.Signature == IMAGE_NT_SIGNATURE)
+            soi = nt.OptionalHeader.SizeOfImage;
+    }
+    CloseHandle(f);
+    return soi;
+}
 static bool FindDll(std::wstring& out, ULONGLONG& size, FILETIME& mtime) {
     wchar_t self[MAX_PATH] = { 0 };
     GetModuleFileNameW(nullptr, self, MAX_PATH);
@@ -135,7 +154,7 @@ static bool FindDll(std::wstring& out, ULONGLONG& size, FILETIME& mtime) {
     std::vector<std::wstring> cand;
     cand.push_back(dir + L"\\" + dllW);                       // lado a lado
     cand.push_back(dir + L"\\build\\Release_x64\\" + dllW);   // raiz do projeto
-    cand.push_back(dir + L"\\..\\build\\Release_x64\\" + dllW);// injector\.. 
+    cand.push_back(dir + L"\\..\\build\\Release_x64\\" + dllW);// injector\..
     cand.push_back(L"D:\\Projeto\\ZB2 Menu\\build\\Release_x64\\" + std::wstring(dllW)); // fixo dev
 
     for (size_t i = 0; i < cand.size(); ++i) {
@@ -144,6 +163,9 @@ static bool FindDll(std::wstring& out, ULONGLONG& size, FILETIME& mtime) {
             out = cand[i];
             size = ((ULONGLONG)fa.nFileSizeHigh << 32) | fa.nFileSizeLow;
             mtime = fa.ftLastWriteTime;
+            char pa[MAX_PATH] = { 0 };
+            WideCharToMultiByte(CP_ACP, 0, cand[i].c_str(), -1, pa, MAX_PATH, nullptr, nullptr);
+            Msg("INFO", "DLL caminho[%llu]: %s (SizeOfImage=0x%lX).", (ULONGLONG)i, pa, (unsigned long)PeSizeOfImage(cand[i]));
             return true;
         }
     }
