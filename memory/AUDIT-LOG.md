@@ -244,6 +244,22 @@ print com ~40 boxes (metade fora da tela, atrás da câmera).
 - CE no hang: bridge vivo, 52 threads, `ASM_COUNT=142`, `CLASSES=1358`
   (nomes indisponíveis nesta build do CE — limitação registrada).
 
+## Crash 03:59 no tiro (16 zumbis, raycast limpo) — Present invocava
+
+- Stack NOVO (9º dump): `ShootGun→Shoot→ShootSingleProjectile→PlayerShot→
+  OnPlayerShot→StartCollidersByLine→StartColliding→SetColliding→set_enabled`
+  → AV. Com 16 zumbis o volume não explica: o gatilho é o TIRO ligando
+  colliders na mesma janela em que o PRESENT invocava (`Tick` no `hkPresent`:
+  `InvokeBool hasLocal` + 19x go+name do `AuditBones`).
+- Raycast limpo (`n=4250 fail=28 seh`, 0,7%). O crash não veio da worker.
+- Fix (commit `87cd69c`, DLL `4052E27D…` 611840 bytes): `Tick` no Present
+  virou bind+init (zero invoke); `ReadAll`/`AuditBones` migraram pra worker
+  1x/2s. Depth `CopyResource` DESLIGADO (`if false` — era fallback morto com
+  `sample=0` sempre + GPU ocupada no tiro). Present agora: copia snapshot +
+  desenha, zero invoke, zero CopyResource.
+- Padrão UC aplicado: Present/render thread nunca toca em API do jogo;
+  tudo que invoca roda em worker dedicada com orçamento.
+
 ## Anomalias para REVALIDAR (não corrigir neste ciclo)
 
 - `stam=-20` fixo e `eyeY/footY` congelados no `Mono live` — cheiro de campo com offset
