@@ -67,7 +67,8 @@ namespace Config {
     extern float fRollMult;
 
     // ---- VISUAL / Zumbis ----
-    extern bool  bZombieEsp;
+    extern bool  bZombieEsp;      // master do ESP (worker + draw)
+    extern bool  bZombieBoxShow;  // R4: Box tem flag propria (desmarca so o box)
     extern int   iZombieBox;        // 0=2D 1=3D 2=Corners
     extern bool  bZombieName;
     extern bool  bZombieDist;
@@ -79,6 +80,9 @@ namespace Config {
     extern bool  bZombieHeadDot;
     extern bool  bZombieClass;      // mostra classe (Comum/Riot/Queen/Reaper)
     extern float colZombieClass[4]; // cor da classe
+    extern float colZombieSkel[4];  // cor propria do Skeleton (spec §3.2)
+    extern float colZombieSnap[4];  // cor propria da Linha
+    extern float colZombieDot[4];   // cor propria do HeadDot
     extern float colZombieVis[4];
     extern float colZombieInv[4];
     extern float colZombieNameVis[4];

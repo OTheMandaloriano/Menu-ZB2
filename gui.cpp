@@ -75,6 +75,7 @@ namespace Config {
     float fRollMult = 1.5f;
 
     bool  bZombieEsp = false;
+    bool  bZombieBoxShow = true;   // R4: Box ligada por padrao
     int   iZombieBox = 0;
     bool  bZombieName = true;
     bool  bZombieDist = true;
@@ -86,6 +87,9 @@ namespace Config {
     bool  bZombieHeadDot = false;
     bool  bZombieClass = true;
     float colZombieClass[4] = { 1, 0.85f, 0.2f, 1 };
+    float colZombieSkel[4] = { 0, 1, 1, 1 };
+    float colZombieSnap[4] = { 0, 1, 0, 1 };
+    float colZombieDot[4] = { 1, 1, 0, 1 };
     float colZombieVis[4] = { 1, 0, 0, 1 };
     float colZombieInv[4] = { 0.5f, 0, 0, 1 };
     float colZombieNameVis[4] = { 1, 1, 1, 1 };
@@ -621,11 +625,11 @@ namespace GUI {
         JS(szItemSearch); JI(iItemAmount);
         JB(bSpeedHack); JF(fSpeedMult); JB(bSuperJump); JF(fJumpMult); JB(bInfStamina);
         JB(bRollSpeed); JF(fRollMult);
-        JB(bZombieEsp); JI(iZombieBox); JB(bZombieName); JB(bZombieDist); JB(bZombieHp); JB(bZombiePct); JF(fPctX); JF(fPctY); JI(iNameA); JI(iDistA); JI(iHpA); JI(iPctA); JF(fPropN); JF(fPropD); JF(fPropH); JF(fPropP);
+        JB(bZombieEsp); JB(bZombieBoxShow); JI(iZombieBox); JB(bZombieName); JB(bZombieDist); JB(bZombieHp); JB(bZombiePct); JF(fPctX); JF(fPctY); JI(iNameA); JI(iDistA); JI(iHpA); JI(iPctA); JF(fPropN); JF(fPropD); JF(fPropH); JF(fPropP);
         JI(iSideN); JI(iSideD); JI(iSideH); JI(iSideP); JI(iAlinN); JI(iAlinD); JI(iAlinH); JI(iAlinP);
         JF(fAlongN); JF(fAlongD); JF(fAlongH); JF(fAlongP); JF(fGapN); JF(fGapD); JF(fGapH); JF(fGapP);
         JI(iOrderN); JI(iOrderD); JI(iOrderH); JI(iOrderP); JF(fBarLength); JF(fBarThickness);
-        JB(bZombieSkeleton); JB(bZombieSnap); JB(bZombieHeadDot);
+        JB(bZombieSkeleton); JB(bZombieSnap); JB(bZombieHeadDot); JV(colZombieSkel); JV(colZombieSnap); JV(colZombieDot);
         JB(bZombieClass); JV(colZombieClass);
         JV(colZombieVis); JV(colZombieInv); JV(colZombieNameVis); JV(colZombieNameInv);
         JV(colZombieDistVis); JV(colZombieDistInv); JV(colZombieHpVis); JV(colZombieHpInv);
@@ -708,9 +712,9 @@ namespace GUI {
         LS(szItemSearch); LI(iItemAmount);
         LB(bSpeedHack); LF(fSpeedMult); LB(bSuperJump); LF(fJumpMult); LB(bInfStamina);
         LB(bRollSpeed); LF(fRollMult);
-        LB(bZombieEsp); LI(iZombieBox); LB(bZombieName); LB(bZombieDist); LB(bZombieHp); LB(bZombiePct); LF(fPctX); LF(fPctY); LI(iNameA); LI(iDistA); LI(iHpA); LI(iPctA); LF(fPropN); LF(fPropD); LF(fPropH); LF(fPropP);
+        LB(bZombieEsp); LB(bZombieBoxShow); LI(iZombieBox); LB(bZombieName); LB(bZombieDist); LB(bZombieHp); LB(bZombiePct); LF(fPctX); LF(fPctY); LI(iNameA); LI(iDistA); LI(iHpA); LI(iPctA); LF(fPropN); LF(fPropD); LF(fPropH); LF(fPropP);
         LI(iSideN); LI(iSideD); LI(iSideH); LI(iSideP); LI(iAlinN); LI(iAlinD); LI(iAlinH); LI(iAlinP);
-        LB(bZombieSkeleton); LB(bZombieSnap); LB(bZombieHeadDot);
+        LB(bZombieSkeleton); LB(bZombieSnap); LB(bZombieHeadDot); LV(colZombieSkel); LV(colZombieSnap); LV(colZombieDot);
         LB(bZombieClass); LV(colZombieClass);
         LV(colZombieVis); LV(colZombieInv); LV(colZombieNameVis); LV(colZombieNameInv);
         LV(colZombieDistVis); LV(colZombieDistInv); LV(colZombieHpVis); LV(colZombieHpInv);
@@ -810,14 +814,21 @@ namespace GUI {
         // Ciclo 2 (spec VISUAL §1+§3.13): toggles do menu mandam junto com o
         // layout (OR). Editor drag-drop continua valendo p/ posicao.
         if (Config::bZombieEsp) {
-            const bool showSkel = layout.skeleton || Config::bZombieSkeleton;
-            const bool showSnap = layout.snapline || Config::bZombieSnap;
-            const bool showDot = layout.headDot || Config::bZombieHeadDot;
+            // R2 (spec VISUAL �3.13): 1 fonte � o MENU manda. Sem OR com o
+            // layout (desligar tem que desligar). O editor drag-drop continua
+            // valendo p/ posicao; liga/desliga e aqui.
+            const bool showSkel = Config::bZombieSkeleton;
+            const bool showSnap = Config::bZombieSnap;
+            const bool showDot = Config::bZombieHeadDot;
             Mono::EspEntry es[128];
             int n = Mono::GetEsp(es, 128);
             float H = io.DisplaySize.y;
             ImU32 colVis = ImGui::GetColorU32(ImVec4(Config::colZombieVis[0], Config::colZombieVis[1], Config::colZombieVis[2], Config::colZombieVis[3]));
             ImU32 colInv = ImGui::GetColorU32(ImVec4(Config::colZombieInv[0], Config::colZombieInv[1], Config::colZombieInv[2], Config::colZombieInv[3]));
+            // R3 (spec �3.2): 1 cor por elemento � Skeleton/Linha/Dot nao usam mais a cor do Box.
+            ImU32 colSkel = ImGui::GetColorU32(ImVec4(Config::colZombieSkel[0], Config::colZombieSkel[1], Config::colZombieSkel[2], Config::colZombieSkel[3]));
+            ImU32 colSnap = ImGui::GetColorU32(ImVec4(Config::colZombieSnap[0], Config::colZombieSnap[1], Config::colZombieSnap[2], Config::colZombieSnap[3]));
+            ImU32 colDot = ImGui::GetColorU32(ImVec4(Config::colZombieDot[0], Config::colZombieDot[1], Config::colZombieDot[2], Config::colZombieDot[3]));
             for (int i = 0; i < n; ++i) {
                 // Item 14: cor por LOS (desliga = tudo visivel).
                 // DIAG: losVis agora vem do depth buffer ponto a ponto (Passo 5).
@@ -825,6 +836,9 @@ namespace GUI {
                 ImU32 col = vis ? colVis : colInv;
                 float h = 0, w = 0, cx = 0, hy = 0, fy = 0;
                 ImVec2 r0, r1;
+                // R4 (spec �1): Box tem flag propria � bZombieEsp e master,
+                // bZombieBoxShow desenha o retangulo. Desmarcar Box nao mata o ESP.
+                const bool showBox = Config::bZombieBoxShow;
                 bool is3d = (layout.boxStyle == 1 && es[i].has3d);
                 if (is3d) {
                     // 3D real: bbox dos 8 cantos da AABB (labels ancoram nela).
@@ -868,11 +882,11 @@ namespace GUI {
                 if (!std::isfinite(r0.x) || !std::isfinite(r0.y) || !std::isfinite(r1.x) || !std::isfinite(r1.y)) continue;
                 w = r1.x - r0.x; h = r1.y - r0.y;
                 if (w < 2.0f || h < 2.0f) continue;
-                if (layout.boxStyle == 0) {
+                if (showBox && layout.boxStyle == 0) {
                     if (r0.x < -10000 || r0.x > 10000 || r0.y < -10000 || r0.y > 10000) continue; // P1 render
                     if (r1.x < -10000 || r1.x > 10000 || r1.y < -10000 || r1.y > 10000) continue;
                     dl->AddRect(r0, r1, col, 0.0f, 0, 1.5f);
-                } else if (layout.boxStyle == 2) {
+                } else if (showBox && layout.boxStyle == 2) {
                     // Corners: 8 segmentos nos cantos (item 11).
                     float cl = h * 0.22f; if (cl > w * 0.45f) cl = w * 0.45f;
                     dl->AddLine(r0, ImVec2(r0.x + cl, r0.y), col, 1.5f);
@@ -883,7 +897,7 @@ namespace GUI {
                     dl->AddLine(ImVec2(r0.x, r1.y), ImVec2(r0.x, r1.y - cl), col, 1.5f);
                     dl->AddLine(r1, ImVec2(r1.x - cl, r1.y), col, 1.5f);
                     dl->AddLine(r1, ImVec2(r1.x, r1.y - cl), col, 1.5f);
-                } else if (layout.boxStyle == 1 && es[i].has3d) {
+                } else if (showBox && layout.boxStyle == 1 && es[i].has3d) {
                     // 3D real: 12 arestas da AABB (frente 4 + fundo 4 + profundidade 4).
                     static const int E[12][2] = { {0,1},{1,3},{3,2},{2,0},{4,5},{5,7},{7,6},{6,4},{0,4},{1,5},{2,6},{3,7} };
                     for (int e = 0; e < 12; ++e) {
@@ -928,7 +942,7 @@ namespace GUI {
                         ImVec2 pb = ImVec2(es[i].skX[b], H - es[i].skY[b]);
                         if (pa.x < -10000 || pa.x > 10000 || pa.y < -10000 || pa.y > 10000) continue;
                         if (pb.x < -10000 || pb.x > 10000 || pb.y < -10000 || pb.y > 10000) continue;
-                        dl->AddLine(pa, pb, col, 1.5f);
+                        dl->AddLine(pa, pb, colSkel, 1.5f);
                     }
                     // Sem circulo na cabeca: Head Dot (item 13) e funcao separada do menu.
                 }
@@ -937,14 +951,14 @@ namespace GUI {
                     ImVec2 base = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y);
                     ImVec2 tgt = ImVec2((r0.x + r1.x) * 0.5f, r1.y);
                     if (tgt.x > -10000 && tgt.x < 10000 && tgt.y > -10000 && tgt.y < 10000)
-                        dl->AddLine(base, tgt, col, 1.0f);
+                        dl->AddLine(base, tgt, colSnap, 1.0f);
                 }
                 // Item 13 Head Dot: ponto na junta HEAD (projetada, nao fixa no box).
                 if (showDot && es[i].skN == Mono::SK_COUNT && es[i].skV[Mono::SK_HEAD]) {
                     ImVec2 hp = ImVec2(es[i].skX[Mono::SK_HEAD], H - es[i].skY[Mono::SK_HEAD]);
                     if (hp.x > -10000 && hp.x < 10000 && hp.y > -10000 && hp.y < 10000) {
                         float hr = h * 0.03f; if (hr < 2.0f) hr = 2.0f; if (hr > 6.0f) hr = 6.0f;
-                        dl->AddCircleFilled(hp, hr, col);
+                        dl->AddCircleFilled(hp, hr, colDot);
                     }
                 }
                 EspLayout::Rect envelope = { r0, r1 };
@@ -954,6 +968,16 @@ namespace GUI {
                 }
                 auto content = LayoutContent(es[i].name, es[i].dist, es[i].hp, es[i].maxHp);
                 auto style = LayoutStyle(content.health, vis);
+                // R5 (spec �1/�3.7): Classe na mesma linha do Nome (zero invoke
+                // novo � usa o nome ja resolvido; tipo real via type+20 no ciclo 6).
+                if (Config::bZombieClass) {
+                    ImU32 colCls = ImGui::GetColorU32(ImVec4(Config::colZombieClass[0], Config::colZombieClass[1], Config::colZombieClass[2], Config::colZombieClass[3]));
+                    ImVec2 anchor = ImVec2((r0.x + r1.x) * 0.5f, hy - 14.0f);
+                    const char* cls = (es[i].hp >= es[i].maxHp && es[i].maxHp > 200.0f) ? "CHEFAO" : "Zumbi";
+                    char cb[96]; _snprintf_s(cb, _TRUNCATE, "%s [%s]", es[i].name, cls);
+                    ImVec2 tsz = ImGui::CalcTextSize(cb);
+                    dl->AddText(ImVec2(anchor.x - tsz.x * 0.5f, anchor.y - tsz.y), colCls, cb);
+                }
                 auto geometry = EspLayout::Resolve(layout, envelope, { ImVec2(2.0f, 2.0f), ImVec2(io.DisplaySize.x - 2.0f, io.DisplaySize.y - 2.0f) }, content, style, true);
                 EspLayout::Draw(dl, geometry, content, style);
             }
@@ -1038,7 +1062,7 @@ namespace GUI {
                 // 1 linha = 1 checkbox + 1 cor (padrao CS2_External). O editor
                 // drag-drop acima continua valendo p/ posicao; aqui liga/desliga.
                 if (ImGui::CollapsingHeader("Zumbis", ImGuiTreeNodeFlags_DefaultOpen)) {
-                    ImGui::Checkbox("Box", &Config::bZombieEsp);
+                    ImGui::Checkbox("Box", &Config::bZombieBoxShow);
                     ImGui::SameLine(); ImGui::SetNextItemWidth(110.0f);
                     ImGui::Combo("Tipo##ZB", &Config::iZombieBox, kBoxType, 3);
                     ImGui::SameLine(); ImGui::ColorEdit4("##CorBoxZ", Config::colZombieVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
@@ -1049,17 +1073,17 @@ namespace GUI {
                     ImGui::Checkbox("Vida", &Config::bZombieHp);
                     ImGui::SameLine(); ImGui::ColorEdit4("##CorVidaZ", Config::colZombieHpVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                     ImGui::Checkbox("Skeleton", &Config::bZombieSkeleton);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##CorSkelZ", Config::colZombieVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##CorSkelZ", Config::colZombieSkel, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                     ImGui::Checkbox("Linha", &Config::bZombieSnap);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##CorLinhaZ", Config::colZombieVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##CorLinhaZ", Config::colZombieSnap, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                     ImGui::Checkbox("HeadDot", &Config::bZombieHeadDot);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##CorDotZ", Config::colZombieVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##CorDotZ", Config::colZombieDot, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                     ImGui::Checkbox("Classe", &Config::bZombieClass);
                     ImGui::SameLine(); ImGui::ColorEdit4("##CorClasseZ", Config::colZombieClass, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                 }
                 if (ImGui::CollapsingHeader("Cores, aliados e itens")) {
-                ImGui::ColorEdit4("Cor Visivel", Config::colZombieVis);
-                ImGui::ColorEdit4("Cor Invisivel", Config::colZombieInv);
+                ImGui::Text("Cor Visivel:"); ImGui::SameLine(); ImGui::ColorEdit4("##Cor Visivel", Config::colZombieVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                ImGui::Text("Cor Invisivel:"); ImGui::SameLine(); ImGui::ColorEdit4("##Cor Invisivel", Config::colZombieInv, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                 ImGui::Separator();
                 // Ciclo 1 (spec §4.1): ESP Aliados vira master — resto da seção
                 // (sempre visíveis, sem LOS/Somente/Dist por decisão PvE coop).
@@ -1071,8 +1095,8 @@ namespace GUI {
                     ImGui::Checkbox("Nome##A", &Config::bAllyName); ImGui::SameLine();
                     ImGui::Checkbox("Dist##A", &Config::bAllyDist); ImGui::SameLine();
                     ImGui::Checkbox("Vida##A", &Config::bAllyHp);
-                    ImGui::ColorEdit4("Aliado Visivel", Config::colAllyVis);
-                    ImGui::ColorEdit4("Aliado Invisivel", Config::colAllyInv);
+                    ImGui::Text("Aliado Visivel:"); ImGui::SameLine(); ImGui::ColorEdit4("##Aliado Visivel", Config::colAllyVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::Text("Aliado Invisivel:"); ImGui::SameLine(); ImGui::ColorEdit4("##Aliado Invisivel", Config::colAllyInv, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                 }
                 ImGui::Separator();
                 // Ciclo 1 (spec §4.1): Chams sem master — o próprio checkbox é o
@@ -1081,8 +1105,8 @@ namespace GUI {
                     ImGui::Checkbox("Chams (corpo)", &Config::bChams);
                 } else {
                     ImGui::Checkbox("Chams (corpo)", &Config::bChams);
-                    ImGui::ColorEdit4("Chams Vis", Config::colChamsVis);
-                    ImGui::ColorEdit4("Chams Inv", Config::colChamsInv);
+                    ImGui::Text("Chams Vis:"); ImGui::SameLine(); ImGui::ColorEdit4("##Chams Vis", Config::colChamsVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::Text("Chams Inv:"); ImGui::SameLine(); ImGui::ColorEdit4("##Chams Inv", Config::colChamsInv, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                 }
                 // Ciclo 1 (spec §4.1): ESP Itens vira master — sub-itens só
                 // aparecem com ele ligado (menos poluição, padrão Gamesense).
@@ -1095,7 +1119,7 @@ namespace GUI {
                     ImGui::Checkbox("Municao", &Config::bItemAmmo); ImGui::SameLine();
                     ImGui::Checkbox("Suprimento", &Config::bItemSupply);
                     ImGui::Checkbox("Pontos (heli/chefe/missao)", &Config::bPoiEsp);
-                    ImGui::ColorEdit4("Cor Item", Config::colItem);
+                    ImGui::Text("Cor Item:"); ImGui::SameLine(); ImGui::ColorEdit4("##Cor Item", Config::colItem, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                     ImGui::SliderFloat("Raio Item", &Config::fItemRadius, 10, 500, "%.0fm");
                 }
                 } // fecha CollapsingHeader "Cores, aliados e itens"
