@@ -146,6 +146,27 @@ Comandos (só leitura, nenhum invoke/escrita no combate):
 - REGRA NOVA: injetar SOMENTE em partida (nunca no loading/menu).
   O `SceneAlive`/`MapSettling` cobre a worker; este cobre a MainThread.
 
+## Auditoria hang 02:44 (86 zumbis, AV 0x19eee86 LOD) — causa raiz tripla
+
+Evidência: `[PI-CALL] raycast n=15431 fail=1604 (seh=1604, 10%) dt 5µs` +
+`Mono live zombies=86` + stack `SetActive→SetColliding→UpdatePhysics` +
+print com ~40 boxes (metade fora da tela, atrás da câmera).
+
+1. **Budget 200 sem gate on-screen**: 96 ent/ciclo x 5 raycasts mesmo fora da
+   viewport. O cull de tela existia só no caminho 2D; o 3D (o que roda em
+   horda) não tinha. Fix: centroide dos 8 cantos antes dos 5 raycasts
+   (fora = skip, mantém cor).
+2. **Kill-window `hp2 != hp` skippa dano normal** (60→40→20): entidade em
+   combate some do LOS por 1 ciclo e a histerese segura cor velha = "não
+   atualiza". Fix: só skippa se MORREU (`!alive3 || hp3 <= 0`).
+3. **SEH em massa = sintoma, não causa**: `hd` inválido porque o raycast leu
+   o corpo errado (lista reciclada + sem gate on-screen). Com os gates, o
+   volume de invokes cai e o SEH some junto.
+- Fix (commit `2471ffb`, DLL `B28489A7…` 612864 bytes).
+- Padrão UC aplicado: broadphase (distância + on-screen) antes de qualquer
+  trace; trace só em quem desenha; decay/histerese segura o resto.
+  (Sem link colado: padrão canônico de ESP, justificativa aqui.)
+
 ## Anomalias para REVALIDAR (não corrigir neste ciclo)
 
 - `stam=-20` fixo e `eyeY/footY` congelados no `Mono live` — cheiro de campo com offset
