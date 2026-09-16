@@ -1469,12 +1469,14 @@ namespace Mono {
                     // descartada; snapshot segura a cor anterior no render).
                     // NOTA: o gate on-screen ja rodou acima (centroide dos 8
                     // cantos); aqui entra direto no LOS real.
-                    // RODIZIO LOS (auditoria 16/09, hang 02:44): 5 raycasts por
-                    // entidade é o custo que estoura o ciclo (1438ms com 86).
-                    // Perto (<25m) = todo ciclo; longe = 1 de 3 ciclos. A
-                    // histerese segura a cor no meio — sem pisca-pisca.
-                    if (Config::bVisibleCheck && hasCamW && dist > 0.5f && dist < 10000.0f &&
-                        (dist < 25.0f || (((s_losCursor + n) % 3) == 0))) {
+                    // SEM RODIZIO (auditoria 16/09, pisca-pisca): o rodizio 1/3
+                    // alternava a cor entre ciclos — entidade longe piscava
+                    // verde/vermelho a cada 3 ciclos. Custo controlado pelo
+                    // budget (64 raycasts/ciclo) + orcamento por ponto: sem
+                    // saldo = sem dado = mantem a cor (nunca verde forcado).
+                    // Padrao UC/Unity: 1 raycast cabeca->camera por entidade,
+                    // QueryTriggerInteraction.Ignore, layer so de mundo.
+                    if (Config::bVisibleCheck && hasCamW && dist > 0.5f && dist < 10000.0f) {
                         Vec3 pts[5];
                         pts[0] = { bb.center.x, bb.center.y + bb.extents.y, bb.center.z }; // cabeca
                         pts[1] = bb.center;                                                 // peito
@@ -1630,9 +1632,8 @@ namespace Mono {
                 }
             }
             // Broadphase 2D: sem distancia valida nao ha LOS (igual ao 3D).
-            // RODIZIO (igual ao 3D): longe = 1 de 3 ciclos, perto todo ciclo.
-            if (Config::bVisibleCheck && hasCamW && dist > 0.5f && dist < 10000.0f &&
-                (dist < 25.0f || (((s_losCursor + n) % 3) == 0))) {
+            // SEM RODIZIO (igual ao 3D): custo controlado pelo budget.
+            if (Config::bVisibleCheck && hasCamW && dist > 0.5f && dist < 10000.0f) {
                 Vec3 pts[5];
                 pts[0] = wh; // cabeca (olho)
                 pts[1] = { (wh.x + wf.x) * 0.5f, wh.y + (wf.y - wh.y) * 0.25f, (wh.z + wf.z) * 0.5f }; // peito
