@@ -167,6 +167,22 @@ print com ~40 boxes (metade fora da tela, atrás da câmera).
   trace; trace só em quem desenha; decay/histerese segura o resto.
   (Sem link colado: padrão canônico de ESP, justificativa aqui.)
 
+## Hang 03:05 (multidão, oscilação visível/invisível) — causa: ciclo de 1438ms
+
+- `[PI-CALL] raycast n=6119 fail=700 seh dt_avg 2358µs` + `[PERF] ciclo 1438.6ms`.
+  O raycast foi de 5µs para 2358µs: PhysX saturado com 86 zumbis invocando
+  junto. O ritmo adaptativo só ia até 66ms — sem freio pro ciclo de 1.4s.
+- Oscilação verde/vermelho: histerese de 3 ciclos com ciclo de 1.4s = a cor
+  leva ~4s pra estabilizar; no meio, cada ciclo alterna. Com rodízio 1/3, a
+  cor atualiza a cada ~100ms e estabiliza em ~300ms.
+- Item 0 FECHADO: `SizeOfImage 0xB5000` lido do PE no disco = 741376, igual
+  ao crash log. Era alinhamento de seção, nunca foi fantasma. A regra
+  "injetar em partida" continua (hook no loading = AV).
+- Fix (commit `6ffb88a`, DLL `F363FCE9…` 612864 bytes): rodízio LOS
+  (perto todo ciclo, longe 1/3) + teto 200ms no ritmo adaptativo.
+- Crash 03:05: mesmo stack LOD `UpdatePhysics` offset `0x19eee86` (6º dump).
+  O LOD crasha sozinho sob carga; nosso trabalho é não estar invocando junto.
+
 ## Anomalias para REVALIDAR (não corrigir neste ciclo)
 
 - `stam=-20` fixo e `eyeY/footY` congelados no `Mono live` — cheiro de campo com offset
