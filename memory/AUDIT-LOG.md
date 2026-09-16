@@ -106,6 +106,26 @@ Comandos (só leitura, nenhum invoke/escrita no combate):
 - Terceiro modo mapeado: hang-kill, AV-kill, AV-loading — comum: invoke sem
   vivacidade em transição. `Raycast n=360 fail=140 seh` no loading confirma.
 
+## Crash 02:17 modo novo + gate geração de mapa (16/09)
+
+- Stack managed NOVO (não é `UpdatePhysics`): `LODTarget:InitialForceCull` →
+  `LODCollider:SetColliding` → `LotConstructor:AddFurnitureToSetsAndInteractables`
+  → `GenerateBuildingFurniture` → `GenerateHashCellBuildings` →
+  `MapHash:InternalGenerateCell` → `LODController:RequestGenerationFor` →
+  `LODForCell` → `UpdateLOD` → AV `0xc0000005` offset `0x19f4924`.
+  `Created #224` → `Crash!!!` com câmera no céu (loading).
+- Quarto modo: hang-kill, AV-kill, AV-loading, AV-geração-de-mapa. Comum:
+  jogo destrói/recria objetos enquanto a worker invoca.
+- Item 0: `SizeOfImage 741376` persiste com DLL 612352 no disco e
+  `injector_state` correto. Não é mais o git (DLL fora do versionamento).
+  `SizeOfImage` do crash log é o mapeado (seções alinhadas), não o tamanho
+  do arquivo — comparar com o `SizeOfImage` do PE no disco (log do injetor),
+  não com bytes do arquivo.
+- Fix (commit `066590f`): `MapSettling()` — lista de zumbis oscilando >= 8
+  em 2 ciclos seguidos = mapa assentando: worker dorme 500ms, zero invoke.
+  DLL `C75E8405…` 612352 bytes.
+- Pendente: 10 kills + tail (`[PI-CALL]`, `[PERF]`, `[SCENE]`).
+
 ## Anomalias para REVALIDAR (não corrigir neste ciclo)
 
 - `stam=-20` fixo e `eyeY/footY` congelados no `Mono live` — cheiro de campo com offset
