@@ -240,7 +240,17 @@ namespace Mono {
     static int s_geomMask = -1; // layer mask (auditoria Passo 2; default = tudo)
     static bool      s_losOk = false; // Physics.Raycast resolvido e funcional
     static int       s_rayArgs = 0; // aridade resolvida (2-5)
-    static EspEntry s_esp[128];
+    // Snapshot double-buffer sem lock no frame (item 14b, Rodada 1 inocentou
+    // a worker): Present NUNCA toca em CS — le o ponteiro do buffer pronto
+    // (troca atomica). Worker publica no back e vira o ponteiro sob 1 CS curto.
+    // memcpy de ~38KB sob lock + Map/Unmap concorrendo = hang em iGPU (23:25).
+    static EspEntry s_espA[128];
+    static EspEntry s_espB[128];
+    static EspEntry* s_espFront = s_espA; // lido pelo Present (sem lock)
+    static EspEntry* s_espBack = s_espB;  // escrito pela worker (sob CS curto)
+    static int s_espNFront = 0;
+    static int s_espNBack = 0;
+    static EspEntry s_esp[128]; // legado: mantido p/ diff minimo (nao usado)
     static int s_espN = 0;
     static CRITICAL_SECTION s_espCS;
     static bool s_csInit = false;
@@ -1631,10 +1641,11 @@ namespace Mono {
             en.hp = hp; en.maxHp = mx;
             en.onScreen = true; en.isAlly = false;
         });
-        // Diagnostico P1: transicoes add/remove com identidade (causa raiz, nao supressao).
-        // FIX hang 15/09: TryEnter — se o Present estiver lendo o snapshot no
-        // GetEsp, a worker pula a publicacao deste ciclo em vez de travar o jogo.
-        if (!TryEnterCriticalSection(&s_espCS)) return;
+        // Publicacao double-buffer (item 14b): worker escreve no back, vira o
+        // ponteiro sob 1 CS curto. Present le o front SEM lock (ponteiro).
+        // TryEnter aqui so protege a virada; quem perde a virada tenta no
+        // proximo ciclo — nunca trava, nunca perde dado.
+        EnterCriticalSection(&s_espCS);
         // Telemetria de orcamento (1x/sessao): prova que o teto segura a horda.
         if (!s_budgetLogged) {
             s_budgetLogged = true;
@@ -1661,9 +1672,13 @@ namespace Mono {
             }
             s_lastN = n > 128 ? 128 : n;
             for (int i = 0; i < s_lastN; ++i) s_lastEnts[i] = tmp[i].ent;
-            s_espN = s_lastN; // publica o snapshot (lock ja adquirido acima)
-            s.espShown = s_espN;
-            for (int i = 0; i < s_espN; ++i) s_esp[i] = tmp[i];
+            s_espNBack = s_lastN;
+            s.espShown = s_espNBack;
+            for (int i = 0; i < s_espNBack; ++i) s_espBack[i] = tmp[i];
+            // Vira o ponteiro: front novo = back cheio (troca atomica de ptr).
+            EspEntry* t = s_espFront; s_espFront = s_espBack; s_espBack = t;
+            s_espNFront = s_espNBack;
+            s_espN = s_espNFront; // legado: espelho p/ debug
         }
         LeaveCriticalSection(&s_espCS);
         // Métrica de custo do ciclo (fora do lock).
@@ -1845,12 +1860,14 @@ namespace Mono {
     const State& Get() { return s; }
     int GetEsp(EspEntry* out, int max) {
         if (!out || max <= 0) return 0;
-        // FIX hang 15/09: TryEnter — Present nunca espera a worker (a worker
-        // que espera, e so por 1 ciclo). Sem isso, deadlock = tela branca.
-        if (!TryEnterCriticalSection(&s_espCS)) return 0;
-        int n = s_espN < max ? s_espN : max;
-        for (int i = 0; i < n; ++i) out[i] = s_esp[i];
-        LeaveCriticalSection(&s_espCS);
+        // Present SEM lock (item 14b): le o front via ponteiro. A virada do
+        // ponteiro e atomica no x64; o pior caso e 1 frame com o buffer
+        // anterior — nunca trava, nunca memcpy sob lock no frame.
+        EspEntry* f = s_espFront;
+        int n = s_espNFront < max ? s_espNFront : max;
+        if (n < 0) n = 0;
+        if (n > 128) n = 128;
+        for (int i = 0; i < n; ++i) out[i] = f[i];
         return n;
     }
     void Shutdown() {
