@@ -188,10 +188,17 @@ namespace Mono {
     // 50+ zumbis, centenas de invokes por ciclo de 33ms viram corrida com o
     // LODController:UpdatePhysics (ver crash 15/09 15:51). Estoura o teto?
     // O resto do ciclo usa o último valor conhecido (fail-open, sem flicker).
+    // AUDITORIA 16/09 (hang 86 zumbis, NUNCA zera statics entre ciclos):
+    // s_losCursor/s_calDone/candOff/hitDistOff vazavam entre ciclos; com a
+    // lista reciclada pelo LOD, o offset travava no corpo errado e o raycast
+    // lia lixo -> SEH em massa -> hang. Tudo que e "por ciclo" reseta aqui.
     // Camada 1 (broadphase, padrao UC): perto (<45m) = LOS real todo ciclo;
     // longe = 1 de 3 ciclos (rodizio). Teto 96 ent/ciclo. Ritmo 33-66ms.
     static int  s_budgetLeft = 0;
-    static int  s_budgetMax = 200; // max_raycasts_padrao ~= 200 (briefing §6)
+    static int  s_budgetMax = 96; // 1 raycast/entidade/ciclo, 96 ent = teto.
+    // Barato: teto de entidades que ganham raycast real por ciclo (o resto
+    // mantem a cor anterior via histerese). Protótipo UC: LOS total só no
+    // perto; longe alterna. Aqui: 32/ciclo, resto skip.
     static bool s_budgetLogged = false;
     static int  s_losSkipped = 0; // telemetria: quantos pontos o teto pulou
     static int  s_losCursor = 0; // legado: rodizio removido (piscava em porta/janela).
@@ -1452,6 +1459,8 @@ namespace Mono {
                     }
                     // Camada 1 (broadphase): distancia invalida = sem LOS (entidade
                     // descartada; snapshot segura a cor anterior no render).
+                    // NOTA: o gate on-screen ja rodou acima (centroide dos 8
+                    // cantos); aqui entra direto no LOS real.
                     if (Config::bVisibleCheck && hasCamW && dist > 0.5f && dist < 10000.0f) {
                         Vec3 pts[5];
                         pts[0] = { bb.center.x, bb.center.y + bb.extents.y, bb.center.z }; // cabeca
