@@ -229,6 +229,21 @@ print com ~40 boxes (metade fora da tela, atrás da câmera).
   aqui 5 pontos com budget global + tri-estado + decay. QueryTrigger usa o
   global do projeto (overload confirmado não tem o parâmetro).
 
+## Hang 03:47 sem crash handler (raycast limpo) — deadlock em lock
+
+- `[PI-CALL] raycast n=3795 fail=1` (0,03%), `zombies=6`, sem pasta nova,
+  sem Event 1000, 50 threads em Wait, delta CPU 0,17s/5s. Hang puro com
+  jogo leve = deadlock, não overload, não AV.
+- Auditoria de locks: `Enter` bloqueante em `BuildEsp` (virada double-buffer,
+  `mono.cpp`), em `Sample` (contadores `s_mapFail/s_mapOk`, `main.cpp`), e
+  `Enter` no `else` da worker + `GetEsp` antigo. Se o Present suspender
+  (resize/foco/GPU), a worker trava dentro do CS = tela congelada com ESP.
+- Fix (commit `2a0146a`, DLL `885827F4…` 612352 bytes): `TryEnter` em TODA
+  espera de lock (virada pula pro próximo ciclo); contadores via
+  `InterlockedIncrement` (sem CS). Zero `Enter` bloqueante no frame/worker.
+- CE no hang: bridge vivo, 52 threads, `ASM_COUNT=142`, `CLASSES=1358`
+  (nomes indisponíveis nesta build do CE — limitação registrada).
+
 ## Anomalias para REVALIDAR (não corrigir neste ciclo)
 
 - `stam=-20` fixo e `eyeY/footY` congelados no `Mono live` — cheiro de campo com offset
