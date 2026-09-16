@@ -202,6 +202,19 @@ print com ~40 boxes (metade fora da tela, atrás da câmera).
   budget 96→64 raycasts/ciclo.
 - Item 0 segue fechado: crash log `size 741376` = `SizeOfImage 0xB5000` do PE.
 
+## Hang 03:24 sem crash handler (21 zumbis, raycast limpo) + inversão de cor
+
+- `[PI-CALL] raycast n=1780 fail=2 seh` (0,1%), `zombies=21-26`, sem pasta
+  nova em `Crashes/`, sem Event 1000. Hang puro (Present travou, worker
+  parou), não AV. Com 21 zumbis o volume não explica — o hang veio de outro
+  lugar (a investigar: deadlock Present/worker fora do snapshot).
+- Inversão verde/vermelho: entidade nova nascia VERMELHA direto
+  (`s_hystShown=false`), antes de qualquer raycast. Quem estava visível
+  nascia vermelho, quem estava oculto... também. Depois a histerese corrigia
+  alguns e outros não = "uns verde quando visível, outros vermelho".
+  Fix: nasce na cor CRUA do 1º ciclo (commit `ae2333a`).
+- DLL `4B18B2A1…` 612864 bytes.
+
 ## Anomalias para REVALIDAR (não corrigir neste ciclo)
 
 - `stam=-20` fixo e `eyeY/footY` congelados no `Mono live` — cheiro de campo com offset
