@@ -260,6 +260,20 @@ print com ~40 boxes (metade fora da tela, atrás da câmera).
 - Padrão UC aplicado: Present/render thread nunca toca em API do jogo;
   tudo que invoca roda em worker dedicada com orçamento.
 
+## Crash 04:20 com 21 zumbis + oscilação sem horda (16/09)
+
+- `[PI-CALL] raycast n=4382 fail=3 seh` (0,07%), sem pasta nova, sem Event
+  1000 = hang, não AV. Com 21 zumbis e raycast limpo, o volume não explica.
+- Stack do dump: SEM frame managed, offset `0x19f43c7` (outra região — não é
+  o LOD `0x19eee86`). Sem managed no stack, o AV veio de fora do Mono:
+  candidato é o próprio tiro do player (PhysicalGun) + LOD na mesma janela.
+- Oscilação sem horda: rodízio 1/3 alternava a cor mesmo sem pressão.
+  Fix: 1 raycast na CABEÇA por entidade (padrão UC/Unity), histerese dura
+  estabiliza. Custo cai 5x; sem dado nunca vira verde.
+- Circuit breaker: raycast com dt médio >500µs = PhysX saturado = pula o
+  ponto (sem dado, mantém cor) em vez de empilhar invoke em PhysX travado.
+- Fix (commit `b51af9d`, DLL `8E2AFCED…` 611328 bytes).
+
 ## Anomalias para REVALIDAR (não corrigir neste ciclo)
 
 - `stam=-20` fixo e `eyeY/footY` congelados no `Mono live` — cheiro de campo com offset
