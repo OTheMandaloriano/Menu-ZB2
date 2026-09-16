@@ -681,12 +681,14 @@ namespace Mono {
                 else if (s <= -3) s_hystShown[i] = false; // 3x ocluido -> vermelho
                 return s_hystShown[i];
             }
-            if (!s_hystEnt[i]) { // slot livre: nasce VERMELHO (dentro de casa
-                // nasce certo; fora, o verde vem em 5 ciclos ~500ms — sem churn)
+            if (!s_hystEnt[i]) { // slot livre: nasce na cor CRUA do 1o ciclo
+                // (auditoria 16/09: nascer vermelho invertia quem estava visivel
+                // — verde virava vermelho e vice-versa; a histerese estabiliza
+                // a partir daqui, 5 verde / 3 vermelho).
                 s_hystEnt[i] = ent;
-                s_hystStreak[i] = -1;
-                s_hystShown[i] = false;
-                return false;
+                s_hystStreak[i] = rawVis ? 1 : -1;
+                s_hystShown[i] = rawVis;
+                return rawVis;
             }
         }
         return rawVis; // tabela cheia: sem histerese
