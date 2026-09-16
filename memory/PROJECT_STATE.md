@@ -12,7 +12,7 @@
 - [x] 12. Skeleton — TESTADO OK (quat real + eixo travado, bracos ate a mao, 14/09)
 - [x] 13. Snapline e Head Dot — TESTADO OK (prints: linhas base->pe + ponto na HEAD, 14/09)
 - [x] 14. Cores Visivel/Invisivel (raycast LOS) — FUNCIONANDO (vermelho/verde por obstáculo, histerese ~3 ciclos)
-- [x] 14b. Estabilidade em horda — EM VALIDAÇÃO (orçamento 220 invokes/ciclo + rodízio LOS + cull de tela + teto 96 ent)
+- [x] 14b. Estabilidade em horda — EM VALIDAÇÃO (snapshot double-buffer sem lock no Present + orçamento 200 + skeleton 50m + throttle depth 1/3)
 - [ ] 15. ESP Aliados (azul)
 
 Metodologia: 1 funcao por ciclo, commit pt-BR, teste in-game antes de avancar.
