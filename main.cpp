@@ -1,4 +1,4 @@
-ï»¿#include "includes.h"
+#include "includes.h"
 
 // ============================================================================
 // MAIN.CPP - Ponto de entrada + hook D3D11 Present/ResizeBuffers (ZB2 Menu)
@@ -111,11 +111,11 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
     ImGui::EndFrame();
     ImGui::Render();
 
-    // Item 14/Passo 5: captura o depth ANTES do overlay (cena pura do jogo â€”
+    // Item 14/Passo 5: captura o depth ANTES do overlay (cena pura do jogo —
     // o OMSetRenderTargets do overlay troca o DSV; depois dele o OMGetRenderTargets
     // pode devolver DSV errado/nulo). Falha silenciosa = ultimo frame valido.
     // NOTA: este bloco roda DEPOIS de ImGui::Render() mas ANTES de RenderDrawData
-    // (o draw do overlay ainda nao executou) â€” o DSV ainda e o da cena do jogo.
+    // (o draw do overlay ainda nao executou) — o DSV ainda e o da cena do jogo.
     // BUG 4 DOC: em Unity com post-processing (URP/HDRP/Built-in + stack), o DSV
     // no Present pertence a pass de composicao final (UI/fullscreen quad), NAO a
     // cena 3D. Todos os pixels leem 1.0 (far). Correcao futura: hook em
@@ -191,11 +191,13 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
                             g_depthW = td.Width; g_depthH = td.Height; g_depthFmt = stageFmt;
                         }
                     }
-                    // Causa B (item 14b): CopyResource a cada Present = GPU ocupada
-                    // justo quando o LOD recalcula celulas. Throttle 1/3 Presents
-                    // (depth ja e fallback â€” Raycast e a primaria). Sem custo visual.
+                    // AUDITORIA 16/09 (crash no tiro): depth e fallback morto —
+                    // [DEPTH-ROW] sample=0 sempre (dsvFmt=19 da UI, nao da cena).
+                    // CopyResource por frame = GPU ocupada justo quando o tiro
+                    // liga colliders em massa. DESLIGADO: Raycast e a primaria.
+                    // Reativar so com hook no DrawIndexed (DSV da cena real).
                     static int s_copyDiv = 0;
-                    if (g_depthStaging && td.SampleDesc.Count == 1 && ((++s_copyDiv % 3) == 0)) {
+                    if (false && g_depthStaging && td.SampleDesc.Count == 1 && ((++s_copyDiv % 3) == 0)) {
                         // Somente nao-MSAA aqui (CopyResource exige mesma amostragem).
                         g_pContext->CopyResource(g_depthStaging, depthTex);
                         float vw = (nvp > 0 && vp[0].Width > 0) ? vp[0].Width : (float)td.Width;
@@ -251,7 +253,7 @@ namespace DepthVis {
     }
     // Amostra o pixel (u,v em [0,1]) e retorna NDC decodificado por formato.
     // D24/D16: inteiro normalizado. D32: float direto. R24G8/R32: typeless views.
-    // FIX hang 15/09: TryEnter em vez de Enter â€” se a thread do Present estiver
+    // FIX hang 15/09: TryEnter em vez de Enter — se a thread do Present estiver
     // no meio do Publish, a worker NAO trava o jogo: pula a amostra (fail-open).
     bool Sample(float u, float v, float& outNdc) {
         if (!g_depthCSInit) return false;
@@ -270,10 +272,10 @@ namespace DepthVis {
         if ((UINT)y >= h) y = (int)h - 1;
         D3D11_MAPPED_SUBRESOURCE mp = {};
         // Map em staging com READ e sem flags extras (dado do frame anterior e valido).
-        // FIX hang 15/09: DO_NOT_WAIT â€” Map com GPU ocupada retorna DXGI_ERROR_WAS_STILL
+        // FIX hang 15/09: DO_NOT_WAIT — Map com GPU ocupada retorna DXGI_ERROR_WAS_STILL
         // DRAWING em vez de travar a worker (e o jogo junto, tela branca).
         if (FAILED(ctx->Map(tex, 0, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &mp))) {
-            // AUDITORIA hang 03:47: Enter aqui derrota o TryEnter de cima â€”
+            // AUDITORIA hang 03:47: Enter aqui derrota o TryEnter de cima —
             // se o Present segurar o CS, a worker trava DENTRO dele. Contador
             // lock-free (Interlocked): Map falhou = pula, sem esperar ninguem.
             long f = InterlockedIncrement(&s_mapFail);
@@ -418,7 +420,7 @@ static DWORD WINAPI MainThread(LPVOID lpReserved) {
             if (stable < 4) Sleep(50);
         }
         if (!g_hWindow) {
-            Log::Error("Sem janela apos 10s â€” MainThread aborta (tente injetar em partida).");
+            Log::Error("Sem janela apos 10s — MainThread aborta (tente injetar em partida).");
             return 0;
         }
     }

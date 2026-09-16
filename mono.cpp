@@ -220,6 +220,8 @@ namespace Mono {
     static bool s_handLogged = false; // diagnostico HAND (1x: ponta da mao em mundo)
     static bool s_handLogged2 = false; // diagnostico HAND2 (1x: maos vivas pos-fix)
     static DWORD WINAPI EspThread(LPVOID); // forward (definida apos BuildEsp)
+    static void ReadAll(); // forward (chamada na worker, fora do Present)
+    static void AuditBones(); // forward (chamada na worker, fora do Present)
     static MonoImage*  s_unity = nullptr;
     static MonoClass*  cCamU = nullptr;
     static MonoClass*  cTrans = nullptr;
@@ -1855,6 +1857,14 @@ namespace Mono {
                 // Cada entidade ganha LOS real a cada ~100ms — imperceptivel,
                 // e o pico de invokes cai 3x. Histerese segura a cor no meio.
                 BuildEsp();
+                {
+                    static int s_slowN = 0;
+                    if (++s_slowN >= 60) {
+                        s_slowN = 0;
+                        ReadAll();
+                        AuditBones();
+                    }
+                }
                 PiFlush(false); // agregado [PI-CALL] 1x/5s (so sai se fail>0 ou >500us)
                 // Adapta pelo custo medido no ciclo (s.espMs, media movel).
                 // Teto duro: ciclo >100ms = respira 200ms (antes o max era 66ms
@@ -1971,17 +1981,13 @@ namespace Mono {
     }
 
     void Tick() {
-        // ESP roda em worker thread (30Hz): Present nunca bloqueia em invoke.
-        // a camera gira. Leituras de texto do overlay seguem a 2Hz (30 frames).
+        // AUDITORIA 16/09 (crash no tiro, 16 zumbis, raycast limpo): Tick
+        // rodava no hkPresent (thread do jogo) com InvokeBool + 19x go+name.
+        // No tiro, o LOD mexe nos mesmos objetos = corrida no frame = AV.
+        // REGRA NOVA: Present NUNCA invoca — so copia snapshot (Get/GetEsp).
+        // ReadAll/AuditBones migraram p/ worker (EspThread, 1x/2s).
         ++s_tick;
         if (!s.ready && !Init()) return;
-        if (s_tick % 30 != 0) return;
-        static int n = 0;
-        ReadAll();
-        AuditBones();
-        if (++n == 1 || n % 20 == 0)
-            Log::Infof("Mono live: localHP=%.0f stam=%.0f players=%d zombies=%d zHp0=%.0f day=%.2fh eyeY=%.2f footY=%.2f fantasma(morta=%d ruim=%d)",
-                s.localHp, s.localStam, s.players, s.zombies, s.zHp0, s.dayTime, s_dbgEyeY, s_dbgFootY, s_ghostDead, s_ghostBad);
     }
 
     const State& Get() { return s; }
