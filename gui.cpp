@@ -85,7 +85,7 @@ namespace Config {
     bool  bZombieSkeleton = false;
     bool  bZombieSnap = false;
     bool  bZombieHeadDot = false;
-    bool  bZombieClass = true;
+    bool  bZombieClass = false; // tag [BOSS] (default OFF ate type+20 real)
     int   iSnapFrom = 0;           // 0=Base 1=Topo 2=Centro
     bool  bEspVisibleOnly = false;  // filtro: so desenha visiveis
     float colZombieClass[4] = { 1, 0.85f, 0.2f, 1 };
@@ -987,16 +987,17 @@ namespace GUI {
                     envelope.min.y -= h * 0.10f;
                     envelope.max.x += w * 0.28f;
                 }
-                // FIX 1: Classe SUBSTITUI o Nome no LayoutContent — nunca AddText separado.
-                // Tipo real via type+20 no ciclo 6; ate la usa nome original ("Zombie").
-                const char* displayName = es[i].name;
-                char clsBuf[96];
-                if (Config::bZombieClass) {
-                    const char* cls = "Zumbi"; // placeholder ate type+20 real (ciclo 6)
-                    _snprintf_s(clsBuf, _TRUNCATE, "%s [%s]", es[i].name, cls);
-                    displayName = clsBuf;
+                // Nome puro do snapshot (1 texto só, dentro do layout).
+                // FIX nome duplicado: removido bloco "%s [%s]" que gerava
+                // "Zombie [Zumbi]" (GetName stubado retorna "Zombie" fixo +
+                // sufixo "Zumbi" hardcoded). Tag [BOSS] via isBoss real abaixo.
+                char nameBuf[80];
+                const char* labelName = es[i].name;
+                if (Config::bZombieClass && es[i].isBoss) {
+                    _snprintf_s(nameBuf, _TRUNCATE, "%s [BOSS]", es[i].name);
+                    labelName = nameBuf;
                 }
-                auto content = LayoutContent(displayName, es[i].dist, es[i].hp, es[i].maxHp);
+                auto content = LayoutContent(labelName, es[i].dist, es[i].hp, es[i].maxHp);
                 auto style = LayoutStyle(content.health, vis);
                 auto geometry = EspLayout::Resolve(layout, envelope, { ImVec2(2.0f, 2.0f), ImVec2(io.DisplaySize.x - 2.0f, io.DisplaySize.y - 2.0f) }, content, style, true);
                 EspLayout::Draw(dl, geometry, content, style);

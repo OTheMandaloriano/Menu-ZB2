@@ -52,6 +52,8 @@ namespace Mono {
         char  name[64];
         bool  onScreen;
         bool  isAlly;        // item 15 (sempre false no item 7)
+        bool  isBoss;        // ZombieIdentity.type+20 (Riot/Queen/Reaper). Sem
+                             // type validado via CE MCP = false (nunca chutar).
     };
 
     struct State {

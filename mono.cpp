@@ -63,6 +63,11 @@ namespace Off {
     constexpr int ZL_totalReal = 184;
     // Zombie (instancia)
     constexpr int Z_health = 168;
+    // Zombie.identity+192 -> ZombieIdentity; type+20 = ZombieType enum.
+    // [PENDENTE CE MCP]: validar via readInt(z+192 -> zi+20) em partida antes
+    // de confiar (CLASSES_UTEIS: Zombie identity+192, ZombieIdentity type+20).
+    constexpr int Z_identity = 192;
+    constexpr int ZI_type = 20;
     // ZombieObject (instancia)
     constexpr int ZO_eye = 88;
     constexpr int ZO_foot = 96;
@@ -1373,6 +1378,30 @@ namespace Mono {
             if (n >= 96) return;
             EspEntry tmpEn = {}; // FIX P0 soco: sem invoke de nome (wrapper pode estar morto)
             strncpy_s(tmpEn.name, sizeof(tmpEn.name), "Zombie", _TRUNCATE);
+            tmpEn.isBoss = false;
+            // Boss via ZombieIdentity.type (memcpy cru + SEH, zero invoke).
+            // Valores do enum ainda NAO mapeados: loga [ZTYPE] 1x por valor novo
+            // p/ descobrir via CE MCP (Riot/Queen/Reaper). Boss = type != 0
+            // (comum = 0); se validacao futura provar outro mapeamento, ajusta aqui.
+            {
+                void* zi = ReadP(e, Off::Z_identity);
+                int tp = -999;
+                __try { if (zi) memcpy(&tp, (char*)zi + Off::ZI_type, sizeof(tp)); }
+                __except (EXCEPTION_EXECUTE_HANDLER) { tp = -999; }
+                if (tp != -999) {
+                    tmpEn.isBoss = (tp != 0);
+                    static int s_ztypeSeen[32] = { 0 };
+                    if (tp >= -16 && tp < 16) {
+                        int si = tp + 16;
+                        if (!s_ztypeSeen[si]) {
+                            s_ztypeSeen[si] = 1;
+                            Log::Infof("[ZTYPE] ent=0x%p type=%d boss=%d", e, tp, tmpEn.isBoss ? 1 : 0);
+                        }
+                    } else {
+                        Log::Infof("[ZTYPE] ent=0x%p type=%d (fora da faixa) boss=%d", e, tp, tmpEn.isBoss ? 1 : 0);
+                    }
+                }
+            }
             for (int k = 0; k < 8; ++k) { tmpEn.pv[k] = false; tmpEn.px[k] = tmpEn.py[k] = 0; }
             tmpEn.has3d = false;
             // Box 3D real: AABB de mundo do corpo (sem hardcode de tamanho).
@@ -1445,7 +1474,7 @@ namespace Mono {
                             en.ent = e; en.ex = bb.extents.x; en.ey = bb.extents.y; en.ez = bb.extents.z;
                             en.headX = en.headY = en.footX = en.footY = 0;
                             en.hp = hp; en.maxHp = mx;
-                            en.onScreen = true; en.isAlly = false;
+                            en.onScreen = true; en.isAlly = false; en.isBoss = tmpEn.isBoss;
                             return;
                         }
                     }
@@ -1580,7 +1609,7 @@ namespace Mono {
                     en.ent = e; en.ex = bb.extents.x; en.ey = bb.extents.y; en.ez = bb.extents.z;
                     en.headX = en.headY = en.footX = en.footY = 0;
                     en.hp = hp; en.maxHp = mx;
-                    en.onScreen = true; en.isAlly = false;
+                    en.onScreen = true; en.isAlly = false; en.isBoss = tmpEn.isBoss;
                     return;
                 }
                 // bounds falhou: cai no caminho eye/foot abaixo (fallback documentado no log 1x).
@@ -1697,7 +1726,7 @@ namespace Mono {
             en.losVis = tmpEn.losVis;
             en.ent = e; en.ex = en.ey = en.ez = 0;
             en.hp = hp; en.maxHp = mx;
-            en.onScreen = true; en.isAlly = false;
+            en.onScreen = true; en.isAlly = false; en.isBoss = tmpEn.isBoss;
         });
         // Publicacao double-buffer (item 14b): worker escreve no back, vira o
         // ponteiro sob 1 CS curto. Present le o front SEM lock (ponteiro).
