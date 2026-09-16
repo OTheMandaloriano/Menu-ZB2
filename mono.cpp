@@ -194,11 +194,13 @@ namespace Mono {
     // lia lixo -> SEH em massa -> hang. Tudo que e "por ciclo" reseta aqui.
     // Camada 1 (broadphase, padrao UC): perto (<45m) = LOS real todo ciclo;
     // longe = 1 de 3 ciclos (rodizio). Teto 96 ent/ciclo. Ritmo 33-66ms.
+    // AUDITORIA 16/09 03:15 (tiro = LOD liga colliders em massa): durante o
+    // tiro o jogo mexe nos mesmos colliders que o raycast testa. Pausar o LOS
+    // por ~300ms após detectar oscilação de lista (MapSettling) + histerese
+    // dura cobre a janela sem custo visual.
     static int  s_budgetLeft = 0;
-    static int  s_budgetMax = 96; // 1 raycast/entidade/ciclo, 96 ent = teto.
-    // Barato: teto de entidades que ganham raycast real por ciclo (o resto
-    // mantem a cor anterior via histerese). Protótipo UC: LOS total só no
-    // perto; longe alterna. Aqui: 32/ciclo, resto skip.
+    static int  s_budgetMax = 64; // 64 raycasts/ciclo: perto sempre, longe fila.
+    // Teto menor = menos concorrencia com o tiro/LOD. Histerese segura a cor.
     static bool s_budgetLogged = false;
     static int  s_losSkipped = 0; // telemetria: quantos pontos o teto pulou
     static int  s_losCursor = 0; // legado: rodizio removido (piscava em porta/janela).
@@ -660,11 +662,14 @@ namespace Mono {
     // o init) — todo LosPoint retorna true pelo gate acima. Quando resolver,
     // a calibracao do offset de distance sai do proprio [LOS-CAL] abaixo.
     static int s_calDone = 0; // calibracao RaycastHit.distance (1x, ver LosCalibrate)
-    // Histerese LOS: a cor exibida so vira apos ~3 ciclos iguais da mesma
-    // entidade (anti-flicker). Retorna a cor ESTAVEL; atualiza o streak.
+    // Histerese LOS (auditoria 16/09, oscilacao em multidao): a cor exibida
+    // so vira apos 5 ciclos iguais da mesma entidade (era 3 — com ciclo de
+    // 200ms em horda, 3 ciclos = 600ms e cada ciclo alternava; 5 ciclos com
+    // rodizio 1/3 = decisao estavel). Verde exige unanimidade maior porque
+    // o fail-open puxa pra verde: 5x exposto -> verde; 3x ocluido -> vermelho
+    // (assimetria intencional: vermelho entra rapido, verde sai devagar).
     // skip=true (ciclo pulado por orcamento/rodizio): NAO mexe no streak,
-    // devolve a cor exibida atual (ou a crua p/ entidade nova). Sem isso, o
-    // rodizio apagava o vermelho: pular ciclo virava verde (bug 16/09).
+    // devolve a cor exibida atual (ou a crua p/ entidade nova).
     static bool LosStable(void* ent, bool rawVis, bool skip = false) {
         for (int i = 0; i < 256; ++i) {
             if (s_hystEnt[i] == ent) {
@@ -672,15 +677,16 @@ namespace Mono {
                 int s = (int)s_hystStreak[i] + (rawVis ? 1 : -1);
                 if (s > 5) s = 5; if (s < -5) s = -5;
                 s_hystStreak[i] = (signed char)s;
-                if (s >= 3) s_hystShown[i] = true;      // 3x exposto -> vira verde
-                else if (s <= -3) s_hystShown[i] = false; // 3x ocluido -> vira vermelho
+                if (s >= 5) s_hystShown[i] = true;      // 5x exposto -> verde
+                else if (s <= -3) s_hystShown[i] = false; // 3x ocluido -> vermelho
                 return s_hystShown[i];
             }
-            if (!s_hystEnt[i]) { // slot livre: nasce na cor crua
+            if (!s_hystEnt[i]) { // slot livre: nasce VERMELHO (dentro de casa
+                // nasce certo; fora, o verde vem em 5 ciclos ~500ms — sem churn)
                 s_hystEnt[i] = ent;
-                s_hystStreak[i] = rawVis ? 1 : -1;
-                s_hystShown[i] = rawVis;
-                return rawVis;
+                s_hystStreak[i] = -1;
+                s_hystShown[i] = false;
+                return false;
             }
         }
         return rawVis; // tabela cheia: sem histerese
