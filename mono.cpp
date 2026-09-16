@@ -208,6 +208,8 @@ namespace Mono {
     static MonoMethod* mGetPos = nullptr;
     static MonoMethod* mW2S = nullptr;
     static MonoMethod* mGetTrans = nullptr;
+    static Vec3 s_camW = { 0, 0, 0 }; // posicao da camera do ciclo (gate skeleton)
+    static bool s_camWok = false;
     // Item 14 LOS: Physics dota o teste de oclusao sem custo de disposicao.
     typedef unsigned int (__cdecl* FnFieldOffset)(void*); // mono_field_get_offset
     static MonoMethod* mRaycast = nullptr; // Physics.Raycast(Vector3,Vector3,RaycastHit&,Single,Int32)
@@ -1148,6 +1150,23 @@ namespace Mono {
         }
         Vec3 wp[SkJoint::SK_PHYS];
         bool wok[SkJoint::SK_PHYS] = { false };
+        // Causa A (item 14b): skeleton longe vira box 2D leve. 18 get_position
+        // por zumbi x 96 = ~1700 invokes/ciclo — e o LOD mexe nesses mesmos
+        // Transforms. Longe (>50m) nao precisa de osso: pula o loop inteiro.
+        // A flag bZombieSkeleton continua mandando (respeita o menu).
+        // Sem eye (sem invoke extra): usa o 1o bone como proxy de distancia.
+        {
+            void* b0 = nullptr;
+            __try { memcpy(&b0, (char*)arr + Off::A_data + (size_t)kBoneIdx[0] * 8, 8); }
+            __except (EXCEPTION_EXECUTE_HANDLER) { b0 = nullptr; }
+            if (b0 && s_camWok) {
+                Vec3 bp;
+                if (GetPos(b0, bp)) {
+                    float dx = bp.x - s_camW.x, dy = bp.y - s_camW.y, dz = bp.z - s_camW.z;
+                    if (dx * dx + dy * dy + dz * dz > 50.0f * 50.0f) { out.skN = 0; return; }
+                }
+            }
+        }
         for (int k = 0; k < SkJoint::SK_PHYS; ++k) {
             if (!bones[k]) continue;
             Vec3 w, s3;
@@ -1257,6 +1276,7 @@ namespace Mono {
             }
         }
         // Posicao da camera 1x por ciclo p/ cull por distancia (poupa 2 invokes de W2S nos longe).
+        // s_camW global: CollectJoints usa p/ gate de skeleton longe (Causa A).
         Vec3 camW = { 0, 0, 0 };
         bool hasCamW = false;
         if (mGetTrans) {
@@ -1267,6 +1287,7 @@ namespace Mono {
             if (tr && !exc) hasCamW = GetPos(tr, camW);
             PiAdd(s_piTrC, PiNow() - t0c, hasCamW);
         }
+        s_camW = camW; s_camWok = hasCamW;
         float maxD = Config::fMaxDistance;
         float maxD2 = maxD * maxD;
         LARGE_INTEGER t0, t1;
