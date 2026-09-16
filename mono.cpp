@@ -1703,9 +1703,12 @@ namespace Mono {
         });
         // Publicacao double-buffer (item 14b): worker escreve no back, vira o
         // ponteiro sob 1 CS curto. Present le o front SEM lock (ponteiro).
-        // TryEnter aqui so protege a virada; quem perde a virada tenta no
-        // proximo ciclo — nunca trava, nunca perde dado.
-        EnterCriticalSection(&s_espCS);
+        // AUDITORIA hang 03:47 (raycast limpo, fail 1/3795): o Enter BLOQUEANTE
+        // aqui e o unico ponto onde a worker pode esperar para sempre — se o
+        // Present estiver suspenso (resize/Alt-Tab/foco), a worker trava dentro
+        // do CS e o jogo congela com ESP desenhado. TryEnter: perdeu a virada
+        // = tenta no proximo ciclo (33ms), nunca trava.
+        if (!TryEnterCriticalSection(&s_espCS)) return;
         // Telemetria de orcamento (1x/sessao): prova que o teto segura a horda.
         if (!s_budgetLogged) {
             s_budgetLogged = true;

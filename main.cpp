@@ -273,12 +273,14 @@ namespace DepthVis {
         // FIX hang 15/09: DO_NOT_WAIT — Map com GPU ocupada retorna DXGI_ERROR_WAS_STILL
         // DRAWING em vez de travar a worker (e o jogo junto, tela branca).
         if (FAILED(ctx->Map(tex, 0, D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, &mp))) {
-            long f = 0;
-            if (g_depthCSInit) { EnterCriticalSection(&g_depthCS); f = ++s_mapFail; LeaveCriticalSection(&g_depthCS); }
+            // AUDITORIA hang 03:47: Enter aqui derrota o TryEnter de cima —
+            // se o Present segurar o CS, a worker trava DENTRO dele. Contador
+            // lock-free (Interlocked): Map falhou = pula, sem esperar ninguem.
+            long f = InterlockedIncrement(&s_mapFail);
             if (f <= 2) Log::Warn("Depth Map falhou (dispositivo/staging).");
             return false;
         }
-        if (g_depthCSInit) { EnterCriticalSection(&g_depthCS); s_mapOk++; LeaveCriticalSection(&g_depthCS); }
+        InterlockedIncrement(&s_mapOk);
         bool ok = false;
         __try {
             if (fmt == DXGI_FORMAT_D32_FLOAT || fmt == DXGI_FORMAT_R32_TYPELESS) {
