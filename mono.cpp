@@ -1767,6 +1767,36 @@ namespace Mono {
     // (<12ms) = volta pros 33ms. O jogo nunca recebe rajada de invokes: quanto
     // mais pesado o ciclo, mais folga o PhysX/LOD ganha antes do proximo.
     static int s_sleepMs = 33;
+    // Gate geracao de mapa (item 14b, crash 02:17): LOD gerando celulas
+    // (LotConstructor/MapHash) destroi e recria colliders em massa. Sinal
+    // observavel sem invoke: a lista de zumbis OSCILA (spawn/despawn em rajada)
+    // ou o totalReal diverge. Oscilou = mapa assentando: dorme 500ms, sem invoke.
+    static int s_lastListN = -1;
+    static int s_unstableN = 0;
+    static bool MapSettling() {
+        __try {
+            if (!cZLoader || !fZLInst || !s_dom) return false;
+            MonoVTable* vt = pVTable(s_dom, cZLoader);
+            if (!vt) return false;
+            void* zl = nullptr;
+            pStaticGet(vt, fZLInst, &zl);
+            if (!zl) return false;
+            void* list = ReadP(zl, Off::ZL_zombies);
+            if (!list) return false;
+            int size = 0;
+            memcpy(&size, (char*)list + Off::L_size, sizeof(size));
+            if (size < 0 || size > 512) return true; // lista invalida = transicao
+            if (s_lastListN < 0) { s_lastListN = size; return false; }
+            int d = size - s_lastListN;
+            if (d < 0) d = -d;
+            s_lastListN = size;
+            // Oscilacao >= 8 em 1 ciclo (~33ms) = spawn/despawn em rajada.
+            if (d >= 8) {
+                if (++s_unstableN >= 2) return true; // 2 ciclos seguidos = assentando
+            } else s_unstableN = 0;
+            return false;
+        } __except (EXCEPTION_EXECUTE_HANDLER) { return true; }
+    }
     static DWORD WINAPI EspThread(LPVOID) {
         pAttach(s_dom); // worker precisa do proprio attach no Mono
         Log::Info("Thread ESP iniciada (30Hz, fora do Present).");
@@ -1782,6 +1812,13 @@ namespace Mono {
                     continue;
                 }
                 if (s_deadN > 0) { s_deadN = 0; Log::Info("[SCENE] loader vivo — worker retomada."); }
+                if (MapSettling()) {
+                    // Mapa gerando celulas: zero invoke neste ciclo.
+                    if (TryEnterCriticalSection(&s_espCS)) { s_espN = 0; LeaveCriticalSection(&s_espCS); }
+                    Log::Warn("[SCENE] mapa assentando — ciclo pulado (LOD gerando).");
+                    Sleep(500);
+                    continue;
+                }
                 BuildEsp();
                 PiFlush(false); // agregado [PI-CALL] 1x/5s (so sai se fail>0 ou >500us)
                 // Adapta pelo custo medido no ciclo (s.espMs, media movel).
