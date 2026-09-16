@@ -215,6 +215,20 @@ print com ~40 boxes (metade fora da tela, atrás da câmera).
   Fix: nasce na cor CRUA do 1º ciclo (commit `ae2333a`).
 - DLL `4B18B2A1…` 612864 bytes.
 
+## Crash 03:33 no tiro parado + pisca-pisca com poucos zumbis (16/09)
+
+- Stack: `ShootGun→Shoot→ShootSingleProjectile→PlayerShot→OnPlayerShot→
+  StartCollidersByLine→StartColliding→SetColliding→set_enabled` → AV
+  `0x19eee86` (8º dump, mesma região LOD). Com 3-5 zumbis o volume não
+  explica: o gatilho é o TIRO ligando colliders na mesma janela do raycast.
+- Pisca-pisca com poucos zumbis: o RODIZIO 1/3 alternava a cor entre ciclos
+  mesmo sem pressão de budget. Rodízio removido dos 2 caminhos (3D e 2D);
+  custo controlado pelo budget (64) + histerese dura (5 verde / 3 vermelho).
+- Fix (commit `aa68d8b`, DLL `9F862392…` 612864 bytes).
+- Padrão UC/Unity aplicado: 1 raycast por entidade por ciclo seria o ideal;
+  aqui 5 pontos com budget global + tri-estado + decay. QueryTrigger usa o
+  global do projeto (overload confirmado não tem o parâmetro).
+
 ## Anomalias para REVALIDAR (não corrigir neste ciclo)
 
 - `stam=-20` fixo e `eyeY/footY` congelados no `Mono live` — cheiro de campo com offset
