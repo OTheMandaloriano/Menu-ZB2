@@ -126,6 +126,26 @@ Comandos (só leitura, nenhum invoke/escrita no combate):
   DLL `C75E8405…` 612352 bytes.
 - Pendente: 10 kills + tail (`[PI-CALL]`, `[PERF]`, `[SCENE]`).
 
+## Crash no inject 02:29 (PID 18308) — hook no meio do loading
+
+- Sintoma: crash ~20s após o inject, tela de loading (céu, `6:10`, sem zumbi).
+- Log da DLL PARA em `[BUDGET] 51/200 entidades=9` — sem `MainThread concluída`,
+  sem `Mono bind OK`, sem `[SIG]`. A MainThread morreu antes de terminar o init.
+- Nosso log recomeça 02:29:28 (nova MainThread?) e crasha 02:29:50
+  (`[PI-CALL] raycast n=5670 fail=1 seh`, 22s de vida). Duas vidas no mesmo log.
+- Crash log: `size 741376` (item 0 ainda aberto — confere `SizeOfImage` do PE
+  no disco, não bytes do arquivo), `Created #221` → `Crash!!!`, stack nativo
+  SEM frame managed, offset `0x19f248b` (mesma região dos LOD).
+- Causa: `MainThread` fazia `kiero::init` + bind + WndProc assim que achava
+  QUALQUER janela — incluindo splash/loading com o `MapHash` gerando células.
+  Hook no meio da remontagem do LOD = AV. Padrão UC: nunca hookar D3D durante
+  load; esperar a janela estabilizar (message loop rodando).
+- Fix (commit `7356597`): MainThread exige 4 leituras iguais da janela
+  (~200ms estável, ~10s max); sem janela, aborta com log em vez de hookar
+  no escuro. DLL `150EFCAA…` 612864 bytes.
+- REGRA NOVA: injetar SOMENTE em partida (nunca no loading/menu).
+  O `SceneAlive`/`MapSettling` cobre a worker; este cobre a MainThread.
+
 ## Anomalias para REVALIDAR (não corrigir neste ciclo)
 
 - `stam=-20` fixo e `eyeY/footY` congelados no `Mono live` — cheiro de campo com offset
