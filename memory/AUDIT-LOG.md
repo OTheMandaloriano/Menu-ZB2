@@ -69,6 +69,21 @@ Comandos (só leitura, nenhum invoke/escrita no combate):
 - `injector_state.txt` = `611840-134340076975175614` = DLL do fix ✅.
 - Jogo PID 18904 + injetor disparado; pendente: 10 kills multidão 40+.
 
+## Teste 01:50 INVÁLIDO + rebuild limpo (16/09)
+
+- Crash 01:53:09 com handler (`Crash_2026-09-16_045310418`, `Created #216`)
+  carregou DLL com `SizeOfImage 741376` — a do fix tem 611840. Build/string
+  tabelam diferente, mas `SizeOfImage` não mente: era OUTRA build (link
+  incremental com `.obj` velhos: `main.obj` de 15/09 21:58 no meio).
+  Prova adicional: zero `[PI-CALL]/[PERF]/[BUDGET]` na sessão.
+- Ação: `build/intermediates/Release_x64` apagado, rebuild limpo full
+  (2608 funções, sem IPDB reaproveitado) → DLL `9B2C07AC…` 611840 bytes
+  (commit `f2606b8`). Tail da morte válido como sintoma (kill melee
+  `...8F140 hp=56/80` → `...8F640`), não como validação.
+- Sessão 02:00: `injector_state.txt` = `611840-134340083136094130` ✅ =
+  DLL do rebuild. Init limpo (`LOS OK`, `[BUDGET] 0/200`). Jogo PID 21952.
+- Pendente: 10 kills multidão 40+ com `[PI-CALL]` discriminado no log.
+
 ## Anomalias para REVALIDAR (não corrigir neste ciclo)
 
 - `stam=-20` fixo e `eyeY/footY` congelados no `Mono live` — cheiro de campo com offset
