@@ -1,4 +1,4 @@
-﻿#include "esp_layout.h"
+#include "esp_layout.h"
 #include "config_json.h"
 #include <cmath>
 #include "gui.h"
@@ -911,7 +911,8 @@ namespace GUI {
                         { MJ::SK_A1R, MJ::SK_A2R },
                         { MJ::SK_A2L, MJ::SK_HL2L }, { MJ::SK_A2R, MJ::SK_HL2R } // mao estimada
                     };
-                    for (int s = 0; s < 19; ++s) {
+                    constexpr int nSeg = (int)(sizeof(SEG) / sizeof(SEG[0]));
+                    for (int s = 0; s < nSeg; ++s) {
                         int a = SEG[s][0], b = SEG[s][1];
                         if (!es[i].skV[a] || !es[i].skV[b]) continue;
                         ImVec2 pa = ImVec2(es[i].skX[a], H - es[i].skY[a]);
@@ -1028,27 +1029,44 @@ namespace GUI {
                 ImGui::ColorEdit4("Cor Visivel", Config::colZombieVis);
                 ImGui::ColorEdit4("Cor Invisivel", Config::colZombieInv);
                 ImGui::Separator();
-                ImGui::Checkbox("ESP Aliados (azul)", &Config::bAllyEsp);
-                ImGui::Combo("Box Aliado", &Config::iAllyBox, kBoxType, 3);
-                ImGui::Checkbox("Nome##A", &Config::bAllyName); ImGui::SameLine();
-                ImGui::Checkbox("Dist##A", &Config::bAllyDist); ImGui::SameLine();
-                ImGui::Checkbox("Vida##A", &Config::bAllyHp);
-                ImGui::ColorEdit4("Aliado Visivel", Config::colAllyVis);
-                ImGui::ColorEdit4("Aliado Invisivel", Config::colAllyInv);
-                ImGui::Separator();
-                ImGui::Checkbox("Chams (corpo)", &Config::bChams);
-                ImGui::ColorEdit4("Chams Vis", Config::colChamsVis);
-                ImGui::ColorEdit4("Chams Inv", Config::colChamsInv);
-                ImGui::Checkbox("ESP Itens", &Config::bItemEsp);
-                ImGui::Checkbox("Armas", &Config::bItemWeapons); ImGui::SameLine();
-                ImGui::Checkbox("Raros", &Config::bItemRare); ImGui::SameLine();
-                ImGui::Checkbox("Municao", &Config::bItemAmmo); ImGui::SameLine();
-                ImGui::Checkbox("Suprimento", &Config::bItemSupply);
-                ImGui::Checkbox("Pontos (heli/chefe/missao)", &Config::bPoiEsp);
-                ImGui::ColorEdit4("Cor Item", Config::colItem);
-                ImGui::SliderFloat("Raio Item", &Config::fItemRadius, 10, 500, "%.0fm");
-
+                // Ciclo 1 (spec §4.1): ESP Aliados vira master — resto da seção
+                // (sempre visíveis, sem LOS/Somente/Dist por decisão PvE coop).
+                if (!Config::bAllyEsp) {
+                    ImGui::Checkbox("ESP Aliados (azul)", &Config::bAllyEsp);
+                } else {
+                    ImGui::Checkbox("ESP Aliados (azul) [ON]", &Config::bAllyEsp);
+                    ImGui::Combo("Box Aliado", &Config::iAllyBox, kBoxType, 3);
+                    ImGui::Checkbox("Nome##A", &Config::bAllyName); ImGui::SameLine();
+                    ImGui::Checkbox("Dist##A", &Config::bAllyDist); ImGui::SameLine();
+                    ImGui::Checkbox("Vida##A", &Config::bAllyHp);
+                    ImGui::ColorEdit4("Aliado Visivel", Config::colAllyVis);
+                    ImGui::ColorEdit4("Aliado Invisivel", Config::colAllyInv);
                 }
+                ImGui::Separator();
+                // Ciclo 1 (spec §4.1): Chams sem master — o próprio checkbox é o
+                // enable (XQZ pode ficar ligado com ESP desligado).
+                if (!Config::bChams) {
+                    ImGui::Checkbox("Chams (corpo)", &Config::bChams);
+                } else {
+                    ImGui::Checkbox("Chams (corpo) [ON]", &Config::bChams);
+                    ImGui::ColorEdit4("Chams Vis", Config::colChamsVis);
+                    ImGui::ColorEdit4("Chams Inv", Config::colChamsInv);
+                }
+                // Ciclo 1 (spec §4.1): ESP Itens vira master — sub-itens só
+                // aparecem com ele ligado (menos poluição, padrão Gamesense).
+                if (!Config::bItemEsp) {
+                    ImGui::Checkbox("ESP Itens", &Config::bItemEsp);
+                } else {
+                    ImGui::Checkbox("ESP Itens [ON]", &Config::bItemEsp);
+                    ImGui::Checkbox("Armas", &Config::bItemWeapons); ImGui::SameLine();
+                    ImGui::Checkbox("Raros", &Config::bItemRare); ImGui::SameLine();
+                    ImGui::Checkbox("Municao", &Config::bItemAmmo); ImGui::SameLine();
+                    ImGui::Checkbox("Suprimento", &Config::bItemSupply);
+                    ImGui::Checkbox("Pontos (heli/chefe/missao)", &Config::bPoiEsp);
+                    ImGui::ColorEdit4("Cor Item", Config::colItem);
+                    ImGui::SliderFloat("Raio Item", &Config::fItemRadius, 10, 500, "%.0fm");
+                }
+                } // fecha CollapsingHeader "Cores, aliados e itens"
                 ImGui::EndTabItem();
             }
             // ---- 3 MISC (sempre 3a aba) ----
