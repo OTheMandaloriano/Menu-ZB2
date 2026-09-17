@@ -29,6 +29,9 @@ namespace Config {
     bool bDebugOverlay = true;
     bool bTooltips = true;
 
+    bool  bGodMode = false;      // default OFF (escrita direta, ver mono.cpp)
+    bool  bInfStamina = false;   // default OFF
+
     bool  bAimbot = false;
     int   iAimKey = VK_RBUTTON;
     int   iAimMode = 0;
@@ -69,7 +72,6 @@ namespace Config {
     float fSpeedMult = 1.5f;
     bool  bSuperJump = false;
     float fJumpMult = 1.5f;
-    bool  bInfStamina = false;
     bool  bRollSpeed = false;
     float fRollMult = 1.5f;
 
@@ -630,6 +632,7 @@ namespace GUI {
 #define JV(v) fprintf(f, "\"" #v "\":[%f,%f,%f,%f],\n", (double)(v)[0], (double)(v)[1], (double)(v)[2], (double)(v)[3])
 #define JS(v) fprintf(f, "\"" #v "\":\"%s\",\n", ConfigJson::Escape(v).c_str())
         JB(bMenuOpen); JI(iMenuKey); JB(bWatermark); JB(bDebugOverlay); JB(bTooltips);
+        JB(bGodMode); JB(bInfStamina);
         JB(bAimbot); JI(iAimKey); JI(iAimMode); JB(bAutoAim); JB(bSilentAim); JB(bAutoFire);
         JB(bTriggerbot); JI(iAimBone); JI(iAimPriority); JF(fSmoothing);
         JB(bLimitFov); JF(fFovAngle); JB(b360Mode); JB(bDrawFov); JF(fMaxDistance);
@@ -638,7 +641,7 @@ namespace GUI {
         JB(bInfAmmo); JB(bInstantReload); JB(bFullAuto); JB(bSaitama); JF(fNadeTime);
         JF(fExplRadius); JF(fExplDamage); JB(bContactExpl); JB(bPowerDrop);
         JS(szItemSearch); JI(iItemAmount);
-        JB(bSpeedHack); JF(fSpeedMult); JB(bSuperJump); JF(fJumpMult); JB(bInfStamina);
+        JB(bSpeedHack); JF(fSpeedMult); JB(bSuperJump); JF(fJumpMult);
         JB(bRollSpeed); JF(fRollMult);
         JB(bZombieEsp); JB(bZombieBoxShow); JI(iZombieBox); JB(bZombieName); JB(bZombieDist); JB(bZombieHp); JB(bZombiePct); JF(fPctX); JF(fPctY); JI(iNameA); JI(iDistA); JI(iHpA); JI(iPctA); JF(fPropN); JF(fPropD); JF(fPropH); JF(fPropP);
         JI(iSideN); JI(iSideD); JI(iSideH); JI(iSideP); JI(iAlinN); JI(iAlinD); JI(iAlinH); JI(iAlinP);
@@ -718,6 +721,7 @@ namespace GUI {
 #define LV(v) fields.push_back({ #v, ConfigJson::ColorField, (v) })
 #define LS(v) fields.push_back({ #v, ConfigJson::StringField, (v), sizeof(v) })
         LB(bMenuOpen); LI(iMenuKey); LB(bWatermark); LB(bDebugOverlay); LB(bTooltips);
+        LB(bGodMode); LB(bInfStamina);
         LB(bAimbot); LI(iAimKey); LI(iAimMode); LB(bAutoAim); LB(bSilentAim); LB(bAutoFire);
         LB(bTriggerbot); LI(iAimBone); LI(iAimPriority); LF(fSmoothing);
         LB(bLimitFov); LF(fFovAngle); LB(b360Mode); LB(bDrawFov); LF(fMaxDistance);
@@ -726,7 +730,7 @@ namespace GUI {
         LB(bInfAmmo); LB(bInstantReload); LB(bFullAuto); LB(bSaitama); LF(fNadeTime);
         LF(fExplRadius); LF(fExplDamage); LB(bContactExpl); LB(bPowerDrop);
         LS(szItemSearch); LI(iItemAmount);
-        LB(bSpeedHack); LF(fSpeedMult); LB(bSuperJump); LF(fJumpMult); LB(bInfStamina);
+        LB(bSpeedHack); LF(fSpeedMult); LB(bSuperJump); LF(fJumpMult);
         LB(bRollSpeed); LF(fRollMult);
         LB(bZombieEsp); LB(bZombieBoxShow); LI(iZombieBox); LB(bZombieName); LB(bZombieDist); LB(bZombieHp); LB(bZombiePct); LF(fPctX); LF(fPctY); LI(iNameA); LI(iDistA); LI(iHpA); LI(iPctA); LF(fPropN); LF(fPropD); LF(fPropH); LF(fPropP);
         LI(iSideN); LI(iSideD); LI(iSideH); LI(iSideP); LI(iAlinN); LI(iAlinD); LI(iAlinH); LI(iAlinP);
@@ -1014,6 +1018,10 @@ namespace GUI {
         if (ImGui::BeginTabBar("ZB2Tabs")) {
             // ---- 1 PLAYER ----
             if (ImGui::BeginTabItem("PLAYER")) {
+                ImGui::Text("Defesa");
+                ImGui::Checkbox("God Mode (HP travado)", &Config::bGodMode); Tip("Trava HP local em 100 (reescreve healthFast/healthSlow).");
+                ImGui::Checkbox("Infinite Stamina", &Config::bInfStamina); Tip("Trava stamina local no maximo (correr sem cansar).");
+                ImGui::Separator();
                 ImGui::Checkbox("Active Aimbot", &Config::bAimbot); Tip("Liga o aimbot (PvE: zumbis/chefes).");
                 ImGui::Combo("Aim Bone", &Config::iAimBone, kAimBones, 4); Tip("Head/Neck/Chest/Pelvis.");
                 ImGui::Combo("Aim Priority", &Config::iAimPriority, kAimPrio, 3);
@@ -1060,7 +1068,6 @@ namespace GUI {
                 ImGui::SliderFloat("Speed Mult", &Config::fSpeedMult, 1, 5, "%.1fx");
                 ImGui::Checkbox("Super Jump", &Config::bSuperJump);
                 ImGui::SliderFloat("Jump Mult", &Config::fJumpMult, 1, 5, "%.1fx");
-                ImGui::Checkbox("Infinite Stamina", &Config::bInfStamina);
                 ImGui::Checkbox("Roll Speed", &Config::bRollSpeed);
                 ImGui::SliderFloat("Roll Mult", &Config::fRollMult, 1, 5, "%.1fx");
                 ImGui::EndTabItem();

@@ -55,9 +55,13 @@ typedef void        (__cdecl* FnFree)(void*);
 namespace Off {
     // PlayersController
     constexpr int PCS_players = 48;
-    // PlayerMain (instancia)
+    // PlayerMain (instancia) — offsets validados OFFSETS.md (CE MCP 12/09).
+    // healthFast/healthSlow: float, 100.0 cheio. stamina*: 100.0 cheio.
     constexpr int PM_healthFast = 204;
+    constexpr int PM_healthSlow = 208;
+    constexpr int PM_maxStamina = 224;
     constexpr int PM_staminaFast = 228;
+    constexpr int PM_staminaSlow = 232;
     // ZombieLoader
     constexpr int ZL_zombies = 88;
     constexpr int ZL_totalReal = 184;
@@ -283,6 +287,19 @@ namespace Mono {
         __try { memcpy(&v, (const char*)base + off, sizeof(v)); }
         __except (EXCEPTION_EXECUTE_HANDLER) {}
         return v;
+    }
+
+    // Escrita direta com SEH (espelho do ReadF). Regras:
+    // - so escreve no LOCAL player (HasLocalControl==1), nunca em aliado/zumbi;
+    // - so quando a flag do menu esta ligada (custo zero desligado);
+    // - valida faixa antes (HP 0..1000, stamina 0..1000) p/ nao plantar NaN/lixo;
+    // - roda na worker (nunca no Present), junto do ReadAll (1x/2s).
+    static bool WriteF(void* base, int off, float v) {
+        if (!base) return false;
+        if (!(v >= -1000000.0f && v <= 1000000.0f)) return false; // rejeita NaN/inf
+        __try { memcpy((char*)base + off, &v, sizeof(v)); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+        return true;
     }
 
     static void* ReadP(const void* base, int off) {
@@ -1239,6 +1256,30 @@ namespace Mono {
         return 0;
     }
 
+    // Defesa (God + Stamina): reescreve os campos do LOCAL player.
+    // Roda dentro do ReadAll (worker, 1x/2s): dano entre ciclos e absorvido
+    // no ciclo seguinte; sem hook, sem patch de codigo, sem custo desligado.
+    static void ApplyDefense(void* local) {
+        if (!local) return;
+        // God Mode: trava healthFast + healthSlow em 100.
+        if (Config::bGodMode) {
+            float hp = ReadF(local, Off::PM_healthFast);
+            if (hp > 0.0f && hp < 100.0f) { // morto (<=0) nao ressuscita
+                WriteF(local, Off::PM_healthFast, 100.0f);
+                WriteF(local, Off::PM_healthSlow, 100.0f);
+            }
+        }
+        // Stamina: trava fast+slow no maxStamina (correr sem cansar).
+        if (Config::bInfStamina) {
+            float mx = ReadF(local, Off::PM_maxStamina, 100.0f);
+            if (!(mx > 0.0f && mx <= 1000.0f)) mx = 100.0f;
+            if (ReadF(local, Off::PM_staminaFast) < mx)
+                WriteF(local, Off::PM_staminaFast, mx);
+            if (ReadF(local, Off::PM_staminaSlow) < mx)
+                WriteF(local, Off::PM_staminaSlow, mx);
+        }
+    }
+
     static void ReadAll() {
         // Daytime (prova de leitura viva simples).
         void* day = nullptr;
@@ -1250,6 +1291,7 @@ namespace Mono {
         void* pcs = nullptr;
         s.players = 0;
         bool gotLocal = false, gotAlly = false;
+        void* localEnt = nullptr;
         if (StaticInstance(cPlayers, fPCInst, pcs)) {
             void* list = ReadP(pcs, Off::PCS_players);
             s.players = WalkList(list, 16, [&](void* e, int) {
@@ -1258,6 +1300,7 @@ namespace Mono {
                 if (hp < 0 || hp > 100000) return;
                 if (local && !gotLocal) {
                     gotLocal = true;
+                    localEnt = e;
                     s.localHp = hp;
                     s.localStam = ReadF(e, Off::PM_staminaFast);
                 } else if (!local && !gotAlly) {
@@ -1266,6 +1309,7 @@ namespace Mono {
                 }
             });
             if (!gotLocal) s.localHp = 0;
+            else ApplyDefense(localEnt); // escrita so no local, so se ligado
         }
         // Zumbis: conta vivos + HP do primeiro vivo; cruza com totalRealZombies.
         void* zl = nullptr;

@@ -17,6 +17,10 @@ namespace Config {
     extern bool bDebugOverlay;      // overlay de debug sempre ativo (briefing)
     extern bool bTooltips;          // tooltips em todos os controles
 
+    // ---- PLAYER / Defesa (God + Stamina: escrita direta, ver mono.cpp WriteF) ----
+    extern bool  bGodMode;        // trava HP local em 100 (healthFast+healthSlow)
+    extern bool  bInfStamina;     // trava stamina local no maximo
+
     // ---- PLAYER / Aimbot ----
     extern bool  bAimbot;
     extern int   iAimKey;           // VK_RBUTTON por padrao
@@ -61,7 +65,6 @@ namespace Config {
     extern float fSpeedMult;        // 1x-5x
     extern bool  bSuperJump;
     extern float fJumpMult;
-    extern bool  bInfStamina;
     extern bool  bRollSpeed;
     extern float fRollMult;
 
