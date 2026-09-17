@@ -65,11 +65,11 @@ static void Log(Level lv, const char* fmt, ...) {
     vsnprintf_s(b, _TRUNCATE, fmt, a);
     va_end(a);
     SetFg(8);
-    printf("[%02u:%02u:%02u] ", st.wHour, st.wMinute, st.wSecond);
+    printf("[%02u:%02u:%02u]", st.wHour, st.wMinute, st.wSecond);
     SetFg(col);
-    printf("[%-5s] ", tag);
+    printf("[%-5s]", tag);
     SetFg(7);
-    printf("%s\n", b);
+    printf(" %s\n", b);
     SetFg(7);
     fflush(stdout);
 }
@@ -205,9 +205,9 @@ static DWORD WaitForProcess(const wchar_t* name, int timeoutSec) {
             SYSTEMTIME st = { 0 };
             GetLocalTime(&st);
             SetFg(8);
-            printf("\r[%02u:%02u:%02u] ", st.wHour, st.wMinute, st.wSecond);
+            printf("\r[%02u:%02u:%02u]", st.wHour, st.wMinute, st.wSecond);
             SetFg(11);
-            printf("[INFO ] ");
+            printf("[INFO ]");
             SetFg(7);
             printf("Aguardando %s... %ds/%ds   ", nameA, s, timeoutSec);
             fflush(stdout);
