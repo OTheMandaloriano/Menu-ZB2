@@ -456,9 +456,49 @@ void DrawPreview(ImDrawList* draw, const Rect& viewport, const Result& result, c
         draw->AddLine(ImVec2(front.max.x, front.min.y), ImVec2(back.max.x, back.min.y), style.boxColor);
         draw->AddLine(ImVec2(front.min.x, front.max.y), ImVec2(back.min.x, back.max.y), style.boxColor);
     } else draw->AddRect(b.min, b.max, style.boxColor, 0.0f, 0, 1.5f);
-    if (model.skeleton) draw->AddLine(ImVec2(center.x, b.min.y + h * 0.28f), ImVec2(center.x, b.max.y - h * 0.12f), IM_COL32(215, 190, 200, 255), 1.0f);
-    if (model.headDot) draw->AddCircleFilled(ImVec2(center.x, b.min.y + h * 0.19f), 2.0f, style.boxColor);
-    if (model.snapline) draw->AddLine(ImVec2(center.x, viewport.max.y), ImVec2(center.x, b.max.y), IM_COL32(95, 145, 185, 180));
+    // Preview skeleton: mesma topologia do jogo (gui.cpp SEG 19 segmentos).
+    // Antes era 1 linha rosa vertical — errado. Agora desenha coluna, pernas
+    // e bracos articulados nas proporcoes da auditoria [BONE]/[JOINT] 14/09,
+    // na cor do box (igual ao jogo usa colVis/colInv).
+    if (model.skeleton) {
+        float cx = center.x, top = b.min.y;
+        ImVec2 P[20];
+        P[0]  = ImVec2(cx, top + h * 0.12f);              // HEAD
+        P[1]  = ImVec2(cx, top + h * 0.22f);              // NECK
+        P[2]  = ImVec2(cx, top + h * 0.30f);              // SP3 (ombros)
+        P[3]  = ImVec2(cx, top + h * 0.38f);              // SP2
+        P[4]  = ImVec2(cx, top + h * 0.46f);              // SP1 (cintura)
+        P[5]  = ImVec2(cx, top + h * 0.54f);              // HL (pelvis)
+        P[6]  = ImVec2(cx - w * 0.10f, top + h * 0.60f);  // L1L quadril L
+        P[7]  = ImVec2(cx - w * 0.12f, top + h * 0.74f);  // L2L joelho L
+        P[8]  = ImVec2(cx - w * 0.13f, top + h * 0.88f);  // FL pe L
+        P[9]  = ImVec2(cx + w * 0.10f, top + h * 0.60f);  // L1R
+        P[10] = ImVec2(cx + w * 0.12f, top + h * 0.74f);  // L2R
+        P[11] = ImVec2(cx + w * 0.13f, top + h * 0.88f);  // FR
+        P[12] = ImVec2(cx - w * 0.18f, top + h * 0.31f);  // SL ombro L
+        P[13] = ImVec2(cx - w * 0.26f, top + h * 0.42f);  // A1L cotovelo L
+        P[14] = ImVec2(cx - w * 0.24f, top + h * 0.53f);  // A2L pulso L
+        P[15] = ImVec2(cx + w * 0.18f, top + h * 0.31f);  // SR
+        P[16] = ImVec2(cx + w * 0.26f, top + h * 0.42f);  // A1R
+        P[17] = ImVec2(cx + w * 0.24f, top + h * 0.53f);  // A2R
+        // Maos estimadas: extensao do antebraco (igual HL2L/HL2R do jogo).
+        P[18] = ImVec2(P[14].x + (P[14].x - P[13].x) * 0.4f, P[14].y + (P[14].y - P[13].y) * 0.4f);
+        P[19] = ImVec2(P[17].x + (P[17].x - P[16].x) * 0.4f, P[17].y + (P[17].y - P[16].y) * 0.4f);
+        static const int SEG[][2] = {
+            {0,1},{1,2},{2,3},{3,4},{4,5},{5,6},{6,7},{7,8},{5,9},{9,10},{10,11},
+            {2,12},{12,13},{13,14},{2,15},{15,16},{16,17},{14,18},{17,19}
+        };
+        for (int s = 0; s < 19; ++s)
+            draw->AddLine(P[SEG[s][0]], P[SEG[s][1]], style.boxColor, 1.5f);
+        draw->AddCircle(P[0], w * 0.10f, style.boxColor, 20, 1.5f); // cranio
+    }
+    if (model.headDot) {
+        float hr = h * 0.03f; if (hr < 2.0f) hr = 2.0f; if (hr > 6.0f) hr = 6.0f;
+        draw->AddCircleFilled(ImVec2(center.x, b.min.y + h * 0.12f), hr, style.boxColor);
+    }
+    // Snapline do preview: base do canvas -> pe do box, na cor do box
+    // (antes era azul fixo; no jogo usa colVis/colInv = boxColor do preview).
+    if (model.snapline) draw->AddLine(ImVec2(center.x, viewport.max.y), ImVec2(center.x, b.max.y), style.boxColor, 1.0f);
     if (dragging && !validDrop) {
         draw->AddRectFilled(b.min, b.max, IM_COL32(190, 60, 75, 22));
         draw->AddRect(b.min, b.max, IM_COL32(255, 120, 100, 255));
