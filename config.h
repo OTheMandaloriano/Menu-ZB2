@@ -17,9 +17,11 @@ namespace Config {
     extern bool bDebugOverlay;      // overlay de debug sempre ativo (briefing)
     extern bool bTooltips;          // tooltips em todos os controles
 
-    // ---- PLAYER / Defesa (God + Stamina: escrita direta, ver mono.cpp WriteF) ----
+    // ---- PLAYER / Defesa (God + Stamina + Ammo + Items: escrita, ver mono.cpp) ----
     extern bool  bGodMode;        // trava HP local em 100 (healthFast+healthSlow)
     extern bool  bInfStamina;     // trava stamina local no maximo
+    extern bool  bInfItems;       // trava stackCount=stackMax em TODAS as pilhas
+                                 // (granada/dinamite/bandagem/municao solta)
 
     // ---- PLAYER / Aimbot ----
     extern bool  bAimbot;
@@ -85,6 +87,8 @@ namespace Config {
     extern float colZombieSnap[4];  // cor propria da Linha
     extern float colZombieDot[4];   // cor propria do HeadDot
     extern float colZombieBox[4];   // cor do box
+    extern bool  bBossColor;        // boss usa cor propria (default ON)
+    extern float colBossBox[4];     // cor do boss (Assalto/Rainha/Ceifador)
     extern float colZombieName[4];  // cor do nome
     extern float colZombieDist[4];  // cor da distancia
     extern float colZombieHp[4];    // cor da vida (%)

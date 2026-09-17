@@ -31,6 +31,7 @@ namespace Config {
 
     bool  bGodMode = false;      // default OFF (escrita direta, ver mono.cpp)
     bool  bInfStamina = false;   // default OFF
+    bool  bInfItems = false;     // default OFF (trava pilhas no stackMax)
 
     bool  bAimbot = false;
     int   iAimKey = VK_RBUTTON;
@@ -91,6 +92,8 @@ namespace Config {
     float colZombieSnap[4] = { 0, 1, 0, 1 };
     float colZombieDot[4] = { 1, 1, 0, 1 };
     float colZombieBox[4] = { 1, 0, 0, 1 };
+    bool  bBossColor = true;               // default ON (boss se destaca)
+    float colBossBox[4] = { 1, 0.4f, 0, 1 }; // laranja (visivel no ceu/chao)
     float colZombieName[4] = { 1, 1, 1, 1 };
     float colZombieDist[4] = { 1, 1, 1, 1 };
     float colZombieHp[4] = { 0, 1, 0, 1 };
@@ -632,7 +635,7 @@ namespace GUI {
 #define JV(v) fprintf(f, "\"" #v "\":[%f,%f,%f,%f],\n", (double)(v)[0], (double)(v)[1], (double)(v)[2], (double)(v)[3])
 #define JS(v) fprintf(f, "\"" #v "\":\"%s\",\n", ConfigJson::Escape(v).c_str())
         JB(bMenuOpen); JI(iMenuKey); JB(bWatermark); JB(bDebugOverlay); JB(bTooltips);
-        JB(bGodMode); JB(bInfStamina);
+        JB(bGodMode); JB(bInfStamina); JB(bInfItems);
         JB(bAimbot); JI(iAimKey); JI(iAimMode); JB(bAutoAim); JB(bSilentAim); JB(bAutoFire);
         JB(bTriggerbot); JI(iAimBone); JI(iAimPriority); JF(fSmoothing);
         JB(bLimitFov); JF(fFovAngle); JB(b360Mode); JB(bDrawFov); JF(fMaxDistance);
@@ -649,7 +652,7 @@ namespace GUI {
         JI(iOrderN); JI(iOrderD); JI(iOrderH); JI(iOrderP); JF(fBarLength); JF(fBarThickness);
         JB(bZombieSkeleton); JB(bZombieSnap); JB(bZombieHeadDot); JV(colZombieSkel); JV(colZombieSnap); JV(colZombieDot);
         JI(iSnapFrom);
-        JV(colZombieBox); JV(colZombieName); JV(colZombieDist); JV(colZombieHp);
+        JV(colZombieBox); JV(colZombieName); JV(colZombieDist); JV(colZombieHp); JB(bBossColor); JV(colBossBox);
         JB(bAllyEsp); JI(iAllyBox); JB(bAllyName); JB(bAllyDist); JB(bAllyHp);
         JB(bAllySkeleton); JB(bAllySnap); JB(bAllyHeadDot); JV(colAllyVis);
         JB(bChams); JV(colChamsVis); JV(colChamsInv); JB(bItemEsp); JB(bItemWeapons);
@@ -721,7 +724,7 @@ namespace GUI {
 #define LV(v) fields.push_back({ #v, ConfigJson::ColorField, (v) })
 #define LS(v) fields.push_back({ #v, ConfigJson::StringField, (v), sizeof(v) })
         LB(bMenuOpen); LI(iMenuKey); LB(bWatermark); LB(bDebugOverlay); LB(bTooltips);
-        LB(bGodMode); LB(bInfStamina);
+        LB(bGodMode); LB(bInfStamina); LB(bInfItems);
         LB(bAimbot); LI(iAimKey); LI(iAimMode); LB(bAutoAim); LB(bSilentAim); LB(bAutoFire);
         LB(bTriggerbot); LI(iAimBone); LI(iAimPriority); LF(fSmoothing);
         LB(bLimitFov); LF(fFovAngle); LB(b360Mode); LB(bDrawFov); LF(fMaxDistance);
@@ -736,7 +739,7 @@ namespace GUI {
         LI(iSideN); LI(iSideD); LI(iSideH); LI(iSideP); LI(iAlinN); LI(iAlinD); LI(iAlinH); LI(iAlinP);
         LB(bZombieSkeleton); LB(bZombieSnap); LB(bZombieHeadDot); LV(colZombieSkel); LV(colZombieSnap); LV(colZombieDot);
         LI(iSnapFrom);
-        LV(colZombieBox); LV(colZombieName); LV(colZombieDist); LV(colZombieHp);
+        LV(colZombieBox); LV(colZombieName); LV(colZombieDist); LV(colZombieHp); LB(bBossColor); LV(colBossBox);
         LB(bAllyEsp); LI(iAllyBox); LB(bAllyName); LB(bAllyDist); LB(bAllyHp);
         LB(bAllySkeleton); LB(bAllySnap); LB(bAllyHeadDot); LV(colAllyVis);
         LB(bChams); LV(colChamsVis); LV(colChamsInv); LB(bItemEsp); LB(bItemWeapons);
@@ -845,6 +848,7 @@ namespace GUI {
             int n = Mono::GetEsp(es, 128);
             float H = io.DisplaySize.y;
             ImU32 col = ImGui::GetColorU32(ImVec4(Config::colZombieBox[0], Config::colZombieBox[1], Config::colZombieBox[2], Config::colZombieBox[3]));
+            ImU32 colBoss = ImGui::GetColorU32(ImVec4(Config::colBossBox[0], Config::colBossBox[1], Config::colBossBox[2], Config::colBossBox[3]));
             // 1 cor por elemento: Skeleton/Linha/Dot usam
             // o picker proprio, nunca a cor do Box.
             ImU32 colSkel = ImGui::GetColorU32(ImVec4(Config::colZombieSkel[0], Config::colZombieSkel[1], Config::colZombieSkel[2], Config::colZombieSkel[3]));
@@ -884,7 +888,8 @@ namespace GUI {
                     float fx = es[i].footX, fy2 = H - es[i].footY;
                     h = fy2 - hy2; // altura head->pes
                     if (h < 4.0f) continue;
-                    w = h * 0.6f; // zumbi largo + cabeca grande (print 02:30)
+                    // Boss (Riot/Rainha/Ceifador) eh largo: 0.9; comum 0.6.
+                    w = h * (es[i].isBoss ? 0.9f : 0.6f);
                     cx = fx; // pes como centro (estavel quando o zumbi inclina)
                     hy = hy2; fy = fy2;
                     r0 = ImVec2(cx - w * 0.5f, hy); r1 = ImVec2(cx + w * 0.5f, fy);
@@ -899,21 +904,24 @@ namespace GUI {
                 if (!std::isfinite(r0.x) || !std::isfinite(r0.y) || !std::isfinite(r1.x) || !std::isfinite(r1.y)) continue;
                 w = r1.x - r0.x; h = r1.y - r0.y;
                 if (w < 2.0f || h < 2.0f) continue;
+                // Boss usa a cor propria (colBossBox) se bBossColor; senao cor do zumbi.
+                bool useBossCol = es[i].isBoss && Config::bBossColor;
+                ImU32 colBox = useBossCol ? colBoss : col;
                 if (showBox && layout.boxStyle == 0) {
                     if (r0.x < -10000 || r0.x > 10000 || r0.y < -10000 || r0.y > 10000) continue; // P1 render
                     if (r1.x < -10000 || r1.x > 10000 || r1.y < -10000 || r1.y > 10000) continue;
-                    dl->AddRect(r0, r1, col, 0.0f, 0, 1.5f);
+                    dl->AddRect(r0, r1, colBox, 0.0f, 0, es[i].isBoss ? 2.5f : 1.5f);
                 } else if (showBox && layout.boxStyle == 2) {
                     // Corners: 8 segmentos nos cantos (item 11).
                     float cl = h * 0.22f; if (cl > w * 0.45f) cl = w * 0.45f;
-                    dl->AddLine(r0, ImVec2(r0.x + cl, r0.y), col, 1.5f);
-                    dl->AddLine(r0, ImVec2(r0.x, r0.y + cl), col, 1.5f);
-                    dl->AddLine(ImVec2(r1.x, r0.y), ImVec2(r1.x - cl, r0.y), col, 1.5f);
-                    dl->AddLine(ImVec2(r1.x, r0.y), ImVec2(r1.x, r0.y + cl), col, 1.5f);
-                    dl->AddLine(ImVec2(r0.x, r1.y), ImVec2(r0.x + cl, r1.y), col, 1.5f);
-                    dl->AddLine(ImVec2(r0.x, r1.y), ImVec2(r0.x, r1.y - cl), col, 1.5f);
-                    dl->AddLine(r1, ImVec2(r1.x - cl, r1.y), col, 1.5f);
-                    dl->AddLine(r1, ImVec2(r1.x, r1.y - cl), col, 1.5f);
+                    dl->AddLine(r0, ImVec2(r0.x + cl, r0.y), colBox, 1.5f);
+                    dl->AddLine(r0, ImVec2(r0.x, r0.y + cl), colBox, 1.5f);
+                    dl->AddLine(ImVec2(r1.x, r0.y), ImVec2(r1.x - cl, r0.y), colBox, 1.5f);
+                    dl->AddLine(ImVec2(r1.x, r0.y), ImVec2(r1.x, r0.y + cl), colBox, 1.5f);
+                    dl->AddLine(ImVec2(r0.x, r1.y), ImVec2(r0.x + cl, r1.y), colBox, 1.5f);
+                    dl->AddLine(ImVec2(r0.x, r1.y), ImVec2(r0.x, r1.y - cl), colBox, 1.5f);
+                    dl->AddLine(r1, ImVec2(r1.x - cl, r1.y), colBox, 1.5f);
+                    dl->AddLine(r1, ImVec2(r1.x, r1.y - cl), colBox, 1.5f);
                 } else if (showBox && layout.boxStyle == 1 && es[i].has3d) {
                     // 3D real: 12 arestas da AABB (frente 4 + fundo 4 + profundidade 4).
                     static const int E[12][2] = { {0,1},{1,3},{3,2},{2,0},{4,5},{5,7},{7,6},{6,4},{0,4},{1,5},{2,6},{3,7} };
@@ -923,20 +931,39 @@ namespace GUI {
                         ImVec2 pa = ImVec2(es[i].px[a], H - es[i].py[a]), pb2 = ImVec2(es[i].px[b], H - es[i].py[b]);
                         if (pa.x < -10000 || pa.x > 10000 || pa.y < -10000 || pa.y > 10000) continue; // P1 render
                         if (pb2.x < -10000 || pb2.x > 10000 || pb2.y < -10000 || pb2.y > 10000) continue;
-                        dl->AddLine(pa, pb2, col, 1.2f);
+                        dl->AddLine(pa, pb2, colBox, 1.2f);
                     }
                 } else {
                     // 3D fallback (bounds indisponivel): face traseira deslocada + arestas.
                     ImVec2 d = ImVec2(w * 0.28f, -h * 0.10f);
                     ImVec2 b0 = ImVec2(r0.x + d.x, r0.y + d.y), b1 = ImVec2(r1.x + d.x, r1.y + d.y);
-                    dl->AddRect(b0, b1, col, 0.0f, 0, 1.0f);
-                    dl->AddRect(r0, r1, col, 0.0f, 0, 1.5f);
-                    dl->AddLine(r0, b0, col, 1.0f); dl->AddLine(ImVec2(r1.x, r0.y), ImVec2(b1.x, b0.y), col, 1.0f);
-                    dl->AddLine(ImVec2(r0.x, r1.y), ImVec2(b0.x, b1.y), col, 1.0f); dl->AddLine(r1, b1, col, 1.0f);
+                    dl->AddRect(b0, b1, colBox, 0.0f, 0, 1.0f);
+                    dl->AddRect(r0, r1, colBox, 0.0f, 0, 1.5f);
+                    dl->AddLine(r0, b0, colBox, 1.0f); dl->AddLine(ImVec2(r1.x, r0.y), ImVec2(b1.x, b0.y), colBox, 1.0f);
+                    dl->AddLine(ImVec2(r0.x, r1.y), ImVec2(b0.x, b1.y), colBox, 1.0f); dl->AddLine(r1, b1, colBox, 1.0f);
                 }
                 // Item 12 Skeleton real: juntas auditadas ([BONE] 14/09), articulado.
                 // Segmentos: coluna, pernas (quadril->pe), bracos (ombro->mao).
-                if (showSkel && es[i].skN == Mono::SK_COUNT) {
+                // Boss (rig relativo: HEAD/NECK/SP3/SP1/FL/FR): espinha + pernas.
+                ImU32 colSkelUse = (es[i].isBoss && Config::bBossColor) ? colBoss : colSkel;
+                if (showSkel && es[i].isBoss) {
+                    using MJ = Mono::SkJoint;
+                    static const int BSEG[][2] = {
+                        { MJ::SK_HEAD, MJ::SK_NECK }, { MJ::SK_NECK, MJ::SK_SP3 },
+                        { MJ::SK_SP3, MJ::SK_SP1 },
+                        { MJ::SK_SP1, MJ::SK_FL }, { MJ::SK_SP1, MJ::SK_FR }
+                    };
+                    for (int s = 0; s < 5; ++s) {
+                        int a = BSEG[s][0], b = BSEG[s][1];
+                        if (!es[i].skV[a] || !es[i].skV[b]) continue;
+                        ImVec2 pa = ImVec2(es[i].skX[a], H - es[i].skY[a]);
+                        ImVec2 pb = ImVec2(es[i].skX[b], H - es[i].skY[b]);
+                        if (pa.x < -10000 || pa.x > 10000 || pa.y < -10000 || pa.y > 10000) continue;
+                        if (pb.x < -10000 || pb.x > 10000 || pb.y < -10000 || pb.y > 10000) continue;
+                        dl->AddLine(pa, pb, colSkelUse, 2.0f);
+                    }
+                }
+                if (showSkel && !es[i].isBoss && es[i].skN == Mono::SK_COUNT) {
                     using MJ = Mono::SkJoint;
                     static const int SEG[][2] = {
                         { MJ::SK_HEAD, MJ::SK_NECK }, { MJ::SK_NECK, MJ::SK_SP3 },
@@ -959,7 +986,7 @@ namespace GUI {
                         ImVec2 pb = ImVec2(es[i].skX[b], H - es[i].skY[b]);
                         if (pa.x < -10000 || pa.x > 10000 || pa.y < -10000 || pa.y > 10000) continue;
                         if (pb.x < -10000 || pb.x > 10000 || pb.y < -10000 || pb.y > 10000) continue;
-                        dl->AddLine(pa, pb, colSkel, 1.5f);
+                        dl->AddLine(pa, pb, colSkelUse, 1.5f);
                     }
                     // Sem circulo na cabeca: Head Dot (item 13) e funcao separada do menu.
                 }
@@ -971,7 +998,8 @@ namespace GUI {
                         dl->AddLine(base, tgt, colSnap, 1.0f);
                 }
                 // Item 13 Head Dot: ponto na junta HEAD (projetada, nao fixa no box).
-                if (showDot && es[i].skN == Mono::SK_COUNT && es[i].skV[Mono::SK_HEAD]) {
+                // Boss: skN vem do rig relativo (HEAD sempre mapeado quando existe).
+                if (showDot && es[i].skV[Mono::SK_HEAD] && (es[i].isBoss || es[i].skN == Mono::SK_COUNT)) {
                     ImVec2 hp = ImVec2(es[i].skX[Mono::SK_HEAD], H - es[i].skY[Mono::SK_HEAD]);
                     if (hp.x > -10000 && hp.x < 10000 && hp.y > -10000 && hp.y < 10000) {
                         float hr = h * 0.03f; if (hr < 2.0f) hr = 2.0f; if (hr > 6.0f) hr = 6.0f;
@@ -983,17 +1011,15 @@ namespace GUI {
                     envelope.min.y -= h * 0.10f;
                     envelope.max.x += w * 0.28f;
                 }
-                // Nome + tag [BOSS] interna (sem checkbox, sem cor, sem var).
-                // FIX nome duplicado: 1 texto só dentro do layout; nunca AddText
-                // separado. Boss detectado via isBoss do snapshot (type+20).
-                char nameBuf[80];
-                const char* labelName = es[i].name;
-                if (es[i].isBoss) {
-                    _snprintf_s(nameBuf, _TRUNCATE, "%s [BOSS]", es[i].name);
-                    labelName = nameBuf;
-                }
-                auto content = LayoutContent(labelName, es[i].dist, es[i].hp, es[i].maxHp);
+                // Nome real ja vem do snapshot (type 0..8 -> PT-BR no mono.cpp).
+                // Sem sufixo: o nome do boss JA diz (Zumbi de Assalto/Rainha/Ceifador).
+                auto content = LayoutContent(es[i].name, es[i].dist, es[i].hp, es[i].maxHp);
                 auto style = LayoutStyle(content.health);
+                if (es[i].isBoss && Config::bBossColor) {
+                    // Nome do boss na cor propria (o layout usa a cor do zumbi).
+                    style.color[EspLayout::Name] = colBoss;
+                    style.boxColor = colBoss;
+                }
                 auto geometry = EspLayout::Resolve(layout, envelope, { ImVec2(2.0f, 2.0f), ImVec2(io.DisplaySize.x - 2.0f, io.DisplaySize.y - 2.0f) }, content, style, true);
                 EspLayout::Draw(dl, geometry, content, style);
             }
@@ -1021,6 +1047,8 @@ namespace GUI {
                 ImGui::Text("Defesa");
                 ImGui::Checkbox("God Mode (HP travado)", &Config::bGodMode); Tip("Trava HP local em 100 (reescreve healthFast/healthSlow).");
                 ImGui::Checkbox("Infinite Stamina", &Config::bInfStamina); Tip("Trava stamina local no maximo (correr sem cansar).");
+                ImGui::Checkbox("Infinite Ammo (pente+reserva)", &Config::bInfAmmo); Tip("Trava pente no maxAmmo da arma + reserva no stackMax (HUD honesto).");
+                ImGui::Checkbox("Infinite Items (pilhas)", &Config::bInfItems); Tip("Trava stackCount=stackMax em TODAS as pilhas (granada/dinamite/bandagem).");
                 ImGui::Separator();
                 ImGui::Checkbox("Active Aimbot", &Config::bAimbot); Tip("Liga o aimbot (PvE: zumbis/chefes).");
                 ImGui::Combo("Aim Bone", &Config::iAimBone, kAimBones, 4); Tip("Head/Neck/Chest/Pelvis.");
@@ -1045,8 +1073,7 @@ namespace GUI {
                 ImGui::Checkbox("No Sway", &Config::bNoSway);
                 ImGui::Checkbox("Rapid Fire", &Config::bRapidFire);
                 ImGui::SliderFloat("Rapid Mult", &Config::fRapidMult, 1, 5, "%.1fx");
-                ImGui::Checkbox("Infinite Ammo", &Config::bInfAmmo);
-                ImGui::Checkbox("Instant Reload", &Config::bInstantReload);
+                ImGui::Checkbox("Instant Reload", &Config::bInstantReload); Tip("Ver Defesa: Infinite Ammo ja recarrega sozinho (pente nunca esvazia).");
                 ImGui::Checkbox("Full Auto for All", &Config::bFullAuto);
                 ImGui::Checkbox("Saitama Mode (4M dano)", &Config::bSaitama);
                 ImGui::SliderFloat("Nade Time", &Config::fNadeTime, 0, 10, "%.1fs");
@@ -1087,7 +1114,9 @@ namespace GUI {
                         ImGui::SameLine(); ImGui::SetNextItemWidth(96.0f);
                         ImGui::Combo("Tipo", &Config::iZombieBox, kBoxType, 3); Tip("2D / 3D real (AABB) / Cantos.");
                         SwatchR("##CorBoxZ", Config::colZombieBox, "Cor do box.");
-                        ImGui::Checkbox("Nome", &Config::bZombieName); Tip("Nome + tag [BOSS] automatica.");
+                        ImGui::Checkbox("Boss (cor)", &Config::bBossColor); Tip("Boss usa cor propria (box+nome+esqueleto). Desligado = cor do zumbi.");
+                        SwatchR("##CorBossZ", Config::colBossBox, "Cor do boss (Assalto/Rainha/Ceifador).");
+                        ImGui::Checkbox("Nome", &Config::bZombieName); Tip("Nome real (tipo do zumbi).");
                         SwatchR("##CorNomeZ", Config::colZombieName, "Cor do nome.");
                         ImGui::Checkbox("Distancia", &Config::bZombieDist); Tip("Distancia em metros ate a camera.");
                         SwatchR("##CorDistZ", Config::colZombieDist, "Cor da distancia.");

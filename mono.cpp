@@ -159,6 +159,12 @@ namespace Mono {
     static MonoClassField* fSel = nullptr;      // PlayerArms.selectedItem
     static MonoClassField* fAmmo = nullptr;     // InventoryItem.ammo
     static MonoClassField* fMaxAmmo = nullptr;  // DatabaseGun.maxAmmo
+    // Itens/pilhas (regra universal do IL: stackMax==1 -> ammo; senao stackCount):
+    static MonoClassField* fStack = nullptr;    // InventoryItem.stackCount
+    static MonoClassField* fDbStack = nullptr;  // DatabaseItem.stackMax
+    static MonoClassField* fStorage = nullptr;  // PlayerInventory.storage
+    static MonoClassField* fItems = nullptr;    // ItemContainer.items
+    static MonoClassField* fId = nullptr;       // InventoryItem.id
     static MonoMethod* mGetEq = nullptr;   // PlayerEquippedItems.GetEquipment(EquipmentIndex)
     static MonoMethod* mGetDb = nullptr;   // InventoryItem.GetDataBaseItem()
     static bool s_ammoLogged = false; // diagnostico da cadeia 1x/sessao
@@ -231,6 +237,8 @@ namespace Mono {
     static DWORD WINAPI EspThread(LPVOID); // forward (definida apos BuildEsp)
     static void ApplyDefense(void* local); // forward (defesa rapida, worker)
     static void TopAmmo(void* item, int oAmmo, int oMax); // forward (teto do ammo)
+    static void TopStacks(void* local, int oInv, int oStorage, int oItems,
+        int oStack, int oDbStack, int oId, bool items); // forward (reserva+pilhas)
     static void ApplyAmmo(void* local); // forward (municao infinita, worker)
     static int FieldOff(MonoClassField* f); // forward (offset via API, -1 se falhar)
     static void ReadAll(); // forward (chamada na worker, fora do Present)
@@ -491,6 +499,18 @@ namespace Mono {
         ResolveField(cPInv, "PlayerInventory", "equippedItems", fEq);
         ResolveField(cItem, "InventoryItem", "ammo", fAmmo);
         ResolveField(cDbGun, "DatabaseGun", "maxAmmo", fMaxAmmo);
+        // Pilhas/reserva: stackCount x stackMax (+storage/items/id p/ reserva por tipo).
+        ResolveField(cItem, "InventoryItem", "stackCount", fStack);
+        ResolveField(cItem, "InventoryItem", "id", fId);
+        ResolveField(cPInv, "PlayerInventory", "storage", fStorage);
+        {
+            MonoClass* cDbItem = nullptr;
+            if (ResolveClass("DatabaseItem", cDbItem))
+                ResolveField(cDbItem, "DatabaseItem", "stackMax", fDbStack);
+            MonoClass* cCont = nullptr;
+            if (ResolveClass("ItemContainer", cCont))
+                ResolveField(cCont, "ItemContainer", "items", fItems);
+        }
         if (cPEq) {
             // GetEquipment(EquipmentIndex): enum = valuetype; mono_class_get_method_
             // from_name pode exigir argc exato do enum. Tenta 1, depois 0 (fallback
@@ -804,7 +824,33 @@ namespace Mono {
         long long len = 0;
         __try { memcpy(&len, (char*)arr + Off::A_len, sizeof(len)); }
         __except (EXCEPTION_EXECUTE_HANDLER) { out.skN = 0; return; }
-        if (len < 19) { out.skN = 0; return; } // rig incompleto: sem skeleton
+        // Boss tem rig diferente (asas/cauda, outro tamanho): aceita rig menor
+        // e mapeia por posicao relativa (head=0, pes=fim) em vez de descartar.
+        // Comum continua exigindo 19 (indices auditados [BONE] 14/09).
+        bool isBossRig = (len > 0 && len < 19);
+        if (len < 19 && !isBossRig) { out.skN = 0; return; } // rig vazio: sem skeleton
+        if (isBossRig) {
+            // Mapeamento relativo: head=primeiro, neck=segundo, pes=ultimos.
+            // Desenha o que projetar (skV por junta); sem maos estimadas.
+            static const int kRel[6] = { 0, 1, 2, 3, 4, 5 };
+            int upto = (int)len < 6 ? (int)len : 6;
+            for (int k = 0; k < upto; ++k) {
+                void* bone = nullptr;
+                __try { memcpy(&bone, (char*)arr + Off::A_data + (size_t)k * 8, 8); }
+                __except (EXCEPTION_EXECUTE_HANDLER) { bone = nullptr; }
+                if (!bone) continue;
+                Vec3 w, s3;
+                if (!GetPos(bone, w)) continue;
+                if (!Fin(w.x) || !Fin(w.y) || !Fin(w.z)) continue;
+                if (!W2S(cam, w, s3)) continue;
+                if (!Sane2(s3.x, s3.y)) continue;
+                int dst = (k == 0) ? SkJoint::SK_HEAD : (k == 1) ? SkJoint::SK_NECK :
+                    (k == 2) ? SkJoint::SK_SP3 : (k == 3) ? SkJoint::SK_SP1 :
+                    (k == 4) ? SkJoint::SK_FL : SkJoint::SK_FR;
+                out.skX[dst] = s3.x; out.skY[dst] = s3.y; out.skV[dst] = true;
+            }
+            return; // boss: sem resto do pipeline (indices de comum nao valem)
+        }
         void* bones[SkJoint::SK_PHYS] = { nullptr };
         for (int k = 0; k < SkJoint::SK_PHYS; ++k) {
             __try { memcpy(&bones[k], (char*)arr + Off::A_data + (size_t)kBoneIdx[k] * 8, 8); }
@@ -981,29 +1027,33 @@ namespace Mono {
             // 200+ entidades x ~8 invokes = corrida com o LOD (crash 15/09).
             if (n >= 96) return;
             EspEntry tmpEn = {}; // FIX P0 soco: sem invoke de nome (wrapper pode estar morto)
-            strncpy_s(tmpEn.name, sizeof(tmpEn.name), "Zombie", _TRUNCATE);
             tmpEn.isBoss = false;
-            // Boss via ZombieIdentity.type (memcpy cru + SEH, zero invoke).
-            // Valores do enum ainda NAO mapeados: loga [ZTYPE] 1x por valor novo
-            // p/ descobrir via CE MCP (Riot/Queen/Reaper). Boss = type != 0
-            // (comum = 0); se validacao futura provar outro mapeamento, ajusta aqui.
+            // Nome real via ZombieIdentity.type (memcpy + SEH, zero invoke).
+            // Enum mapeado no metadata (dnlib, 17/09): 0=Tier1Civilian,
+            // 1=Tier2Worker, 2=Tier3Combatant, 3=Tier4Military,
+            // 4=Tier5Primordial, 5=FactoryWorker, 6=BossRiot, 7=BossQueen,
+            // 8=BossReaper. Boss = type 6..8 (equivale a IsBoss() do jogo).
             {
-                void* zi = ReadP(e, Off::Z_identity);
+                static const char* kNames[9] = {
+                    "Zombie", "Zombie", "Zombie", "Zombie", "Zombie", "Zombie",
+                    "Zumbi de Assalto", "Zumbi Rainha", "Zumbi Ceifador"
+                };
                 int tp = -999;
+                void* zi = ReadP(e, Off::Z_identity);
                 __try { if (zi) memcpy(&tp, (char*)zi + Off::ZI_type, sizeof(tp)); }
                 __except (EXCEPTION_EXECUTE_HANDLER) { tp = -999; }
-                if (tp != -999) {
-                    tmpEn.isBoss = (tp != 0);
-                    static int s_ztypeSeen[32] = { 0 };
-                    if (tp >= -16 && tp < 16) {
-                        int si = tp + 16;
-                        if (!s_ztypeSeen[si]) {
-                            s_ztypeSeen[si] = 1;
-                            Log::Infof("[ZTYPE] ent=0x%p type=%d boss=%d", e, tp, tmpEn.isBoss ? 1 : 0);
-                        }
-                    } else {
-                        Log::Infof("[ZTYPE] ent=0x%p type=%d (fora da faixa) boss=%d", e, tp, tmpEn.isBoss ? 1 : 0);
+                if (tp >= 0 && tp <= 8) {
+                    tmpEn.isBoss = (tp >= 6);
+                    strncpy_s(tmpEn.name, sizeof(tmpEn.name), kNames[tp], _TRUNCATE);
+                    static int s_ztypeSeen[16] = { 0 };
+                    if (!s_ztypeSeen[tp]) {
+                        s_ztypeSeen[tp] = 1;
+                        Log::Infof("[ZTYPE] ent=0x%p type=%d (%s) boss=%d", e, tp, kNames[tp], tmpEn.isBoss ? 1 : 0);
                     }
+                } else {
+                    strncpy_s(tmpEn.name, sizeof(tmpEn.name), "Zombie", _TRUNCATE);
+                    if (tp != -999)
+                        Log::Infof("[ZTYPE] ent=0x%p type=%d (desconhecido) boss=0", e, tp);
                 }
             }
             for (int k = 0; k < 8; ++k) { tmpEn.pv[k] = false; tmpEn.px[k] = tmpEn.py[k] = 0; }
@@ -1294,7 +1344,7 @@ namespace Mono {
             // ESP ligado. Leitura barata (1 lista curta + 2 floats); escrita so
             // se a flag ligada E o valor caiu (custo zero no estado estavel).
             // Comeca rapido e so desacelera se o proprio ciclo ficar caro.
-            bool wantDef = s.ready && (Config::bGodMode || Config::bInfStamina || Config::bInfAmmo);
+            bool wantDef = s.ready && (Config::bGodMode || Config::bInfStamina || Config::bInfAmmo || Config::bInfItems);
             if (wantDef && SceneAlive()) {
                 void* pcs = nullptr;
                 if (StaticInstance(cPlayers, fPCInst, pcs)) {
@@ -1302,7 +1352,7 @@ namespace Mono {
                     WalkList(list, 16, [&](void* e, int) {
                         if (!InvokeBool(mHasLocal, e)) return;
                         ApplyDefense(e);
-                        if (Config::bInfAmmo) ApplyAmmo(e);
+                        if (Config::bInfAmmo || Config::bInfItems) ApplyAmmo(e);
                     });
                 }
                 if (++s_defN >= 60) {
@@ -1369,6 +1419,7 @@ namespace Mono {
     // TODOS os itens da lista (custo: 2-4 escritas/ciclo, sem invoke).
     static bool s_ammoOk = true;
     static int s_ammoMode = 0; // 0=desconhecido 1=invoke 2=lista
+    static int s_ammoIdCur = -1; // ammoID da arma equipada (reserva filtra por ele)
     static void ApplyAmmo(void* local) {
         if (!local || !s_ammoOk) return;
         // Resolve preguiçoso dos offsets (1x; API pode indisponivel no Unity 6).
@@ -1410,17 +1461,45 @@ namespace Mono {
                 int selArg = sel;
                 void* args[1] = { &selArg };
                 void* item = InvokeObj(mGetEq, peq, args);
-                if (item) TopAmmo(item, oAmmo, oMax);
+                if (item) {
+                    TopAmmo(item, oAmmo, oMax);
+                    // Guarda o ammoID da arma p/ reserva travar so o mesmo tipo.
+                    static int oAmmoId = -2;
+                    if (oAmmoId == -2) {
+                        oAmmoId = -1;
+                        if (cDbGun) {
+                            MonoClassField* f = pFieldFrom(cDbGun, "ammoID");
+                            oAmmoId = FieldOff(f);
+                        }
+                    }
+                    if (oAmmoId >= 0 && mGetDb) {
+                        void* db = InvokeObj(mGetDb, item, nullptr);
+                        if (db) {
+                            int aid = ReadI(db, oAmmoId, -1);
+                            if (aid >= 0) s_ammoIdCur = aid;
+                        }
+                    }
+                }
                 // invoke falhou (retorno nulo)? cai p/ modo lista no proximo ciclo.
                 else if (oWeapons >= 0) s_ammoMode = 2;
-                return;
+            } else {
+                // Modo lista: trava o ammo de cada InventoryItem em weapons.
+                void* list = ReadP(peq, oWeapons);
+                if (list) WalkList(list, 16, [&](void* item, int) {
+                    TopAmmo(item, oAmmo, oMax);
+                });
             }
-            // Modo lista: trava o ammo de cada InventoryItem em weapons.
-            void* list = ReadP(peq, oWeapons);
-            if (!list) return;
-            WalkList(list, 16, [&](void* item, int) {
-                TopAmmo(item, oAmmo, oMax);
-            });
+            // Reserva (bInfAmmo) + pilhas gerais (bInfItems): offsets resolvidos 1x.
+            static int oStorage = -2, oItems = -2, oStack = -2, oDbStack = -2, oId = -2;
+            if (oStorage == -2) {
+                oStorage = FieldOff(fStorage); oItems = FieldOff(fItems);
+                oStack = FieldOff(fStack); oDbStack = FieldOff(fDbStack);
+                oId = FieldOff(fId);
+            }
+            if (Config::bInfAmmo)
+                TopStacks(local, oInv, oStorage, oItems, oStack, oDbStack, oId, false);
+            if (Config::bInfItems)
+                TopStacks(local, oInv, oStorage, oItems, oStack, oDbStack, oId, true);
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 
@@ -1442,6 +1521,42 @@ namespace Mono {
             return;
         }
         if (cur < max) WriteI(item, oAmmo, max);
+    }
+
+    // Reserva + pilhas (regra universal do IL Get/SetGenericNumericValue:
+    // stackMax==1 -> o numero eh ammo; senao eh stackCount; teto = stackMax).
+    // - Com bInfAmmo: trava stackCount=stackMax nas pilhas do storage cujo
+    //   id == ammoID da arma (HUD reserva honesto: 30/150, nao 30/0).
+    // - Com bInfItems: trava stackCount=stackMax em TODAS as pilhas
+    //   (granada/dinamite/bandagem/municao solta — cada uma no seu teto).
+    static void TopStacks(void* local, int oInv, int oStorage, int oItems,
+        int oStack, int oDbStack, int oId, bool items) {
+        if (!local || oInv < 0 || oStorage < 0 || oItems < 0) return;
+        if (oStack < 0 || oDbStack < 0) return;
+        __try {
+            void* pinv = ReadP(local, oInv);
+            if (!pinv) return;
+            void* cont = ReadP(pinv, oStorage);
+            if (!cont) return;
+            void* list = ReadP(cont, oItems);
+            if (!list) return;
+            WalkList(list, 64, [&](void* it, int) {
+                if (!mGetDb) return;
+                void* db = InvokeObj(mGetDb, it, nullptr);
+                if (!db) return;
+                int smax = ReadI(db, oDbStack, -1);
+                if (smax <= 1) return; // stackMax==1 -> eh arma (ammo), nao pilha
+                if (smax > 100000) return;
+                if (!items) {
+                    // Reserva: so o mesmo tipo da arma (id == ammoID equipada).
+                    if (oId < 0 || s_ammoIdCur < 0) return;
+                    int id = ReadI(it, oId, -1);
+                    if (id != s_ammoIdCur) return;
+                }
+                int cur = ReadI(it, oStack, -1);
+                if (cur >= 0 && cur < smax) WriteI(it, oStack, smax);
+            });
+        } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 
     // Defesa (God + Stamina): reescreve os campos do LOCAL player.
