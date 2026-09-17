@@ -1055,27 +1055,45 @@ namespace Mono {
             if (n >= 96) return;
             EspEntry tmpEn = {}; // FIX P0 soco: sem invoke de nome (wrapper pode estar morto)
             tmpEn.isBoss = false;
-            // Nome real via ZombieIdentity.type (memcpy + SEH, zero invoke).
+            // Nome real via ZombieType (memcpy + SEH, zero invoke).
             // Enum mapeado no metadata (dnlib, 17/09): 0=Tier1Civilian,
             // 1=Tier2Worker, 2=Tier3Combatant, 3=Tier4Military,
             // 4=Tier5Primordial, 5=FactoryWorker, 6=BossRiot, 7=BossQueen,
             // 8=BossReaper. Boss = type 6..8 (equivale a IsBoss() do jogo).
+            // Caminho 1: Zombie.identity -> ZombieIdentity.type.
+            // Caminho 2 (fallback): ZombieObject.zombieType direto (1o field
+            // do ZombieObject; identity pode ser nulo em spawn/transicao).
             {
                 static const char* kNames[9] = {
                     "Zombie", "Zombie", "Zombie", "Zombie", "Zombie", "Zombie",
                     "Zumbi de Assalto", "Zumbi Rainha", "Zumbi Ceifador"
                 };
+                static int oZType = -2; // offset de ZombieObject.zombieType (via API)
+                if (oZType == -2) {
+                    oZType = -1;
+                    MonoClass* cZO = nullptr;
+                    if (ResolveClass("ZombieObject", cZO) && cZO) {
+                        MonoClassField* f = pFieldFrom(cZO, "zombieType");
+                        oZType = FieldOff(f);
+                    }
+                }
                 int tp = -999;
                 void* zi = ReadP(e, Off::Z_identity);
                 __try { if (zi) memcpy(&tp, (char*)zi + Off::ZI_type, sizeof(tp)); }
                 __except (EXCEPTION_EXECUTE_HANDLER) { tp = -999; }
+                const char* src = "identity";
+                if ((tp < 0 || tp > 8) && zo && oZType >= 0) {
+                    __try { memcpy(&tp, (char*)zo + oZType, sizeof(tp)); }
+                    __except (EXCEPTION_EXECUTE_HANDLER) { tp = -999; }
+                    src = "zotype";
+                }
                 if (tp >= 0 && tp <= 8) {
                     tmpEn.isBoss = (tp >= 6);
                     strncpy_s(tmpEn.name, sizeof(tmpEn.name), kNames[tp], _TRUNCATE);
                     static int s_ztypeSeen[16] = { 0 };
                     if (!s_ztypeSeen[tp]) {
                         s_ztypeSeen[tp] = 1;
-                        Log::Infof("[ZTYPE] ent=0x%p type=%d (%s) boss=%d", e, tp, kNames[tp], tmpEn.isBoss ? 1 : 0);
+                        Log::Infof("[ZTYPE] ent=0x%p type=%d (%s) boss=%d via=%s", e, tp, kNames[tp], tmpEn.isBoss ? 1 : 0, src);
                     }
                 } else {
                     strncpy_s(tmpEn.name, sizeof(tmpEn.name), "Zombie", _TRUNCATE);
