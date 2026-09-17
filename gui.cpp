@@ -376,6 +376,12 @@ namespace GUI {
         s_previewBox = { ImVec2(center.x - h * 0.3f, center.y - h * 0.5f), ImVec2(center.x + h * 0.3f, center.y + h * 0.5f) };
         auto content = LayoutContent(s_previewName, s_previewDistance, Config::fPreviewHp, 100.0f);
         auto style = LayoutStyle(content.health);
+        // Preview usa as cores reais do jogo (1:1 com RenderOverlay):
+        // headDot faltava no canvas (skeleton/linha ja iam); sem isso o ponto
+        // nunca aparecia no preview mesmo com o toggle ligado.
+        style.skelColor = ImGui::GetColorU32(ImVec4(Config::colZombieSkel[0], Config::colZombieSkel[1], Config::colZombieSkel[2], Config::colZombieSkel[3]));
+        style.snapColor = ImGui::GetColorU32(ImVec4(Config::colZombieSnap[0], Config::colZombieSnap[1], Config::colZombieSnap[2], Config::colZombieSnap[3]));
+        style.dotColor  = ImGui::GetColorU32(ImVec4(Config::colZombieDot[0],  Config::colZombieDot[1],  Config::colZombieDot[2],  Config::colZombieDot[3]));
         EspLayout::Input input;
         input.mouse = ImGui::GetIO().MousePos;
         input.pressed = ImGui::IsMouseClicked(ImGuiMouseButton_Left);

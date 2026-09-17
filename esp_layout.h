@@ -57,6 +57,11 @@ struct Style {
     std::array<ImU32, Count> color = {{ IM_COL32_WHITE, IM_COL32(185, 215, 255, 255), IM_COL32(65, 230, 95, 255), IM_COL32_WHITE }};
     ImU32 boxColor = IM_COL32(255, 65, 75, 255);
     ImU32 textBackground = IM_COL32(14, 18, 25, 185);
+    // Cores do jogo no preview (1:1 com gui.cpp RenderOverlay):
+    // skeleton/linha/dot usam o color picker proprio, nao a cor do box.
+    ImU32 skelColor = IM_COL32(0, 255, 255, 255);
+    ImU32 snapColor = IM_COL32(0, 255, 0, 255);
+    ImU32 dotColor = IM_COL32(255, 255, 0, 255);
 };
 
 struct Item {

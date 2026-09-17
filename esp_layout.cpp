@@ -456,10 +456,9 @@ void DrawPreview(ImDrawList* draw, const Rect& viewport, const Result& result, c
         draw->AddLine(ImVec2(front.max.x, front.min.y), ImVec2(back.max.x, back.min.y), style.boxColor);
         draw->AddLine(ImVec2(front.min.x, front.max.y), ImVec2(back.min.x, back.max.y), style.boxColor);
     } else draw->AddRect(b.min, b.max, style.boxColor, 0.0f, 0, 1.5f);
-    // Preview skeleton: mesma topologia do jogo (gui.cpp SEG 19 segmentos).
-    // Antes era 1 linha rosa vertical — errado. Agora desenha coluna, pernas
-    // e bracos articulados nas proporcoes da auditoria [BONE]/[JOINT] 14/09,
-    // na cor do box (igual ao jogo usa colVis/colInv).
+    // Preview skeleton/linha/dot: mesmas cores do jogo (style.skelColor etc.,
+    // montados em gui.cpp a partir do color picker proprio de cada funcao).
+    // Sem isso o canvas ignorava o picker e pintava tudo da cor do box.
     if (model.skeleton) {
         float cx = center.x, top = b.min.y;
         ImVec2 P[20];
@@ -489,16 +488,15 @@ void DrawPreview(ImDrawList* draw, const Rect& viewport, const Result& result, c
             {2,12},{12,13},{13,14},{2,15},{15,16},{16,17},{14,18},{17,19}
         };
         for (int s = 0; s < 19; ++s)
-            draw->AddLine(P[SEG[s][0]], P[SEG[s][1]], style.boxColor, 1.5f);
-        draw->AddCircle(P[0], w * 0.10f, style.boxColor, 20, 1.5f); // cranio
+            draw->AddLine(P[SEG[s][0]], P[SEG[s][1]], style.skelColor, 1.5f);
+        draw->AddCircle(P[0], w * 0.10f, style.skelColor, 20, 1.5f); // cranio
     }
     if (model.headDot) {
         float hr = h * 0.03f; if (hr < 2.0f) hr = 2.0f; if (hr > 6.0f) hr = 6.0f;
-        draw->AddCircleFilled(ImVec2(center.x, b.min.y + h * 0.12f), hr, style.boxColor);
+        draw->AddCircleFilled(ImVec2(center.x, b.min.y + h * 0.12f), hr, style.dotColor);
     }
-    // Snapline do preview: base do canvas -> pe do box, na cor do box
-    // (antes era azul fixo; no jogo usa colVis/colInv = boxColor do preview).
-    if (model.snapline) draw->AddLine(ImVec2(center.x, viewport.max.y), ImVec2(center.x, b.max.y), style.boxColor, 1.0f);
+    // Snapline do preview: base do canvas -> pe do box, na cor da Linha.
+    if (model.snapline) draw->AddLine(ImVec2(center.x, viewport.max.y), ImVec2(center.x, b.max.y), style.snapColor, 1.0f);
     if (dragging && !validDrop) {
         draw->AddRectFilled(b.min, b.max, IM_COL32(190, 60, 75, 22));
         draw->AddRect(b.min, b.max, IM_COL32(255, 120, 100, 255));
