@@ -441,19 +441,24 @@ namespace GUI {
         static const char* sides[] = { "Acima", "Abaixo", "Esquerda", "Direita" };
         ImGui::SetNextItemWidth(160.0f);
         changed |= ImGui::Combo("Lado", &item.side, sides, 4);
-        ImGui::SetNextItemWidth(160.0f);
-        changed |= ImGui::SliderFloat("Posicao", &item.position, 0.0f, 1.0f, "%.2f");
+        // Posicao como escolha discreta (Inicio/Centro/Fim) em vez de slider
+        // 0-1: usuario quer centralizar/canto, nao digitar 0.37.
+        {
+            int posChoice = item.position < 0.25f ? 0 : (item.position > 0.75f ? 2 : 1);
+            static const char* posNames[] = { "Inicio", "Centro", "Fim" };
+            ImGui::SetNextItemWidth(160.0f);
+            int posNew = posChoice;
+            if (ImGui::Combo("Posicao", &posNew, posNames, 3)) {
+                float want = posNew == 0 ? 0.0f : (posNew == 1 ? 0.5f : 1.0f);
+                if (item.position != want) { item.position = want; changed = true; }
+            }
+        }
         if (s_editor.selected == EspLayout::Health) {
             ImGui::SetNextItemWidth(160.0f);
             changed |= ImGui::SliderFloat("Comprimento", &model.barLength, 0.25f, 1.0f, "%.2f");
             ImGui::SetNextItemWidth(160.0f);
             changed |= ImGui::SliderFloat("Espessura", &model.barThickness, 2.0f, 6.0f, "%.0fpx");
         }
-        ImGui::Separator();
-        ImGui::SetNextItemWidth(160.0f);
-        changed |= ImGui::SliderFloat("Dist do box", &model.gap, 2.0f, 12.0f, "%.0fpx");
-        ImGui::SetNextItemWidth(160.0f);
-        changed |= ImGui::SliderFloat("Espaco itens", &model.spacing, 2.0f, 8.0f, "%.0fpx");
         if (changed) {
             EspLayout::CancelDrag(s_editor);
             EspLayout::Normalize(model);
@@ -465,13 +470,7 @@ namespace GUI {
         if (columns) ImGui::EndTable();
         if (ImGui::CollapsingHeader("Simulacao")) {
             ImGui::SetNextItemWidth(180.0f);
-            ImGui::InputText("Nome", s_previewName, sizeof(s_previewName));
-            ImGui::SetNextItemWidth(180.0f);
             ImGui::SliderFloat("Altura", &s_previewBoxHeight, 32.0f, 180.0f, "%.0fpx");
-            ImGui::SetNextItemWidth(180.0f);
-            ImGui::SliderFloat("HP", &Config::fPreviewHp, 0.0f, 100.0f, "%.0f%%");
-            ImGui::SetNextItemWidth(180.0f);
-            ImGui::SliderFloat("Dist", &s_previewDistance, 1.0f, 9999.0f, "%.0fm");
             if (ImGui::Combo("Tipo de box", &model.boxStyle, kBoxType, 3)) SaveLayoutDraft();
         }
     }
