@@ -154,7 +154,7 @@ namespace Mono {
     // Fase 1b: fail discriminado por sub-causa (exc = exc||!ret, hd = hd
     // NaN/<=0, seh = __except). Budget negado NAO conta (nao e falha do jogo).
     struct PiSite { long n; long fail; long exc; long hd; long seh; long long dt_us; };
-    static PiSite s_piPos, s_piRot, s_piBnd, s_piTrC, s_piRay, s_piHas;
+    static PiSite s_piPos, s_piRot, s_piBnd, s_piTrC, s_piHas;
     static long long s_piWinStart;
     static inline void PiAdd(PiSite& s, long long dt, bool ok) {
         s.n++; s.dt_us += dt; if (!ok) s.fail++;
@@ -174,11 +174,11 @@ namespace Mono {
         long long now = PiNow();
         if (!force && now - s_piWinStart < 5000000LL) return;
         s_piWinStart = now;
-        const struct { const char* nm; PiSite* s; } sites[6] = {
+        const struct { const char* nm; PiSite* s; } sites[5] = {
             { "getPos", &s_piPos }, { "getRot", &s_piRot }, { "getBounds", &s_piBnd },
-            { "getTransCam", &s_piTrC }, { "raycast", &s_piRay }, { "hasLocal", &s_piHas },
+            { "getTransCam", &s_piTrC }, { "hasLocal", &s_piHas },
         };
-        for (int i = 0; i < 6; ++i) {
+        for (int i = 0; i < 5; ++i) {
             PiSite* s = sites[i].s;
             if (!s->n) continue;
             long long avg = s->dt_us / s->n;
@@ -189,36 +189,20 @@ namespace Mono {
         }
     }
     // Orçamento de invokes por ciclo de BuildEsp (anti-crash em horda).
-    // Cada invoke cruza para o Mono e compete com o PhysX/LOD do jogo; com
-    // 50+ zumbis, centenas de invokes por ciclo de 33ms viram corrida com o
-    // LODController:UpdatePhysics (ver crash 15/09 15:51). Estoura o teto?
-    // O resto do ciclo usa o último valor conhecido (fail-open, sem flicker).
-    // AUDITORIA 16/09 (hang 86 zumbis, NUNCA zera statics entre ciclos):
-    // s_losCursor/s_calDone/candOff/hitDistOff vazavam entre ciclos; com a
-    // lista reciclada pelo LOD, o offset travava no corpo errado e o raycast
-    // lia lixo -> SEH em massa -> hang. Tudo que e "por ciclo" reseta aqui.
-    // Camada 1 (broadphase, padrao UC): perto (<45m) = LOS real todo ciclo;
-    // longe = 1 de 3 ciclos (rodizio). Teto 96 ent/ciclo. Ritmo 33-66ms.
-    // AUDITORIA 16/09 03:15 (tiro = LOD liga colliders em massa): durante o
-    // tiro o jogo mexe nos mesmos colliders que o raycast testa. Pausar o LOS
-    // por ~300ms após detectar oscilação de lista (MapSettling) + histerese
-    // dura cobre a janela sem custo visual.
+    // Cada invoke cruza para o Mono e compete com o jogo; com 50+ zumbis,
+    // centenas de invokes por ciclo de 33ms viram corrida com o LOD
+    // (ver crash 15/09 15:51). Estoura o teto? O resto do ciclo usa o
+    // último valor conhecido (fail-open, sem flicker).
     static int  s_budgetLeft = 0;
-    static int  s_budgetMax = 64; // 64 raycasts/ciclo: perto sempre, longe fila.
-    // Teto menor = menos concorrencia com o tiro/LOD. Histerese segura a cor.
+    static int  s_budgetMax = 64; // 64 invokes/ciclo p/ maos do skeleton.
     static bool s_budgetLogged = false;
-    static int  s_losSkipped = 0; // telemetria: quantos pontos o teto pulou
-    static int  s_losCursor = 0; // legado: rodizio removido (piscava em porta/janela).
-    // Manter o campo evita diff gigante; o ciclo so o incrementa.
     static inline bool BudgetTake(int n = 1) {
         if (s_budgetLeft < n) return false;
         s_budgetLeft -= n;
         return true;
     }
     static MonoMethod* mGetGO = nullptr; // Component.get_gameObject (auditoria ossos)
-    static MonoMethod* mGetRot = nullptr; // Transform.get_rotation -> Matrix4x4 (fix bug 4)
-    static MonoMethod* mLinecast = nullptr; // Physics.Linecast alternativa (sem ambiguidade Ray)
-    static int s_lineArgs = 0;
+    static MonoMethod* mGetRot = nullptr; // Transform.get_rotation -> quaternio (maos)
     static bool s_boneLogged = false;
     static bool s_jointLogged = false; // auditoria juntas (1x por sessao)
     static bool s_skelLogged = false; // diagnostico SKEL (1x: mascara + tela dos bracos)
@@ -236,26 +220,6 @@ namespace Mono {
     static Vec3 s_camW = { 0, 0, 0 }; // posicao da camera do ciclo (gate skeleton)
     static bool s_camWok = false;
     static float s_skDist2 = -1.0f; // dist2 da entidade atual (gate skeleton, sem invoke)
-    // Item 14 LOS: Physics dota o teste de oclusao sem custo de disposicao.
-    typedef unsigned int (__cdecl* FnFieldOffset)(void*); // mono_field_get_offset
-    static MonoMethod* mRaycast = nullptr; // Physics.Raycast(Vector3,Vector3,RaycastHit&,Single,Int32)
-    static MonoClass*  cRayHit = nullptr;  // UnityEngine.RaycastHit (struct p/ out)
-    static MonoClassField* fHitDist = nullptr; // RaycastHit.distance (offset real via API)
-    static MonoClassField* fHitCol = nullptr;  // RaycastHit.collider (p/ log layer)
-    static MonoClass*  cCollider = nullptr; // UnityEngine.Collider (gameObject/layer)
-    static MonoMethod* mGetHitGO = nullptr; // Collider.get_gameObject (log HIT)
-    static MonoMethod* mGetLayer = nullptr; // GameObject.get_layer (log HIT)
-    static FnFieldOffset pFieldOff = nullptr; // mono_field_get_offset
-    static int s_hitDistOff = 28; // RAW (sem header MonoObject). Era 20 (chute) e
-    // 44 (api COM header +16) — ambos errados p/ o hitBuf cru; ver [FIELDS].
-    static bool s_distRawOk = false; // true quando o raw foi derivado na enumeracao
-    static void* s_hystEnt[256];      // histerese LOS: entidade -> cor exibida estavel
-    static signed char s_hystStreak[256]; // +exposto / -ocluido (satura em +/-5)
-    static bool  s_hystShown[256];    // cor exibida atual (vira após ~3 ciclos iguais)
-    static int s_losLogN = 0; // log [LOS] por entidade (1x cada, sem spam)
-    static int s_geomMask = -1; // layer mask (auditoria Passo 2; default = tudo)
-    static bool      s_losOk = false; // Physics.Raycast resolvido e funcional
-    static int       s_rayArgs = 0; // aridade resolvida (2-5)
     // Snapshot double-buffer sem lock no frame (item 14b, Rodada 1 inocentou
     // a worker): Present NUNCA toca em CS — le o ponteiro do buffer pronto
     // (troca atomica). Worker publica no back e vira o ponteiro sob 1 CS curto.
@@ -467,183 +431,7 @@ namespace Mono {
             if (cObj) { s.resolvedClasses++; ResolveMethod(cObj, "Object", "get_name", 0, mGetName); }
             MonoClass* cRend = pClassFrom(s_unity, "UnityEngine", "Renderer");
             if (cRend) { s.resolvedClasses++; ResolveMethod(cRend, "Renderer", "get_bounds", 0, mGetBounds); }
-            // Item 14: Physics.Raycast p/ LOS camera->peito (visivel/invisivel).
-            // AUDITORIA: mono_class_get_method_from_name("Raycast",N) retorna o
-            // PRIMEIRO overload com N params — sem checar assinatura. Com 6+
-            // overloads de Raycast, /5 pode devolver (Ray,...) em vez de
-            // (origin,dir,hit,...). Por isso: enumera TODOS os Raycast via
-            // mono_class_get_methods + assinatura, e casa por TIPOS. Fallback:
-            // Linecast (start,end[,mask]) e descritor ":Raycast(...)".
-            // NOTA: mLinecast/s_lineArgs sao statics de namespace (visiveis em BuildEsp).
-            // BUG 1 fix: Physics NAO esta em CoreModule no Unity 6 — esta em
-            // UnityEngine.PhysicsModule. Tenta PhysicsModule 1o (log prova qual veio),
-            // fallback p/ CoreModule (builds antigas). Idem RaycastHit/Collider.
-            MonoImage* s_physmod = pImgLoaded("UnityEngine.PhysicsModule");
-            if (!s_physmod) s_physmod = pImgLoaded("UnityEngine.PhysicsModule.dll");
-            Log::Infof("[LOS-AUDIT] PhysicsModule=%s img=0x%p.",
-                s_physmod ? "OK" : "AUSENTE", s_physmod);
-            MonoImage* physImg = s_physmod ? s_physmod : s_unity;
-            MonoClass* cPhys = pClassFrom(physImg, "UnityEngine", "Physics");
-            if (cPhys) {
-                s.resolvedClasses++;
-                // 1) Auditoria [SIG]: enumera TODOS os overloads de Raycast/Linecast
-                // com os TIPOS de cada parametro (nao so aridade). Regra: NUNCA
-                // confiar em pMethodFrom por aridade em metodos com overloads de
-                // mesma aridade (Unity 6 tem 2x Linecast/4: A=(V3,V3,out,int) e
-                // B=(V3,V3,int,QueryTrigger)). Invocar o errado = crash.
-                // Guarda o MonoMethod* exato de cada assinatura desejada.
-                static MonoMethod* s_rayV3 = nullptr; // (V3,V3,RaycastHit&,Single,Int32)
-                static MonoMethod* s_lineV3 = nullptr; // Linecast (V3,V3,RaycastHit&,Int32)
-                if (pClassMethods && pSigOf && pSigCount && pMethodGetName && pSigParam && pTypeName) {
-                    void* iter = nullptr;
-                    int nTotal = 0, nRay = 0, nLine = 0;
-                    while (true) {
-                        MonoMethod* mm = (MonoMethod*)pClassMethods(cPhys, &iter);
-                        if (!mm) break;
-                        if (++nTotal > 256) break;
-                        const char* nm = pMethodGetName(mm);
-                        if (!nm) continue;
-                        bool isRay = !strcmp(nm, "Raycast");
-                        bool isLine = !strcmp(nm, "Linecast");
-                        if (!isRay && !isLine) continue;
-                        void* sg = pSigOf(mm);
-                        if (!sg) continue;
-                        int ac = pSigCount(sg);
-                        char p0[64] = "?", p1[64] = "?", p2[64] = "?", p3[64] = "?", p4[64] = "?", p5[64] = "?";
-                        char* slots[6] = { p0, p1, p2, p3, p4, p5 };
-                        void* piter = nullptr;
-                        for (int pi = 0; pi < ac && pi < 6; ++pi) {
-                            void* pt = nullptr;
-                            __try { pt = pSigParam(sg, &piter); } __except (EXCEPTION_EXECUTE_HANDLER) { pt = nullptr; }
-                            if (!pt) break;
-                            const char* tn = nullptr;
-                            __try { tn = pTypeName(pt); } __except (EXCEPTION_EXECUTE_HANDLER) { tn = nullptr; }
-                            if (tn) strncpy_s(slots[pi], 64, tn, _TRUNCATE);
-                        }
-                        Log::Infof("[SIG] %s argc=%d p0=%s p1=%s p2=%s p3=%s p4=%s p5=%s",
-                            nm, ac, p0, p1, p2, p3, p4, p5);
-                        // Casa pela assinatura STRING (byref = '&' no fim, padrao Mono):
-                        // A) Raycast(V3,V3,RaycastHit&,Single,Int32)
-                        // B) Linecast(V3,V3,RaycastHit&,Int32)
-                        if (isRay && ac == 5 && !strcmp(p0, "UnityEngine.Vector3")
-                            && !strcmp(p1, "UnityEngine.Vector3")
-                            && strstr(p2, "RaycastHit") && !strcmp(p4, "System.Int32")) {
-                            if (!s_rayV3) { s_rayV3 = mm; nRay += 100; Log::Info("[SIG] Raycast(V3,V3,Hit&,f,i) CONFIRMADO."); }
-                        }
-                        if (isLine && ac == 4 && !strcmp(p0, "UnityEngine.Vector3")
-                            && !strcmp(p1, "UnityEngine.Vector3")
-                            && strstr(p2, "RaycastHit") && !strcmp(p3, "System.Int32")) {
-                            if (!s_lineV3) { s_lineV3 = mm; nLine += 100; Log::Info("[SIG] Linecast(V3,V3,Hit&,i) CONFIRMADO."); }
-                        }
-                        if (isRay) nRay++;
-                        if (isLine) nLine++;
-                    }
-                    Log::Infof("[LOS-AUDIT] Physics declarados=%d Raycast~%d Linecast~%d (100+=assinatura confirmada).", nTotal, nRay, nLine);
-                } else Log::Warn("LOS-AUDIT sem API de assinatura completa (pClassMethods/pSigOf/pSigCount/pMethodGetName/pSigParam/pTypeName).");
-                // mRaycast = assinatura confirmada OU descritor exato; aridade sozinha = PROIBIDO.
-                mRaycast = s_rayV3;
-                if (mRaycast) { s_rayArgs = 5; s.resolvedMethods++; Log::Info("LOS-SIG Raycast/5 via assinatura confirmada [SIG]."); }
-                // 2) Tenta por descritor exato (origin,dir,hit,maxDist,mask).
-                // BUG 1 fix: pDescSearch(desc, klass) — estava invertido.
-                // BUG 2 fix: descritor precisa do nome da classe "Physics:Raycast(...)".
-                if (pDescNew && pDescSearch && pDescFree) {
-                    void* dd = pDescNew("Physics:Raycast(UnityEngine.Vector3,UnityEngine.Vector3,UnityEngine.RaycastHit&,System.Single,System.Int32)", 1);
-                    if (dd) {
-                        MonoMethod* t = (MonoMethod*)pDescSearch(dd, cPhys);
-                        if (t) { mRaycast = t; s_rayArgs = 5; s.resolvedMethods++; Log::Info("LOS-SIG Raycast/5 via descritor exato."); }
-                        else Log::Warn("LOS-SIG descritor nao casou (fallback por aridade).");
-                        pDescFree(dd);
-                    } else Log::Warn("LOS-SIG mono_method_desc_new retornou null.");
-                }
-                // 3) Linecast DESABILITADO (PASSO 1 — parar o crash).
-                // Motivo: 2 overloads /4 com mesma aridade; pMethodFrom nao
-                // distingue (V3,V3,out,int) de (V3,V3,int,QueryTrigger). Invocar
-                // o B corrompe a pilha Mono. Reabilitar so apos [SIG] confirmar
-                // s_lineV3 com assinatura exata.
-                mLinecast = nullptr; s_lineArgs = 0;
-                if (s_lineV3) {
-                    mLinecast = s_lineV3; s_lineArgs = 4; s.resolvedMethods++;
-                    Log::Info("LOS-SIG Physics.Linecast/4 via assinatura confirmada [SIG].");
-                } else Log::Warn("Linecast DESABILITADO (assinatura (V3,V3,Hit&,i) nao confirmada — sem crash).");
-                if (mRaycast) Log::Infof("LOS-SIG Physics.Raycast/%d resolvido.", s_rayArgs);
-                else Log::Warn("Metodo nao resolvido: Physics.Raycast (2-5 + descritor)");
-                if (mRaycast && !mLinecast) Log::Warn("Linecast ausente; Raycast e a unica via.");
-                if (!cPhys) Log::Warn("Physics NAO encontrado em PhysicsModule nem CoreModule (BUG 1 persiste).");
-            }
-            cRayHit = pClassFrom(physImg, "UnityEngine", "RaycastHit");
-            if (!cRayHit) cRayHit = pClassFrom(s_unity, "UnityEngine", "RaycastHit");
-            if (cRayHit) {
-                s.resolvedClasses++;
-                // PASSO 3: auditoria [FIELDS] — enumera TODOS os campos com nome
-                // + offset (nome pode ser m_Distance; offset pode != 20).
-                if (pClassFields && pFieldGetName) {
-                    void* fiter = nullptr;
-                    int nF = 0;
-                    while (true) {
-                        MonoClassField* ff = (MonoClassField*)pClassFields(cRayHit, &fiter);
-                        if (!ff) break;
-                        if (++nF > 64) break;
-                        const char* fn = nullptr;
-                        __try { fn = pFieldGetName(ff); } __except (EXCEPTION_EXECUTE_HANDLER) { fn = nullptr; }
-                        int fo = -1;
-                        if (pFieldGetOff) { __try { fo = pFieldGetOff(ff); } __except (EXCEPTION_EXECUTE_HANDLER) { fo = -1; } }
-                        Log::Infof("[FIELDS] RaycastHit.%s @ %d", fn ? fn : "?", fo);
-                        // Registra o handle exato do campo de distancia (qualquer nome).
-                        // CORRECAO offset-16: mono_field_get_offset inclui o header
-                        // MonoObject (16 bytes no x64: vtable+sync). Nosso hitBuf e
-                        // cru (sem header), entao RAW = API - 16. Ex: 44 -> 28.
-                        if (fn && (strstr(fn, "istance") || strstr(fn, "ISTANCE"))) {
-                            if (!fHitDist) { fHitDist = ff; s.resolvedFields++; }
-                            if (fo >= 16) {
-                                s_hitDistOff = fo - 16;
-                                s_distRawOk = true;
-                                Log::Infof("[FIELDS] distance api=%d raw=%d (hitBuf cru, sem header).", fo, s_hitDistOff);
-                            } else if (fo >= 0) { s_hitDistOff = fo; Log::Infof("[FIELDS] distance offset=%d (via enumeracao).", fo); }
-                        }
-                    }
-                }
-                if (!fHitDist) {
-                    fHitDist = pFieldFrom(cRayHit, "distance");
-                    if (fHitDist) s.resolvedFields++;
-                    else Log::Warn("Campo nao resolvido: RaycastHit.distance (nem via [FIELDS])");
-                }
-                fHitCol = pFieldFrom(cRayHit, "m_Collider");
-                if (!fHitCol) fHitCol = pFieldFrom(cRayHit, "collider");
-                if (fHitCol) s.resolvedFields++;
-                else Log::Warn("Campo nao resolvido: RaycastHit.collider");
-            }
-            cCollider = pClassFrom(physImg, "UnityEngine", "Collider");
-            if (!cCollider) cCollider = pClassFrom(s_unity, "UnityEngine", "Collider");
-            if (cCollider && cComp) {
-                MonoMethod* t = pMethodFrom(cCollider, "get_gameObject", 0);
-                if (t) { mGetHitGO = t; s.resolvedMethods++; }
-            }
-            MonoClass* cGO = pClassFrom(s_unity, "UnityEngine", "GameObject");
-            if (cGO) {
-                MonoMethod* t = pMethodFrom(cGO, "get_layer", 0);
-                if (t) { mGetLayer = t; s.resolvedMethods++; }
-            }
-            // Offset REAL do campo via mono_field_get_offset.
-            // NOTA: mono-2.0-bdwgc.dll do Unity 6 NAO exporta esta funcao.
-            // Workaround: LosCalibrate descobre o slot comparando o buffer do
-            // hit com a distancia conhecida (auto-calibracao no 1o OCC real).
-            // BUG 3 doc: fallback +20 e chute; LosCalibrate corrige em runtime.
-            {
-                HMODULE mm = GetModuleHandleW(L"mono-2.0-bdwgc.dll");
-                if (mm) pFieldOff = (FnFieldOffset)GetProcAddress(mm, "mono_field_get_offset");
-                if (pFieldOff && fHitDist) {
-                    int apiOff = (int)pFieldOff(fHitDist);
-                    s_hitDistOff = (apiOff >= 16) ? apiOff - 16 : apiOff; // raw: sem header
-                    s_distRawOk = true;
-                    Log::Infof("LOS RaycastHit.distance api=%d raw=%d.", apiOff, s_hitDistOff);
-                } else {
-                    Log::Warnf("mono_field_get_offset ausente; distance usa fallback +%d (LosCalibrate corrige).", s_hitDistOff);
-                }
-            }
-            s_losOk = (mRaycast && cRayHit && fHitDist);
-            Log::Infof("LOS %s (mask=0x%X).", s_losOk ? "OK (Raycast/5 + HitGO/layer)" : "INDISPONIVEL (tudo visivel)", (unsigned)s_geomMask);
         }                     else Log::Warn("Imagem UnityEngine.CoreModule nao carregada.");
-        // Passo 2: auditoria de layers via CE MCP (preencher GEOMETRY_MASK apos ler o log [LOS-HIT]).
 
         s.ready = (cDay && cPlayer && cZombie && cZLoader && cPlayers
             && fDayInst && fZLInst && fPCInst && mHasLocal);
@@ -662,228 +450,10 @@ namespace Mono {
         return s.ready;
     }
 
-    // Item 14 LOS multi-bone: 1 ponto por osso (cabeca/peito/quadril/coxas).
-    // maxDist = ate o osso - 0.15m (nao acerta o proprio zumbi). Hit = ocluido.
-    // Retorna true=ponto exposto. Fail-open: falha = exposto (nunca some ESP).
-    // DIAG 16/09: Physics.Raycast/5 NAO resolveu nesta build (s_losOk=false desde
-    // o init) — todo LosPoint retorna true pelo gate acima. Quando resolver,
-    // a calibracao do offset de distance sai do proprio [LOS-CAL] abaixo.
-    static int s_calDone = 0; // calibracao RaycastHit.distance (1x, ver LosCalibrate)
-    // Histerese LOS (auditoria 16/09, oscilacao em multidao): a cor exibida
-    // so vira apos 5 ciclos iguais da mesma entidade (era 3 — com ciclo de
-    // 200ms em horda, 3 ciclos = 600ms e cada ciclo alternava; 5 ciclos com
-    // rodizio 1/3 = decisao estavel). Verde exige unanimidade maior porque
-    // o fail-open puxa pra verde: 5x exposto -> verde; 3x ocluido -> vermelho
-    // (assimetria intencional: vermelho entra rapido, verde sai devagar).
-    // skip=true (ciclo pulado por orcamento/rodizio): NAO mexe no streak,
-    // devolve a cor exibida atual (ou a crua p/ entidade nova).
-    static bool LosStable(void* ent, bool rawVis, bool skip = false) {
-        for (int i = 0; i < 256; ++i) {
-            if (s_hystEnt[i] == ent) {
-                if (skip) return s_hystShown[i];
-                int s = (int)s_hystStreak[i] + (rawVis ? 1 : -1);
-                if (s > 5) s = 5; if (s < -5) s = -5;
-                s_hystStreak[i] = (signed char)s;
-                if (s >= 5) s_hystShown[i] = true;      // 5x exposto -> verde
-                else if (s <= -3) s_hystShown[i] = false; // 3x ocluido -> vermelho
-                return s_hystShown[i];
-            }
-            if (!s_hystEnt[i]) { // slot livre: nasce na cor CRUA do 1o ciclo
-                // (auditoria 16/09: nascer vermelho invertia quem estava visivel
-                // — verde virava vermelho e vice-versa; a histerese estabiliza
-                // a partir daqui, 5 verde / 3 vermelho).
-                s_hystEnt[i] = ent;
-                s_hystStreak[i] = rawVis ? 1 : -1;
-                s_hystShown[i] = rawVis;
-                return rawVis;
-            }
-        }
-        return rawVis; // tabela cheia: sem histerese
-    }
-    static void LosCalibrate(const unsigned char* hitBuf, float knownDist) {
-        if (s_calDone || !(knownDist > 1.0f)) return;
-        if (s_distRawOk) { s_calDone = 1; return; } // raw ja derivado: nao sobrescrever
-        // Procura o slot float cujo valor ~= knownDist (hit confirmado pelo bool).
-        for (int off = 0; off + 4 <= 128; off += 4) {
-            float v = 0;
-            __try { memcpy(&v, hitBuf + off, sizeof(v)); }
-            __except (EXCEPTION_EXECUTE_HANDLER) { return; }
-            if (v == v && v > 0.5f && v < knownDist && (knownDist - v) < knownDist * 0.5f + 1.0f) {
-                // Candidato: hit antes do alvo. Exige estabilidade 2x antes de travar.
-                static int candOff = -1, candHits = 0;
-                if (off == candOff) {
-                    if (++candHits >= 2) {
-                        s_hitDistOff = off;
-                        s_calDone = 1;
-                        Log::Infof("[LOS-CAL] distance offset=%d (hit=%.1f alvo=%.1f).", off, (double)v, (double)knownDist);
-                    }
-                } else { candOff = off; candHits = 1; }
-                return;
-            }
-        }
-    }
-    // Linecast tri-estado (fia de verdade: 1=exposto, 0=ocluido, -1=sem dado).
-    // /4 le o RaycastHit e ignora o corpo do proprio alvo (hd ~= dist); /2 sem
-    // hitInfo e fail-conservador. Sem dado NUNCA vira verde (igual LosPointV).
-    static int LosPointLineV(const Vec3& from, const Vec3& to) {
-        if (!mLinecast || s_lineArgs == 0) return -1;
-        float dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
-        float dist = sqrtf(dx * dx + dy * dy + dz * dz);
-        if (!(dist > 0.5f) || !(dist < 10000.0f)) return -1;
-        long long t0 = PiNow();
-        __try {
-            int mask = s_geomMask;
-            MonoObject* exc = nullptr;
-            MonoObject* ret = nullptr;
-            if (s_lineArgs == 4) {
-                unsigned char hitBuf[128] = { 0 };
-                void* args[4];
-                args[0] = (void*)&from;
-                args[1] = (void*)&to;
-                args[2] = (void*)hitBuf;
-                args[3] = (void*)&mask;
-                ret = pInvoke(mLinecast, nullptr, args, &exc);
-                if (exc || !ret) { PiAddEx(s_piRay, PiNow() - t0, 0); return -1; }
-                bool hit = (*(unsigned char*)pUnbox(ret)) != 0;
-                if (!hit) { PiAdd(s_piRay, PiNow() - t0, true); return 1; }
-                float hd = 0;
-                __try { memcpy(&hd, hitBuf + s_hitDistOff, sizeof(hd)); }
-                __except (EXCEPTION_EXECUTE_HANDLER) { PiAddEx(s_piRay, PiNow() - t0, 2); return -1; }
-                if (!(hd == hd) || hd <= 0) { PiAddEx(s_piRay, PiNow() - t0, 1); return -1; }
-                if (hd >= dist - 0.15f) { PiAdd(s_piRay, PiNow() - t0, true); return 1; }
-                PiAdd(s_piRay, PiNow() - t0, true);
-                return 0;
-            }
-            // s_lineArgs == 2: (start,end) — hit de qualquer coisa = ocluido.
-            void* args[2];
-            args[0] = (void*)&from;
-            args[1] = (void*)&to;
-            ret = pInvoke(mLinecast, nullptr, args, &exc);
-            if (exc || !ret) { PiAddEx(s_piRay, PiNow() - t0, 0); return -1; }
-            bool hit = (*(unsigned char*)pUnbox(ret)) != 0;
-            PiAdd(s_piRay, PiNow() - t0, true);
-            return !hit ? 1 : 0;
-        } __except (EXCEPTION_EXECUTE_HANDLER) { PiAddEx(s_piRay, PiNow() - t0, 2); return -1; }
-    }
-    // Tri-estado do ponto (briefing §6 Camada 2/3): 1=exposto, 0=ocluido,
-    // -1=sem dado (sem saldo, distancia invalida, invoke falhou). O chamador
-    // decide: sem dado em TODOS os pontos = mantem a cor anterior (decay),
-    // nunca verde forcado. Verde forcado era o pisca-pisca em porta/janela.
-    static int LosPointV(const Vec3& from, const Vec3& to, float* outHit, int* outLayer = nullptr) {
-        if (outHit) *outHit = 0;
-        if (!s_losOk) return -1;
-        if (!BudgetTake(1)) { s_losSkipped++; return -1; }
-        float dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
-        float dist = sqrtf(dx * dx + dy * dy + dz * dz);
-        if (!(dist > 0.5f) || !(dist < 10000.0f)) return -1;
-        // AUDITORIA 16/09 (crash 04:20, offset 0x19f43c7, SEM frame managed):
-        // o AV acontece DENTRO do PhysX, fora do nosso __try. A defesa e NAO
-        // invocar quando o PhysX esta sob carga: se o dt medio do raycast
-        // passar de 500us, o PhysX esta saturado — pula o ponto (sem dado =
-        // mantem a cor) em vez de empilhar invoke em cima de PhysX travado.
-        // Limite UC: raycast sao custa <50us; >500us = PhysX em UpdatePhysics.
-        if (s_piRay.n >= 10 && (s_piRay.dt_us / s_piRay.n) > 500) {
-            s_losSkipped++;
-            return -1;
-        }
-        long long t0 = PiNow();
-        bool piOk = true;
-        Vec3 dir = { dx / dist, dy / dist, dz / dist };
-        unsigned char hitBuf[128] = { 0 };
-        void* args[5];
-        args[0] = (void*)&from;
-        args[1] = (void*)&dir;
-        __try {
-            // Assinaturas Unity (ordens testadas no init: s_rayArgs):
-            // /2: (ray, maxDistance) | /3: +layerMask | /4: +hitInfo | /5: +hitInfo+mask.
-            float maxD = dist - 0.15f;
-            int mask = s_geomMask;
-            MonoObject* exc = nullptr;
-            MonoObject* ret = nullptr;
-            bool hit = false;
-            if (s_rayArgs == 5) {
-                args[2] = (void*)hitBuf;
-                args[3] = (void*)&maxD;
-                args[4] = (void*)&mask;
-                ret = pInvoke(mRaycast, nullptr, args, &exc);
-                if (exc || !ret) { PiAddEx(s_piRay, PiNow() - t0, 0); return -1; }
-                hit = (*(unsigned char*)pUnbox(ret)) != 0;
-            } else if (s_rayArgs == 4) {
-                args[2] = (void*)hitBuf;
-                args[3] = (void*)&maxD;
-                ret = pInvoke(mRaycast, nullptr, args, &exc);
-                if (exc || !ret) { PiAddEx(s_piRay, PiNow() - t0, 0); return -1; }
-                hit = (*(unsigned char*)pUnbox(ret)) != 0;
-            } else if (s_rayArgs == 3) {
-                args[2] = (void*)&maxD;
-                args[3] = (void*)&mask;
-                ret = pInvoke(mRaycast, nullptr, args, &exc);
-                if (exc || !ret) { PiAddEx(s_piRay, PiNow() - t0, 0); return -1; }
-                hit = (*(unsigned char*)pUnbox(ret)) != 0;
-                if (hit) { if (outHit) *outHit = maxD; PiAdd(s_piRay, PiNow() - t0, true); return 0; }
-                PiAdd(s_piRay, PiNow() - t0, true); return 1;
-            } else if (s_rayArgs == 2) {
-                args[2] = (void*)&maxD;
-                ret = pInvoke(mRaycast, nullptr, args, &exc);
-                if (exc || !ret) { PiAddEx(s_piRay, PiNow() - t0, 0); return -1; }
-                hit = (*(unsigned char*)pUnbox(ret)) != 0;
-                if (hit) { if (outHit) *outHit = maxD; PiAdd(s_piRay, PiNow() - t0, true); return 0; }
-                PiAdd(s_piRay, PiNow() - t0, true); return 1;
-            } else { PiAddEx(s_piRay, PiNow() - t0, 0); return -1; }
-            if (!hit) { PiAdd(s_piRay, PiNow() - t0, true); return 1; } // sem hit = exposto
-            if (!s_calDone) LosCalibrate(hitBuf, dist);
-            float hd = 0;
-            __try { memcpy(&hd, hitBuf + s_hitDistOff, sizeof(hd)); }
-            __except (EXCEPTION_EXECUTE_HANDLER) { PiAddEx(s_piRay, PiNow() - t0, 2); return -1; }
-            if (outHit) *outHit = hd;
-            if (!(hd == hd) || hd <= 0) { PiAddEx(s_piRay, PiNow() - t0, 1); return -1; }
-            if (hd >= dist - 0.15f) { PiAdd(s_piRay, PiNow() - t0, true); return 1; } // encosto no corpo
-            // Log HIT DESABILITADO (P0 crash em aproximacao 15/09): invocar
-            // Collider.get_gameObject / GameObject.get_layer num collider que o
-            // jogo pode estar destruindo (LODController.SetColliding/GameObject.
-            // SetActive na mesma janela — ver crash dump 10:57) = AV dentro do
-            // runtime Mono. A decisao visivel/invisivel NAO usa layer, so distancia.
-            if (outLayer) *outLayer = -1;
-            PiAdd(s_piRay, PiNow() - t0, true);
-            return 0;
-        } __except (EXCEPTION_EXECUTE_HANDLER) { PiAddEx(s_piRay, PiNow() - t0, 2); return -1; }
-    }
-    // Compat: LosPoint antigo (bool) vira LosPointV (o chamador termico ignora -1).
-    static bool LosPoint(const Vec3& from, const Vec3& to, float* outHit, int* outLayer) {
-        float hd = 0; int dumL = -1;
-        int v = LosPointV(from, to, outHit ? outHit : &hd);
-        if (outLayer) *outLayer = dumL;
-        return v >= 0 ? (v == 1) : true;
-    }
-    // REGRA PROPORCIONAL: 5 pontos (cabeca/peito/quadril/coxaL/coxaR).
-    // visivel = hits >= 2 (40%) OU cabeca exposta (headshot viavel).
-    // Log [LOS] por entidade 1x (Passo 1/7): id/dist/hits/visivel.
-    static bool LosMulti(const Vec3& from, const Vec3 pts[5], float dist, void* ent) {
-        if (!s_losOk || !Config::bVisibleCheck) return true;
-        int hits = 0;
-        bool headExp = false;
-        int layers[5] = { -1,-1,-1,-1,-1 };
-        float hd[5] = { 0,0,0,0,0 };
-        for (int i = 0; i < 5; ++i) {
-            if (LosPoint(from, pts[i], &hd[i], &layers[i])) {
-                hits++;
-                if (i == 0) headExp = true;
-            }
-        }
-        bool vis = (hits >= 2) || headExp;
-        if (s_losLogN < 40) {
-            s_losLogN++;
-            Log::Infof("[LOS] id=0x%p dist=%.1f hits=%d/5 visivel=%d (lay=%d,%d,%d,%d,%d)",
-                ent, (double)dist, hits, vis ? 1 : 0,
-                layers[0], layers[1], layers[2], layers[3], layers[4]);
-        }
-        return vis;
-    }
-
     // invoke Transform.get_position -> mundo. Retorna false se falhar.
-    // GetPos fora do orçamento (posicao e dado vital: box/skeleton/LOS
+    // GetPos fora do orçamento (posicao e dado vital: box/skeleton
     // dependem dela; sem posicao a entidade some). O teto que protege a
-    // horda e o de entidades/ciclo + LOS em rodizio, nao este.
+    // horda e o de entidades/ciclo, nao este.
     static bool GetPos(void* trans, Vec3& out) {
         if (!mGetPos || !trans) return false;
         long long t0 = PiNow();
@@ -901,66 +471,6 @@ namespace Mono {
 
     void SetViewport(float w, float h) {
         if (w > 100 && h > 100) { s_vpW = w; s_vpH = h; }
-    }
-
-    // Item 14/Passo 5: NDC de profundidade de um ponto de MUNDO via VP proprio.
-    // Mesma matematica do W2S, mas retorna o Z clip (0=perto, 1=longe) em vez do pixel.
-    // Comparado com o depth buffer da cena: osso mais fundo que a cena = ocluido.
-    static bool BoneNdc(const Vec3& w, float& outNdc, float& outU, float& outV) {
-        if (!s_vpOk || s_vpW < 64 || s_vpH < 64) return false;
-        float cx = s_vp[0] * w.x + s_vp[4] * w.y + s_vp[8] * w.z + s_vp[12];
-        float cy = s_vp[1] * w.x + s_vp[5] * w.y + s_vp[9] * w.z + s_vp[13];
-        float cz = s_vp[2] * w.x + s_vp[6] * w.y + s_vp[10] * w.z + s_vp[14];
-        float cw = s_vp[3] * w.x + s_vp[7] * w.y + s_vp[11] * w.z + s_vp[15];
-        if (!(cw > 0.05f)) return false;
-        float inv = 1.0f / cw;
-        float nx = cx * inv, ny = cy * inv, nz = cz * inv;
-        if (!(nx == nx && ny == ny && nz == nz)) return false;
-        if (nx < -1.2f || nx > 1.2f || ny < -1.2f || ny > 1.2f) return false;
-        outNdc = nz * 0.5f + 0.5f; // clip [-1,1] -> depth [0,1] (D3D)
-        outU = nx * 0.5f + 0.5f;
-        outV = 1.0f - (ny * 0.5f + 0.5f); // NDC y-up -> UV y-down (texel)
-        return true;
-    }
-    static int s_depthOk = 0, s_depthMiss = 0; // diagnostico depth (amostragem)
-    static Vec3 s_depthProbe[5]; // pontos do ultimo ciclo p/ diagnostico DEPTH-ROW
-    static bool s_depthProbeOn = false;
-    // Ponto exposto? Compara NDC do osso com a cena. Epsilon 0.001 + margem de
-    // 0.5m em profundidade (converte: margem relativa a distancia do osso).
-    static bool DepthExposed(const Vec3& w, float distToBone) {
-        float ndc = 0, u = 0, v = 0;
-        if (!BoneNdc(w, ndc, u, v)) return true; // fora da tela = nao decide
-        float scene = 0;
-        if (!DepthVisShim::Sample(u, v, scene)) {
-            if (s_depthMiss < 3) { s_depthMiss++; Log::Warn("Depth sample indisponivel (MSAA/staging?)."); }
-            return true; // fail-open: sem depth, exposto
-        }
-        if (s_depthOk < 2) { s_depthOk++; Log::Infof("Depth OK: osso=%.4f cena=%.4f u=%.2f v=%.2f.", (double)ndc, (double)scene, (double)u, (double)v); }
-        // Cena no far (1.0) = ceu: osso sempre exposto.
-        if (scene >= 0.999f) return true;
-        // Margem: osso ate ~0.5m atras da superficie ainda conta como exposto
-        // (espessura do corpo + jitter). Em NDC a margem encolhe com a distancia;
-        // aproxima com 0.5m convertido via derivada: eps = 0.5 / dist^2 * k.
-        float eps = 0.5f / (distToBone * distToBone + 1.0f) + 0.001f;
-        return ndc <= scene + eps;
-    }
-    // Diagnostico DEPTH-ROW (1x/sessao): NDC do osso vs cena amostrada.
-    // Se osso< cena mas marca verde => o sample esta lendo a textura errada.
-    static void DepthDiagRow(const Vec3 pts[5], float dist) {
-        static bool done = false;
-        if (done) return;
-        done = true;
-        for (int i = 0; i < 5; ++i) {
-            float ndc = 0, u = 0, v = 0;
-            if (!BoneNdc(pts[i], ndc, u, v)) {
-                Log::Infof("[DEPTH-ROW] pt=%d sem NDC.", i);
-                continue;
-            }
-            float scene = 0;
-            bool ok = DepthVisShim::Sample(u, v, scene);
-            Log::Infof("[DEPTH-ROW] pt=%d osso=%.4f cena=%.4f u=%.3f v=%.3f sample=%d dist=%.1f.",
-                i, (double)ndc, (double)scene, (double)u, (double)v, ok ? 1 : 0, (double)dist);
-        }
     }
 
     // Le matriz 4x4 da camera (64 bytes, column-major Unity).
@@ -1340,10 +850,9 @@ namespace Mono {
         float maxD2 = maxD * maxD;
         LARGE_INTEGER t0, t1;
         QueryPerformanceCounter(&t0);
-        // Orçamento do ciclo: reseta a cada BuildEsp. Sem orçamento, LOS e
-        // skeleton viram leitura barata (sem invoke) em vez de travar o jogo.
+        // Orçamento do ciclo: reseta a cada BuildEsp. Sem orçamento o skeleton
+        // vira leitura barata (sem invoke) em vez de travar o jogo.
         s_budgetLeft = s_budgetMax;
-        s_losCursor = (s_losCursor + 1) & 0x7fffffff;
         void* zl = nullptr;
         if (!cZLoader) return;
         MonoClassField* fZL = pFieldFrom(cZLoader, "Instance");
@@ -1441,10 +950,8 @@ namespace Mono {
                     if (nv < 6) return;
                     // Maos ja calculadas em CollectJoints (fix bugs 1-2, 4) — vale p/ 2D e 3D.
                     // s_skDist2 alimenta o gate de skeleton longe (sem invoke extra).
-                    // Kill-window melee: a entidade pode morrer ENTRE CollectJoints
-                    // (18 GetPos em bones) e os 5 raycasts do LOS. Revalida HP/
-                    // isAlive aqui; mudou = publica box+skeleton e pula o LOS
-                    // (mantem a cor anterior, sem invocar no objeto em Destroy).
+                    // Kill-window melee (item 14b): revalida HP/isAlive apos o
+                    // skeleton; mudou = publica box+skeleton (cor unica).
                     s_skDist2 = hasCamW ? (dist * dist) : -1.0f;
                     CollectJoints(zo, cam, tmpEn);
                     {
@@ -1455,8 +962,6 @@ namespace Mono {
                         } __except (EXCEPTION_EXECUTE_HANDLER) { hp3 = 0; alive3 = 0; }
                         if (!alive3 || hp3 <= 0 || hp3 != hp) {
                             s_ghostDead++;
-                            tmpEn.losVis = LosStable(e, true, true); // skip: mantem cor
-                            tmpEn.losHits = -1;
                             EspEntry& en = tmp[n++];
                             memcpy(en.name, tmpEn.name, sizeof(en.name));
                             en.has3d = false;
@@ -1469,113 +974,11 @@ namespace Mono {
                             memcpy(en.skY, tmpEn.skY, sizeof(en.skY));
                             memcpy(en.skV, tmpEn.skV, sizeof(en.skV));
                             en.has3d = true;
-                            en.losVis = tmpEn.losVis;
-                            en.losHits = tmpEn.losHits;
                             en.ent = e; en.ex = bb.extents.x; en.ey = bb.extents.y; en.ez = bb.extents.z;
                             en.headX = en.headY = en.footX = en.footY = 0;
                             en.hp = hp; en.maxHp = mx;
                             en.onScreen = true; en.isAlly = false; en.isBoss = tmpEn.isBoss;
                             return;
-                        }
-                    }
-                    // Item 14/Passo 5: depth buffer nos 5 pontos (cabeca/peito/quadril/coxas).
-                    // Raycast (LosMulti) = fallback se depth indisponivel.
-                    // Auditoria: DEPTH-ROW 1x no caminho 3D + UV vs viewport real.
-                    {
-                        Vec3 dpts[5];
-                        dpts[0] = { bb.center.x, bb.center.y + bb.extents.y, bb.center.z };
-                        dpts[1] = bb.center;
-                        dpts[2] = { bb.center.x, bb.center.y - bb.extents.y * 0.35f, bb.center.z };
-                        dpts[3] = { bb.center.x - bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z };
-                        dpts[4] = { bb.center.x + bb.extents.x * 0.5f, bb.center.y - bb.extents.y * 0.7f, bb.center.z };
-                        DepthDiagRow(dpts, dist);
-                        // UV fora de [0,1] = BoneNdc divergindo da viewport do jogo.
-                        for (int di = 0; di < 5; ++di) {
-                            float nn = 0, uu = 0, vv = 0;
-                            if (BoneNdc(dpts[di], nn, uu, vv) && (uu < 0 || uu > 1 || vv < 0 || vv > 1))
-                                Log::Infof("[DEPTH-UV] pt=%d u=%.3f v=%.3f fora [0,1] (viewport divergente).", di, (double)uu, (double)vv);
-                        }
-                    }
-                    tmpEn.losVis = true;
-                    tmpEn.losHits = 5;
-                    // DIAG 2.1A (temporario): qual gate falha? 1x por entidade seria ideal,
-                    // mas aqui vale 1x por sessao (sem spam): mostra bVisibleCheck/hasCamW/s_losOk.
-                    {
-                        static bool s_gateLogged = false;
-                        if (!s_gateLogged) {
-                            s_gateLogged = true;
-                            Log::Infof("[LOS-GATE] 3D bVisibleCheck=%d hasCamW=%d s_losOk=%d mLinecast=0x%p s_rayArgs=%d",
-                                Config::bVisibleCheck ? 1 : 0, hasCamW ? 1 : 0, s_losOk ? 1 : 0,
-                                (void*)mLinecast, s_rayArgs);
-                        }
-                    }
-                    // Camada 1 (broadphase): distancia invalida = sem LOS (entidade
-                    // descartada; snapshot segura a cor anterior no render).
-                    // NOTA: o gate on-screen ja rodou acima (centroide dos 8
-                    // cantos); aqui entra direto no LOS real.
-                    // PADRAO UC (auditoria 16/09, crash 04:20): 1 raycast por
-                    // entidade (CABECA), nao 5. 5 raycasts x N zumbis saturam o
-                    // PhysX (dt 5us -> 2358us) e o AV acontece DENTRO do PhysX,
-                    // fora do nosso __try. 1 raio na cabeca = decisao binaria
-                    // (ocluido/exposto), histerese estabiliza. Custo cai 5x.
-                    if (Config::bVisibleCheck && hasCamW && dist > 0.5f && dist < 10000.0f) {
-                        Vec3 head = { bb.center.x, bb.center.y + bb.extents.y, bb.center.z };
-                        {
-                            int h = 0, o = 0, u = 0; bool he = false;
-                            float dummy;
-                            int v = -1;
-                            if (s_losOk) v = LosPointV(camW, head, &dummy);
-                            else if (mLinecast && s_lineArgs >= 2) v = LosPointLineV(camW, head);
-                            else {
-                                float ndc = 0, uu = 0, vv = 0;
-                                bool hasNdc = BoneNdc(head, ndc, uu, vv);
-                                float scene = 0;
-                                bool hasDepth = hasNdc && DepthVisShim::Sample(uu, vv, scene);
-                                if (!hasDepth) v = -1;
-                                else if (scene >= 0.999f) v = 1;
-                                else {
-                                    float eps = 0.5f / (dist * dist + 1.0f) + 0.001f;
-                                    v = (ndc <= scene + eps) ? 1 : 0;
-                                }
-                            }
-                            if (v > 0) { h = 5; he = true; }
-                            else if (v == 0) o = 5;
-                            else u = 5;
-                            tmpEn.losHits = (u == 5) ? -1 : h;
-                            if (u == 5) {
-                                tmpEn.losVis = LosStable(e, true, true); // skip: mantem cor
-                            } else {
-                                bool rawVis = (h >= 2) || he;
-                                // Ocluido sem exposto: forca vermelho estavel (bypass
-                                // da histerese p/ dentro de casa nao ficar verde).
-                                if (o > 0 && h == 0 && !he) {
-                                    for (int i = 0; i < 256; ++i) {
-                                        if (s_hystEnt[i] == e || !s_hystEnt[i]) {
-                                            s_hystEnt[i] = e;
-                                            s_hystStreak[i] = -5;
-                                            s_hystShown[i] = false;
-                                            break;
-                                        }
-                                    }
-                                    tmpEn.losVis = false;
-                                    rawVis = false;
-                                } else tmpEn.losVis = LosStable(e, rawVis);
-                                // DIAG 2.1C (temporario): resultado sempre (1x/sessao).
-                                {
-                                    static bool s_resLogged = false;
-                                    if (!s_resLogged) {
-                                        s_resLogged = true;
-                                        Log::Infof("[LOS-RESULT] 3D ent=0x%p losVis=%d losHits=%d",
-                                            e, tmpEn.losVis ? 1 : 0, h);
-                                    }
-                                }
-                                if (s_losLogN < 40) {
-                                    s_losLogN++;
-                                    const char* via = s_losOk ? "ray" : (mLinecast ? "line" : "depth");
-                                    Log::Infof("[LOS] id=0x%p dist=%.1f hits=%d/5 visivel=%d(raw=%d) via=%s",
-                                        e, (double)dist, h, tmpEn.losVis ? 1 : 0, rawVis ? 1 : 0, via);
-                                }
-                            }
                         }
                     }
                     if (!s_skelLogged && tmpEn.skN == SkJoint::SK_COUNT) {
@@ -1604,8 +1007,6 @@ namespace Mono {
                     memcpy(en.skY, tmpEn.skY, sizeof(en.skY));
                     memcpy(en.skV, tmpEn.skV, sizeof(en.skV));
                     en.has3d = true;
-                    en.losVis = tmpEn.losVis;
-                    en.losHits = tmpEn.losHits;
                     en.ent = e; en.ex = bb.extents.x; en.ey = bb.extents.y; en.ez = bb.extents.z;
                     en.headX = en.headY = en.footX = en.footY = 0;
                     en.hp = hp; en.maxHp = mx;
@@ -1647,66 +1048,9 @@ namespace Mono {
             if (n == 0) { s_dbgEyeY = wh.y; s_dbgFootY = wf.y; }
             s_skDist2 = hasCamW ? (dist * dist) : -1.0f;
             CollectJoints(zo, cam, tmpEn);
-            // Item 14/Passo 5 (fallback 2D): mesma logica do 3D —
-            // Raycast primario, Linecast secundario, Depth ultimo recurso.
-            tmpEn.losVis = true;
-            tmpEn.losHits = 5;
-            // DIAG 2.1A-2D (temporario): gate do caminho 2D, 1x/sessao.
-            {
-                static bool s_gateLogged2 = false;
-                if (!s_gateLogged2) {
-                    s_gateLogged2 = true;
-                    Log::Infof("[LOS-GATE] 2D bVisibleCheck=%d hasCamW=%d s_losOk=%d",
-                        Config::bVisibleCheck ? 1 : 0, hasCamW ? 1 : 0, s_losOk ? 1 : 0);
-                }
-            }
-            // Broadphase 2D: sem distancia valida nao ha LOS (igual ao 3D).
-            // 1 RAYCAST NA CABECA (igual ao 3D): 5 pontos saturavam o PhysX.
-            if (Config::bVisibleCheck && hasCamW && dist > 0.5f && dist < 10000.0f) {
-                Vec3 head = wh; // cabeca (olho)
-                // Tri-estado igual ao 3D (h=exposto, o=ocluido, u=sem dado).
-                int h = 0, o = 0, u = 0; bool he = false;
-                float dummy;
-                {
-                    int v = -1;
-                    if (s_losOk) v = LosPointV(camW, head, &dummy);
-                    else if (mLinecast && s_lineArgs >= 2) v = LosPointLineV(camW, head);
-                    else v = DepthExposed(head, dist) ? 1 : 0;
-                    if (v > 0) { h = 5; he = true; }
-                    else if (v == 0) o = 5;
-                    else u = 5;
-                    float ndc = 0, uu = 0, vv = 0;
-                    tmpEn.losDepth[0] = BoneNdc(head, ndc, uu, vv) ? ndc : -1.0f;
-                }
-                {
-                    Vec3 dpts[5] = { head, head, head, head, head };
-                    DepthDiagRow(dpts, dist);
-                }
-                tmpEn.losHits = (u == 5) ? -1 : h;
-                if (u == 5) tmpEn.losVis = LosStable(e, true, true); // skip: mantem cor
-                else if (o > 0 && h == 0 && !he) {
-                    for (int i = 0; i < 256; ++i) {
-                        if (s_hystEnt[i] == e || !s_hystEnt[i]) {
-                            s_hystEnt[i] = e; s_hystStreak[i] = -5; s_hystShown[i] = false; break;
-                        }
-                    }
-                    tmpEn.losVis = false;
-                }
-                else tmpEn.losVis = LosStable(e, (h >= 2) || he);
-                // DIAG 2.1C-2D (temporario): resultado do 2D, 1x/sessao.
-                {
-                    static bool s_resLogged2 = false;
-                    if (!s_resLogged2) {
-                        s_resLogged2 = true;
-                        Log::Infof("[LOS-RESULT] 2D ent=0x%p losVis=%d losHits=%d", e, tmpEn.losVis ? 1 : 0, h);
-                    }
-                }
-            }
             EspEntry& en = tmp[n++];
             memcpy(en.name, tmpEn.name, sizeof(en.name));
             en.dist = dist;
-            en.losVis = tmpEn.losVis;
-            en.losHits = tmpEn.losHits;
             en.headX = sh.x; en.headY = sh.y;
             en.footX = sf.x; en.footY = sf.y;
             // Diagnostico SKEL (1x/sessao, 1a entidade): mascara de juntas + tela.
@@ -1723,17 +1067,12 @@ namespace Mono {
             memcpy(en.skX, tmpEn.skX, sizeof(en.skX));
             memcpy(en.skY, tmpEn.skY, sizeof(en.skY));
             memcpy(en.skV, tmpEn.skV, sizeof(en.skV));
-            en.losVis = tmpEn.losVis;
             en.ent = e; en.ex = en.ey = en.ez = 0;
             en.hp = hp; en.maxHp = mx;
             en.onScreen = true; en.isAlly = false; en.isBoss = tmpEn.isBoss;
         });
         // Publicacao double-buffer (item 14b): worker escreve no back, vira o
         // ponteiro sob 1 CS curto. Present le o front SEM lock (ponteiro).
-        // AUDITORIA hang 03:47 (raycast limpo, fail 1/3795): o Enter BLOQUEANTE
-        // aqui e o unico ponto onde a worker pode esperar para sempre — se o
-        // Present estiver suspenso (resize/Alt-Tab/foco), a worker trava dentro
-        // do CS e o jogo congela com ESP desenhado. TryEnter: perdeu a virada
         // = tenta no proximo ciclo (33ms), nunca trava.
         if (!TryEnterCriticalSection(&s_espCS)) return;
         // Telemetria de orcamento (1x/sessao): prova que o teto segura a horda.
@@ -1819,8 +1158,7 @@ namespace Mono {
     }
     // Ritmo adaptativo anti-crash: a worker mede o custo do BuildEsp e ajusta
     // o intervalo. Ciclo caro (>25ms, horda densa) = respira 66ms; ciclo leve
-    // (<12ms) = volta pros 33ms. O jogo nunca recebe rajada de invokes: quanto
-    // mais pesado o ciclo, mais folga o PhysX/LOD ganha antes do proximo.
+    // (<12ms) = volta pros 33ms.
     static int s_sleepMs = 33;
     // Gate geracao de mapa (item 14b, crash 02:17): LOD gerando celulas
     // (LotConstructor/MapHash) destroi e recria colliders em massa. Sinal
@@ -1875,12 +1213,9 @@ namespace Mono {
                     continue;
                 }
                 // AUDITORIA 16/09 (hang 02:44, PERF 1438ms): BuildEsp inteiro
-                // (posicao+skeleton+LOS) rodava no MESMO ciclo. Com 86 zumbis,
-                // o ciclo estourava 1.4s e o ritmo adaptativo so reagia DEPOIS.
-                // Novo ritmo: posicao+skeleton TODO ciclo (barato, ~2ms), LOS
-                // pesado (5 raycasts) em RODIZIO: 1/3 das entidades por ciclo.
-                // Cada entidade ganha LOS real a cada ~100ms — imperceptivel,
-                // e o pico de invokes cai 3x. Histerese segura a cor no meio.
+                // rodava no MESMO ciclo. Com 86 zumbis, o ciclo estourava 1.4s
+                // e o ritmo adaptativo so reagia DEPOIS.
+                // Novo ritmo: posicao+skeleton TODO ciclo (barato, ~2ms).
                 BuildEsp();
                 {
                     static int s_slowN = 0;
@@ -2006,10 +1341,7 @@ namespace Mono {
     }
 
     void Tick() {
-        // AUDITORIA 16/09 (crash no tiro, 16 zumbis, raycast limpo): Tick
-        // rodava no hkPresent (thread do jogo) com InvokeBool + 19x go+name.
-        // No tiro, o LOD mexe nos mesmos objetos = corrida no frame = AV.
-        // REGRA NOVA: Present NUNCA invoca — so copia snapshot (Get/GetEsp).
+        // Present NUNCA invoca — so copia snapshot (Get/GetEsp).
         // ReadAll/AuditBones migraram p/ worker (EspThread, 1x/2s).
         ++s_tick;
         if (!s.ready && !Init()) return;

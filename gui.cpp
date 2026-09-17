@@ -36,7 +36,6 @@ namespace Config {
     bool  bSilentAim = false;
     bool  bAutoFire = false;
     bool  bTriggerbot = false;
-    bool  bVisibleCheck = true;
     int   iAimBone = 0;
     int   iAimPriority = 0;
     float fSmoothing = 8.0f;
@@ -86,18 +85,13 @@ namespace Config {
     bool  bZombieSnap = false;
     bool  bZombieHeadDot = false;
     int   iSnapFrom = 0;           // 0=Base 1=Topo 2=Centro
-    bool  bEspVisibleOnly = false;  // filtro: so desenha visiveis
     float colZombieSkel[4] = { 0, 1, 1, 1 };
     float colZombieSnap[4] = { 0, 1, 0, 1 };
     float colZombieDot[4] = { 1, 1, 0, 1 };
-    float colZombieVis[4] = { 1, 0, 0, 1 };
-    float colZombieInv[4] = { 0.5f, 0, 0, 1 };
-    float colZombieNameVis[4] = { 1, 1, 1, 1 };
-    float colZombieNameInv[4] = { 0.7f, 0.7f, 0.7f, 1 };
-    float colZombieDistVis[4] = { 1, 1, 1, 1 };
-    float colZombieDistInv[4] = { 0.7f, 0.7f, 0.7f, 1 };
-    float colZombieHpVis[4] = { 0, 1, 0, 1 };
-    float colZombieHpInv[4] = { 1, 0, 0, 1 };
+    float colZombieBox[4] = { 1, 0, 0, 1 };
+    float colZombieName[4] = { 1, 1, 1, 1 };
+    float colZombieDist[4] = { 1, 1, 1, 1 };
+    float colZombieHp[4] = { 0, 1, 0, 1 };
 
     bool  bAllyEsp = false;
     int   iAllyBox = 0;
@@ -345,13 +339,13 @@ namespace GUI {
     }
 
 
-    static EspLayout::Style LayoutStyle(float health, bool losVis = true) {
+    static EspLayout::Style LayoutStyle(float health) {
         EspLayout::Style style;
         style.font = ImGui::GetFont();
         style.fontSize = style.font->FontSize * ImGui::GetIO().FontGlobalScale;
-        float(*nc)[4] = losVis ? &Config::colZombieNameVis : &Config::colZombieNameInv;
-        float(*dc)[4] = losVis ? &Config::colZombieDistVis : &Config::colZombieDistInv;
-        float(*bc)[4] = losVis ? &Config::colZombieVis : &Config::colZombieInv;
+        float(*nc)[4] = &Config::colZombieName;
+        float(*dc)[4] = &Config::colZombieDist;
+        float(*bc)[4] = &Config::colZombieBox;
         style.color[EspLayout::Name] = ImGui::GetColorU32(ImVec4((*nc)[0], (*nc)[1], (*nc)[2], (*nc)[3]));
         style.color[EspLayout::Distance] = ImGui::GetColorU32(ImVec4((*dc)[0], (*dc)[1], (*dc)[2], (*dc)[3]));
         style.boxColor = ImGui::GetColorU32(ImVec4((*bc)[0], (*bc)[1], (*bc)[2], (*bc)[3]));
@@ -620,7 +614,7 @@ namespace GUI {
 #define JS(v) fprintf(f, "\"" #v "\":\"%s\",\n", ConfigJson::Escape(v).c_str())
         JB(bMenuOpen); JI(iMenuKey); JB(bWatermark); JB(bDebugOverlay); JB(bTooltips);
         JB(bAimbot); JI(iAimKey); JI(iAimMode); JB(bAutoAim); JB(bSilentAim); JB(bAutoFire);
-        JB(bTriggerbot); JB(bVisibleCheck); JI(iAimBone); JI(iAimPriority); JF(fSmoothing);
+        JB(bTriggerbot); JI(iAimBone); JI(iAimPriority); JF(fSmoothing);
         JB(bLimitFov); JF(fFovAngle); JB(b360Mode); JB(bDrawFov); JF(fMaxDistance);
         JB(bPrediction); JF(fLagComp);
         JB(bNoRecoil); JB(bNoSpread); JB(bNoSway); JB(bRapidFire); JF(fRapidMult);
@@ -634,9 +628,8 @@ namespace GUI {
         JF(fAlongN); JF(fAlongD); JF(fAlongH); JF(fAlongP); JF(fGapN); JF(fGapD); JF(fGapH); JF(fGapP);
         JI(iOrderN); JI(iOrderD); JI(iOrderH); JI(iOrderP); JF(fBarLength); JF(fBarThickness);
         JB(bZombieSkeleton); JB(bZombieSnap); JB(bZombieHeadDot); JV(colZombieSkel); JV(colZombieSnap); JV(colZombieDot);
-        JI(iSnapFrom); JB(bEspVisibleOnly);
-        JV(colZombieVis); JV(colZombieInv); JV(colZombieNameVis); JV(colZombieNameInv);
-        JV(colZombieDistVis); JV(colZombieDistInv); JV(colZombieHpVis); JV(colZombieHpInv);
+        JI(iSnapFrom);
+        JV(colZombieBox); JV(colZombieName); JV(colZombieDist); JV(colZombieHp);
         JB(bAllyEsp); JI(iAllyBox); JB(bAllyName); JB(bAllyDist); JB(bAllyHp);
         JB(bAllySkeleton); JB(bAllySnap); JB(bAllyHeadDot); JV(colAllyVis);
         JB(bChams); JV(colChamsVis); JV(colChamsInv); JB(bItemEsp); JB(bItemWeapons);
@@ -709,7 +702,7 @@ namespace GUI {
 #define LS(v) fields.push_back({ #v, ConfigJson::StringField, (v), sizeof(v) })
         LB(bMenuOpen); LI(iMenuKey); LB(bWatermark); LB(bDebugOverlay); LB(bTooltips);
         LB(bAimbot); LI(iAimKey); LI(iAimMode); LB(bAutoAim); LB(bSilentAim); LB(bAutoFire);
-        LB(bTriggerbot); LB(bVisibleCheck); LI(iAimBone); LI(iAimPriority); LF(fSmoothing);
+        LB(bTriggerbot); LI(iAimBone); LI(iAimPriority); LF(fSmoothing);
         LB(bLimitFov); LF(fFovAngle); LB(b360Mode); LB(bDrawFov); LF(fMaxDistance);
         LB(bPrediction); LF(fLagComp);
         LB(bNoRecoil); LB(bNoSpread); LB(bNoSway); LB(bRapidFire); LF(fRapidMult);
@@ -721,9 +714,8 @@ namespace GUI {
         LB(bZombieEsp); LB(bZombieBoxShow); LI(iZombieBox); LB(bZombieName); LB(bZombieDist); LB(bZombieHp); LB(bZombiePct); LF(fPctX); LF(fPctY); LI(iNameA); LI(iDistA); LI(iHpA); LI(iPctA); LF(fPropN); LF(fPropD); LF(fPropH); LF(fPropP);
         LI(iSideN); LI(iSideD); LI(iSideH); LI(iSideP); LI(iAlinN); LI(iAlinD); LI(iAlinH); LI(iAlinP);
         LB(bZombieSkeleton); LB(bZombieSnap); LB(bZombieHeadDot); LV(colZombieSkel); LV(colZombieSnap); LV(colZombieDot);
-        LI(iSnapFrom); LB(bEspVisibleOnly);
-        LV(colZombieVis); LV(colZombieInv); LV(colZombieNameVis); LV(colZombieNameInv);
-        LV(colZombieDistVis); LV(colZombieDistInv); LV(colZombieHpVis); LV(colZombieHpInv);
+        LI(iSnapFrom);
+        LV(colZombieBox); LV(colZombieName); LV(colZombieDist); LV(colZombieHp);
         LB(bAllyEsp); LI(iAllyBox); LB(bAllyName); LB(bAllyDist); LB(bAllyHp);
         LB(bAllySkeleton); LB(bAllySnap); LB(bAllyHeadDot); LV(colAllyVis);
         LB(bChams); LV(colChamsVis); LV(colChamsInv); LB(bItemEsp); LB(bItemWeapons);
@@ -831,17 +823,13 @@ namespace GUI {
             Mono::EspEntry es[128];
             int n = Mono::GetEsp(es, 128);
             float H = io.DisplaySize.y;
-            ImU32 colVis = ImGui::GetColorU32(ImVec4(Config::colZombieVis[0], Config::colZombieVis[1], Config::colZombieVis[2], Config::colZombieVis[3]));
-            ImU32 colInv = ImGui::GetColorU32(ImVec4(Config::colZombieInv[0], Config::colZombieInv[1], Config::colZombieInv[2], Config::colZombieInv[3]));
-            // R3 (spec �3.2): 1 cor por elemento � Skeleton/Linha/Dot nao usam mais a cor do Box.
+            ImU32 col = ImGui::GetColorU32(ImVec4(Config::colZombieBox[0], Config::colZombieBox[1], Config::colZombieBox[2], Config::colZombieBox[3]));
+            // 1 cor por elemento: Skeleton/Linha/Dot usam
+            // o picker proprio, nunca a cor do Box.
             ImU32 colSkel = ImGui::GetColorU32(ImVec4(Config::colZombieSkel[0], Config::colZombieSkel[1], Config::colZombieSkel[2], Config::colZombieSkel[3]));
             ImU32 colSnap = ImGui::GetColorU32(ImVec4(Config::colZombieSnap[0], Config::colZombieSnap[1], Config::colZombieSnap[2], Config::colZombieSnap[3]));
             ImU32 colDot = ImGui::GetColorU32(ImVec4(Config::colZombieDot[0], Config::colZombieDot[1], Config::colZombieDot[2], Config::colZombieDot[3]));
             for (int i = 0; i < n; ++i) {
-                // Item 14: cor por LOS (desliga = tudo visivel).
-                // DIAG: losVis agora vem do depth buffer ponto a ponto (Passo 5).
-                bool vis = !Config::bVisibleCheck || es[i].losVis;
-                ImU32 col = vis ? colVis : colInv;
                 float h = 0, w = 0, cx = 0, hy = 0, fy = 0;
                 ImVec2 r0, r1;
                 // R4 (spec �1): Box tem flag propria � bZombieEsp e master,
@@ -984,7 +972,7 @@ namespace GUI {
                     labelName = nameBuf;
                 }
                 auto content = LayoutContent(labelName, es[i].dist, es[i].hp, es[i].maxHp);
-                auto style = LayoutStyle(content.health, vis);
+                auto style = LayoutStyle(content.health);
                 auto geometry = EspLayout::Resolve(layout, envelope, { ImVec2(2.0f, 2.0f), ImVec2(io.DisplaySize.x - 2.0f, io.DisplaySize.y - 2.0f) }, content, style, true);
                 EspLayout::Draw(dl, geometry, content, style);
             }
@@ -1018,7 +1006,6 @@ namespace GUI {
                 ImGui::Checkbox("Silent Aim", &Config::bSilentAim);
                 ImGui::Checkbox("Auto Fire", &Config::bAutoFire);
                 ImGui::Checkbox("Triggerbot", &Config::bTriggerbot);
-                ImGui::Checkbox("Visible Check", &Config::bVisibleCheck); Tip("Raycast camera->alvo.");
                 ImGui::Separator();
                 ImGui::Checkbox("Limit FOV", &Config::bLimitFov);
                 ImGui::SliderFloat("FOV Angle", &Config::fFovAngle, 1, 360, "%.0f deg");
@@ -1072,14 +1059,14 @@ namespace GUI {
                     ImGui::Checkbox("Box", &Config::bZombieBoxShow);
                     ImGui::SameLine(); ImGui::SetNextItemWidth(110.0f);
                     ImGui::Combo("Tipo##ZB", &Config::iZombieBox, kBoxType, 3);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##CorBoxZ", Config::colZombieVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##CorBoxZ", Config::colZombieBox, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                     ImGui::Checkbox("Nome", &Config::bZombieName);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##CorNomeZ", Config::colZombieNameVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##CorNomeZ", Config::colZombieName, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                     ImGui::Checkbox("Distancia", &Config::bZombieDist);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##CorDistZ", Config::colZombieDistVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##CorDistZ", Config::colZombieDist, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                     ImGui::Checkbox("Barra", &Config::bZombieHp);
                     ImGui::SameLine(); ImGui::Checkbox("%%##pct", &Config::bZombiePct);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##CorVidaZ", Config::colZombieHpVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+                    ImGui::SameLine(); ImGui::ColorEdit4("##CorVidaZ", Config::colZombieHp, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                     ImGui::Checkbox("Skeleton", &Config::bZombieSkeleton);
                     ImGui::SameLine(); ImGui::ColorEdit4("##CorSkelZ", Config::colZombieSkel, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                     ImGui::Checkbox("Linha", &Config::bZombieSnap);
@@ -1088,11 +1075,6 @@ namespace GUI {
                     ImGui::SameLine(); ImGui::ColorEdit4("##CorLinhaZ", Config::colZombieSnap, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                     ImGui::Checkbox("HeadDot", &Config::bZombieHeadDot);
                     ImGui::SameLine(); ImGui::ColorEdit4("##CorDotZ", Config::colZombieDot, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::Separator();
-                    ImGui::Checkbox("Visible Check", &Config::bVisibleCheck);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##Vis", Config::colZombieVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##Inv", Config::colZombieInv, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::Checkbox("Somente visiveis", &Config::bEspVisibleOnly);
                     ImGui::SliderFloat("Dist max", &Config::fMaxDistance, 10, 500, "%.0fm");
                 }
                 ImGui::Separator();

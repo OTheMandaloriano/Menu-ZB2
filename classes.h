@@ -33,6 +33,7 @@ public:
 };
 
 // Snapshot usado pelo ESP (preenchido via reflection, sem expor Mono aqui).
+// NOTA: struct legado — o overlay usa Mono::EspEntry (mono.h).
 struct EspEntry {
     char     name[64];
     Vector3  pos;        // mundo
@@ -40,7 +41,6 @@ struct EspEntry {
     float    dist;       // metros ate camera local
     int      hp;
     int      maxHp;
-    bool     visible;    // raycast camera->alvo
     bool     isAlly;     // true=aliado(azul) false=zumbi(vermelho)
     bool     isBoss;     // Riot/Queen/Reaper
 };

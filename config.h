@@ -25,7 +25,6 @@ namespace Config {
     extern bool  bSilentAim;
     extern bool  bAutoFire;
     extern bool  bTriggerbot;
-    extern bool  bVisibleCheck;
     extern int   iAimBone;          // 0=Head 1=Neck 2=Chest 3=Pelvis
     extern int   iAimPriority;      // 0=Crosshair 1=LowestHP 2=Nearest
     extern float fSmoothing;        // 1-30
@@ -79,18 +78,13 @@ namespace Config {
     extern bool  bZombieSnap;
     extern bool  bZombieHeadDot;
     extern int   iSnapFrom;         // 0=Base 1=Topo 2=Centro (origem da snapline)
-    extern bool  bEspVisibleOnly;   // filtro: so desenha visiveis (custo zero)
     extern float colZombieSkel[4];  // cor propria do Skeleton
     extern float colZombieSnap[4];  // cor propria da Linha
     extern float colZombieDot[4];   // cor propria do HeadDot
-    extern float colZombieVis[4];   // cor do box/nome quando visivel
-    extern float colZombieInv[4];   // cor do box/nome quando oculto
-    extern float colZombieNameVis[4];
-    extern float colZombieNameInv[4];
-    extern float colZombieDistVis[4];
-    extern float colZombieDistInv[4];
-    extern float colZombieHpVis[4];
-    extern float colZombieHpInv[4];
+    extern float colZombieBox[4];   // cor do box
+    extern float colZombieName[4];  // cor do nome
+    extern float colZombieDist[4];  // cor da distancia
+    extern float colZombieHp[4];    // cor da vida (%)
 
     // ---- VISUAL / Aliados ----
     extern bool  bAllyEsp;

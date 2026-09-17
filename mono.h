@@ -36,16 +36,6 @@ namespace Mono {
         bool  has3d;        // AABB valida (Box 3D real; senao fallback 2D)
         void* ent;          // ponteiro da entidade (log diagnostico P1)
         float ex, ey, ez;   // extents da AABB (log diagnostico P1)
-        bool  losVis;       // item 14: proporcao exposta >= 40% (multi-bone)
-        int   losHits;      // item 14: pontos expostos de 5 (log [LOS])
-        // DIVIDA TECNICA: se um dia houver entidade com nome variavel, cachear
-        // entPtr->name (tabela hash, 1a aparicao, memcpy direto + SEH). Nunca
-        // invocar Object.get_name no caminho quente (P0 crash pos-kill).
-        // AUDIT SENIOR 15/09: RaycastHit.m_Distance @ 44 (Unity 6.0.3, [FIELDS]
-        // + mono_field_get_offset concordam). Raycast/5 confirmado via [SIG]
-        // (V3,V3,RaycastHit&,Single,Int32). Linecast/4 AMBIGUO (2 overloads de
-        // mesma aridade) — manter DESABILITADO ate [SIG] provar o handle exato.
-        float losDepth[5];  // item 14/Passo5: profundidade NDC do osso (depth buffer)
         int   skN;          // juntas validas (item 12 Skeleton real)
         float skX[20], skY[20]; // pixels Unity (y p/ cima, igual px/py)
         bool  skV[20];      // junta na frente da camera
@@ -77,9 +67,6 @@ namespace Mono {
     void Tick();
     const State& Get();
     void SetViewport(float w, float h); // tela atual (p/ W2S proprio)
-    // Implementado em main.cpp (captura D3D11). Declarado aqui p/ a worker.
-    // Usa :: (global) porque a definicao esta em namespace global, nao em Mono.
-    namespace DepthVisShim { bool Sample(float u, float v, float& outNdc); }
 
     // Snapshot do ESP (preenchido no Tick; ler no Render).
     // N <0 = todos; retorna quantidade escrita.
