@@ -519,6 +519,15 @@ namespace GUI {
             ImGui::SetTooltip("%s", t);
     }
 
+    // Swatch alinhado a direita da coluna atual. So apresentacao.
+    static void SwatchR(const char* id, float col[4], const char* tip = nullptr) {
+        ImGui::SameLine();
+        float avail = ImGui::GetContentRegionAvail().x;
+        if (avail > 30.0f) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail - 26.0f);
+        ImGui::ColorEdit4(id, col, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+        if (tip) Tip(tip);
+    }
+
     // ---- Hotkeys com modal (Fase 1 item 3) ----
     // OBJETIVO: clique no botao -> modal captura a proxima tecla/mouse. ESC cancela.
     static int* s_capKey = nullptr;
@@ -1050,92 +1059,103 @@ namespace GUI {
             }
             // ---- 2 VISUAL ----
             if (ImGui::BeginTabItem("VISUAL")) {
-                // FIX 2: funcoes rapidas no topo, Layout Avancado colapsado no fundo.
-                // ======== ZUMBIS ========
-                ImGui::Checkbox("ESP Zumbis", &Config::bZombieEsp); ImGui::SameLine();
-                ImGui::TextDisabled("(master)");
-                if (Config::bZombieEsp) {
-                    static const char* kSnapFrom[] = { "Base", "Topo", "Centro" };
-                    ImGui::Checkbox("Box", &Config::bZombieBoxShow);
-                    ImGui::SameLine(); ImGui::SetNextItemWidth(110.0f);
-                    ImGui::Combo("Tipo##ZB", &Config::iZombieBox, kBoxType, 3);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##CorBoxZ", Config::colZombieBox, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::Checkbox("Nome", &Config::bZombieName);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##CorNomeZ", Config::colZombieName, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::Checkbox("Distancia", &Config::bZombieDist);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##CorDistZ", Config::colZombieDist, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::Checkbox("Barra", &Config::bZombieHp);
-                    ImGui::SameLine(); ImGui::Checkbox("%%##pct", &Config::bZombiePct);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##CorVidaZ", Config::colZombieHp, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::Checkbox("Skeleton", &Config::bZombieSkeleton);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##CorSkelZ", Config::colZombieSkel, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::Checkbox("Linha", &Config::bZombieSnap);
-                    ImGui::SameLine(); ImGui::SetNextItemWidth(90.0f);
-                    ImGui::Combo("##SnapOrig", &Config::iSnapFrom, kSnapFrom, 3);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##CorLinhaZ", Config::colZombieSnap, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::Checkbox("HeadDot", &Config::bZombieHeadDot);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##CorDotZ", Config::colZombieDot, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::SliderFloat("Dist max", &Config::fMaxDistance, 10, 500, "%.0fm");
+                // Padrao mercado: 2 colunas (ESP | Mundo), cabecalho por grupo,
+                // filhos indentados, swatch a direita. So apresentacao.
+                static const char* kSnapFrom[] = { "Base", "Topo", "Centro" };
+                if (ImGui::BeginTable("visual_cols", 2)) {
+                    ImGui::TableNextColumn();
+                    ImGui::SeparatorText("ZUMBIS");
+                    ImGui::Checkbox("Ativo##Z", &Config::bZombieEsp); Tip("Master do ESP de zumbis (worker + desenho).");
+                    if (Config::bZombieEsp) {
+                        ImGui::Indent();
+                        ImGui::Checkbox("Box", &Config::bZombieBoxShow); Tip("Desenha o retangulo. Desmarcar nao mata nome/vida.");
+                        ImGui::SameLine(); ImGui::SetNextItemWidth(96.0f);
+                        ImGui::Combo("Tipo", &Config::iZombieBox, kBoxType, 3); Tip("2D / 3D real (AABB) / Cantos.");
+                        SwatchR("##CorBoxZ", Config::colZombieBox, "Cor do box.");
+                        ImGui::Checkbox("Nome", &Config::bZombieName); Tip("Nome + tag [BOSS] automatica.");
+                        SwatchR("##CorNomeZ", Config::colZombieName, "Cor do nome.");
+                        ImGui::Checkbox("Distancia", &Config::bZombieDist); Tip("Distancia em metros ate a camera.");
+                        SwatchR("##CorDistZ", Config::colZombieDist, "Cor da distancia.");
+                        ImGui::Checkbox("Barra de vida", &Config::bZombieHp);
+                        ImGui::SameLine(); ImGui::Checkbox("%", &Config::bZombiePct); Tip("Numero arrastavel no Avancado.");
+                        SwatchR("##CorVidaZ", Config::colZombieHp, "Cor do texto de vida (a barra usa HpColor).");
+                        ImGui::Checkbox("Esqueleto", &Config::bZombieSkeleton); Tip("19 segmentos articulados (< 50m).");
+                        SwatchR("##CorSkelZ", Config::colZombieSkel, "Cor do esqueleto.");
+                        ImGui::Checkbox("Linha", &Config::bZombieSnap);
+                        ImGui::SameLine(); ImGui::SetNextItemWidth(80.0f);
+                        ImGui::Combo("Origem", &Config::iSnapFrom, kSnapFrom, 3); Tip("De onde sai a linha: base/topo/centro da tela.");
+                        SwatchR("##CorLinhaZ", Config::colZombieSnap, "Cor da linha.");
+                        ImGui::Checkbox("Ponto na cabeca", &Config::bZombieHeadDot); Tip("Head dot projetado na junta HEAD.");
+                        SwatchR("##CorDotZ", Config::colZombieDot, "Cor do ponto.");
+                        ImGui::SetNextItemWidth(160.0f);
+                        ImGui::SliderFloat("Dist. maxima", &Config::fMaxDistance, 10, 500, "%.0fm"); Tip("Alem disso a entidade e ignorada (chefao ignora).");
+                        ImGui::Unindent();
+                    }
+                    ImGui::SeparatorText("ALIADOS");
+                    ImGui::Checkbox("Ativo##A", &Config::bAllyEsp); Tip("ESP dos jogadores (sempre azul).");
+                    if (Config::bAllyEsp) {
+                        ImGui::Indent();
+                        ImGui::SetNextItemWidth(96.0f);
+                        ImGui::Combo("Box", &Config::iAllyBox, kBoxType, 3); Tip("2D / 3D real (AABB) / Cantos.");
+                        SwatchR("##CorAlly", Config::colAllyVis, "Cor unica do aliado.");
+                        ImGui::Checkbox("Nome##A", &Config::bAllyName);
+                        ImGui::SameLine(); ImGui::Checkbox("Dist.##A", &Config::bAllyDist);
+                        ImGui::SameLine(); ImGui::Checkbox("Vida##A", &Config::bAllyHp);
+                        ImGui::Checkbox("Esqueleto##A", &Config::bAllySkeleton);
+                        ImGui::SameLine(); ImGui::Checkbox("Linha##A", &Config::bAllySnap);
+                        ImGui::SameLine(); ImGui::Checkbox("Ponto##A", &Config::bAllyHeadDot);
+                        ImGui::Unindent();
+                    }
+                    ImGui::SeparatorText("CHAMS");
+                    ImGui::Checkbox("Corpo (XQZ)", &Config::bChams); Tip("Atravessa parede. O proprio checkbox e o enable.");
+                    if (Config::bChams) {
+                        ImGui::Indent();
+                        ImGui::TextDisabled("Visivel"); SwatchR("##ChVis", Config::colChamsVis, "Cor com linha de visada livre.");
+                        ImGui::TextDisabled("Oculto"); SwatchR("##ChInv", Config::colChamsInv, "Cor atras de parede.");
+                        ImGui::Unindent();
+                    }
+                    ImGui::TableNextColumn();
+                    ImGui::SeparatorText("ITENS");
+                    ImGui::Checkbox("Ativo##I", &Config::bItemEsp); Tip("Master do ESP de itens no chao.");
+                    if (Config::bItemEsp) {
+                        ImGui::Indent();
+                        ImGui::Checkbox("Armas", &Config::bItemWeapons);
+                        SwatchR("##CArma", Config::colItem, "Cor das armas.");
+                        ImGui::SameLine(); ImGui::Checkbox("Raros", &Config::bItemRare);
+                        SwatchR("##CRaro", Config::colItemRare, "Cor dos raros.");
+                        ImGui::Checkbox("Municao", &Config::bItemAmmo);
+                        SwatchR("##CMunic", Config::colItemAmmo, "Cor da municao.");
+                        ImGui::SameLine(); ImGui::Checkbox("Suprimento", &Config::bItemSupply);
+                        SwatchR("##CSupri", Config::colItemSupply, "Cor do suprimento.");
+                        ImGui::SetNextItemWidth(160.0f);
+                        ImGui::SliderFloat("Raio", &Config::fItemRadius, 10, 500, "%.0fm"); Tip("So mostra item dentro deste raio.");
+                        ImGui::Unindent();
+                    }
+                    ImGui::SeparatorText("PONTOS / MUNDO");
+                    ImGui::Checkbox("Ativo##P", &Config::bPoiEsp); Tip("Master dos pontos de interesse.");
+                    if (Config::bPoiEsp) {
+                        ImGui::Indent();
+                        ImGui::Checkbox("Helicoptero", &Config::bPoiHeli);
+                        SwatchR("##PHeli", Config::colPoiHeli, "Sempre visivel (dinamico).");
+                        ImGui::SameLine(); ImGui::Checkbox("Chefao", &Config::bPoiBoss);
+                        SwatchR("##PBoss", Config::colPoiBoss, "Sempre visivel (dinamico).");
+                        ImGui::Checkbox("Missao", &Config::bPoiMission);
+                        SwatchR("##PMiss", Config::colPoiMission, "Sempre visivel (dinamico).");
+                        ImGui::SameLine(); ImGui::Checkbox("Onda", &Config::bPoiWave);
+                        SwatchR("##PWave", Config::colPoiWave, "Mostra a direcao da onda.");
+                        ImGui::Checkbox("Loot fixo", &Config::bPoiLootFix);
+                        SwatchR("##PLoot", Config::colPoiLootFix, "Dentro do raio (estatico).");
+                        ImGui::SameLine(); ImGui::Checkbox("Bancadas", &Config::bPoiBench);
+                        SwatchR("##PBench", Config::colPoiBench, "Dentro do raio (estatico).");
+                        ImGui::Checkbox("Fogueira", &Config::bPoiFire);
+                        SwatchR("##PFire", Config::colPoiFire, "Dentro do raio (estatico).");
+                        ImGui::SameLine(); ImGui::Checkbox("Mercador", &Config::bPoiShop);
+                        SwatchR("##PShop", Config::colPoiShop, "Dentro do raio (estatico).");
+                        ImGui::Checkbox("Respawn", &Config::bPoiRespawn);
+                        SwatchR("##PResp", Config::colPoiRespawn, "Sempre visivel (dinamico).");
+                        ImGui::Unindent();
+                    }
                 }
-                ImGui::Separator();
-                // ======== ALIADOS ========
-                ImGui::Checkbox("ESP Aliados", &Config::bAllyEsp); ImGui::SameLine();
-                ImGui::TextDisabled("(azul, sempre visivel)");
-                if (Config::bAllyEsp) {
-                    ImGui::Combo("Box Aliado", &Config::iAllyBox, kBoxType, 3);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##CorAlly", Config::colAllyVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::Checkbox("Nome##A", &Config::bAllyName); ImGui::SameLine();
-                    ImGui::Checkbox("Dist##A", &Config::bAllyDist); ImGui::SameLine();
-                    ImGui::Checkbox("Vida##A", &Config::bAllyHp);
-                    ImGui::Checkbox("Skeleton##A", &Config::bAllySkeleton); ImGui::SameLine();
-                    ImGui::Checkbox("Linha##A", &Config::bAllySnap); ImGui::SameLine();
-                    ImGui::Checkbox("HeadDot##A", &Config::bAllyHeadDot);
-                }
-                ImGui::Separator();
-                // ======== CHAMS ========
-                ImGui::Checkbox("Chams (corpo)", &Config::bChams);
-                if (Config::bChams) {
-                    ImGui::SameLine(); ImGui::ColorEdit4("##ChVis", Config::colChamsVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##ChInv", Config::colChamsInv, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                }
-                ImGui::Separator();
-                // ======== ITENS ========
-                ImGui::Checkbox("ESP Itens", &Config::bItemEsp);
-                if (Config::bItemEsp) {
-                    ImGui::Checkbox("Armas", &Config::bItemWeapons);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##CArma", Config::colItem, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::SameLine(); ImGui::Checkbox("Raros", &Config::bItemRare);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##CRaro", Config::colItemRare, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::Checkbox("Municao", &Config::bItemAmmo);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##CMunic", Config::colItemAmmo, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::SameLine(); ImGui::Checkbox("Suprimento", &Config::bItemSupply);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##CSupri", Config::colItemSupply, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::SliderFloat("Raio Item", &Config::fItemRadius, 10, 500, "%.0fm");
-                }
-                ImGui::Separator();
-                // ======== PONTOS / MUNDO ========
-                ImGui::Checkbox("ESP Pontos / Mundo", &Config::bPoiEsp);
-                if (Config::bPoiEsp) {
-                    ImGui::Checkbox("Helicoptero", &Config::bPoiHeli);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##PHeli", Config::colPoiHeli, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::SameLine(); ImGui::Checkbox("Chefao", &Config::bPoiBoss);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##PBoss", Config::colPoiBoss, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::Checkbox("Missao", &Config::bPoiMission);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##PMiss", Config::colPoiMission, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::SameLine(); ImGui::Checkbox("Onda/Wave", &Config::bPoiWave);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##PWave", Config::colPoiWave, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::Checkbox("Loot fixo", &Config::bPoiLootFix);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##PLoot", Config::colPoiLootFix, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::SameLine(); ImGui::Checkbox("Bancadas", &Config::bPoiBench);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##PBench", Config::colPoiBench, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::Checkbox("Fogueira", &Config::bPoiFire);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##PFire", Config::colPoiFire, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::SameLine(); ImGui::Checkbox("Mercador", &Config::bPoiShop);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##PShop", Config::colPoiShop, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::Checkbox("Respawn", &Config::bPoiRespawn);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##PResp", Config::colPoiRespawn, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                }
-                ImGui::Separator();
                 // ======== LAYOUT AVANCADO (colapsado) ========
                 if (ImGui::CollapsingHeader("Avancado (layout drag-drop)")) {
                     DrawLayoutEditor();

@@ -1,5 +1,10 @@
 # CHANGELOG.md (ZB2 Menu)
 
+## [não lançado] - 2026-09-17
+- feat: aba VISUAL padrão mercado (2 colunas, cabeçalhos, swatch à direita, tooltips, acentos, sem bug %%)
+- feat: auto-inject com watcher 120s + retry 3x (abriu o jogo, injeta sozinho)
+- docs: 4 guias anti-círculo (pesquisar-antes, esp-patterns, mono-safety, horda-perf)
+
 ## [não lançado] - 2026-09-15
 - perf: orçamento de 220 invokes/ciclo + cull fora da tela + teto 96 ent/ciclo (anti-crash em horda)
 - fix: watchdog SceneAlive no respawn + probe SEH na câmera + TryEnter nos locks + Map DO_NOT_WAIT (anti-hang tela branca)
