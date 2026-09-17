@@ -289,10 +289,17 @@ int main(int argc, char** argv) {
     }
     ReportDllState(size, mt);
 
-    // 3. Jogo aberto?
-    DWORD pid = FindGamePid();
+    // 3. Jogo aberto? (auto-inject: espera ate 120s o processo aparecer).
+    DWORD pid = 0;
+    for (int w = 0; w < 120 && !pid; ++w) {
+        pid = FindGamePid();
+        if (!pid) {
+            if (w == 0) Msg("INFO", "Aguardando ZumbiBlocks2.exe (auto-inject, ate 120s)...");
+            Sleep(1000);
+        }
+    }
     if (!pid) {
-        Msg("ERRO", "Processo ZumbiBlocks2.exe nao encontrado. Abra o jogo antes.");
+        Msg("ERRO", "Processo ZumbiBlocks2.exe nao apareceu em 120s. Abra o jogo e rode de novo.");
         Sleep(2500);
         return 4;
     }
@@ -303,10 +310,13 @@ int main(int argc, char** argv) {
         return 5;
     }
 
-    // 4. Injecao automatica (sem clique)
-    Msg("INFO", "Injetando em 1s (automatico)...");
-    Sleep(1000);
-    bool ok = Inject(pid, dll);
+    // 4. Injecao automatica com retry (bootstrap do jogo pode recusar a 1a).
+    bool ok = false;
+    for (int t = 1; t <= 3 && !ok; ++t) {
+        if (t > 1) { Msg("INFO", "Tentativa %d/3 em 5s...", t); Sleep(5000); }
+        else { Msg("INFO", "Injetando em 3s (jogo termina o bootstrap)..."); Sleep(3000); }
+        ok = Inject(pid, dll);
+    }
 
     if (ok) {
         Msg("OK", "SUCESSO: pressione INSERT no jogo p/ abrir o menu.");
