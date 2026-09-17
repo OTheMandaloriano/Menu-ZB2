@@ -361,6 +361,12 @@ namespace GUI {
 
     void DrawEspPreview(ImVec2 origin, ImVec2 size) {
         if (!s_editorReady) { EspLayout::Reset(s_editor, ReadLayout()); s_editorReady = true; }
+        // Preview espelha os toggles reais (menu manda, canvas mostra):
+        // usuario ve como fica Skeleton/HeadDot/Snapline sem duplicar controle.
+        s_editor.draft.skeleton = Config::bZombieSkeleton;
+        s_editor.draft.headDot = Config::bZombieHeadDot;
+        s_editor.draft.snapline = Config::bZombieSnap;
+        s_editor.draft.boxStyle = Config::iZombieBox;
         float h = s_previewBoxHeight;
         ImVec2 center(origin.x + size.x * 0.5f, origin.y + size.y * 0.5f);
         s_previewViewport = { ImVec2(origin.x + 5.0f, origin.y + 5.0f), ImVec2(origin.x + size.x - 5.0f, origin.y + size.y - 5.0f) };
