@@ -230,6 +230,7 @@ namespace Mono {
     static bool s_handLogged2 = false; // diagnostico HAND2 (1x: maos vivas pos-fix)
     static DWORD WINAPI EspThread(LPVOID); // forward (definida apos BuildEsp)
     static void ApplyDefense(void* local); // forward (defesa rapida, worker)
+    static void TopAmmo(void* item, int oAmmo, int oMax); // forward (teto do ammo)
     static void ApplyAmmo(void* local); // forward (municao infinita, worker)
     static int FieldOff(MonoClassField* f); // forward (offset via API, -1 se falhar)
     static void ReadAll(); // forward (chamada na worker, fora do Present)
@@ -491,9 +492,14 @@ namespace Mono {
         ResolveField(cItem, "InventoryItem", "ammo", fAmmo);
         ResolveField(cDbGun, "DatabaseGun", "maxAmmo", fMaxAmmo);
         if (cPEq) {
+            // GetEquipment(EquipmentIndex): enum = valuetype; mono_class_get_method_
+            // from_name pode exigir argc exato do enum. Tenta 1, depois 0 (fallback
+            // diagnostico); se ambos falharem, ApplyAmmo usa caminho sem invoke
+            // (caminha a List<InventoryItem>.weapons direto).
             MonoMethod* t = pMethodFrom(cPEq, "GetEquipment", 1);
+            if (!t) t = pMethodFrom(cPEq, "GetEquipment", 0);
             if (t) { mGetEq = t; s.resolvedMethods++; }
-            else Log::Warn("Metodo nao resolvido: PlayerEquippedItems.GetEquipment/1");
+            else Log::Warn("Metodo nao resolvido: PlayerEquippedItems.GetEquipment/1 (tentado 1 e 0)");
         }
         if (cItem) ResolveMethod(cItem, "InventoryItem", "GetDataBaseItem", 0, mGetDb);
         {
@@ -1358,20 +1364,32 @@ namespace Mono {
     // -> InventoryItem.ammo. Reescreve ammo=maxAmmo quando cai.
     // Regras: so no local, so se bInfAmmo, offsets via API, falha 1x loga e
     // desliga sozinho (s_ammoOk=false) sem travar a worker.
+    // Fallback sem invoke: se GetEquipment nao resolver, caminha a
+    // List<InventoryItem>.weapons de PlayerEquippedItems e trava o ammo de
+    // TODOS os itens da lista (custo: 2-4 escritas/ciclo, sem invoke).
     static bool s_ammoOk = true;
+    static int s_ammoMode = 0; // 0=desconhecido 1=invoke 2=lista
     static void ApplyAmmo(void* local) {
         if (!local || !s_ammoOk) return;
         // Resolve preguiçoso dos offsets (1x; API pode indisponivel no Unity 6).
         static int oInv = -2, oEq = -2, oSel = -2, oAmmo = -2, oMax = -2;
+        static int oArms = -2, oWeapons = -2;
+        static MonoClassField* fArms = nullptr;
+        static MonoClassField* fWeapons = nullptr;
         if (oInv == -2) {
             oInv = FieldOff(fInv); oEq = FieldOff(fEq); oSel = FieldOff(fSel);
             oAmmo = FieldOff(fAmmo); oMax = FieldOff(fMaxAmmo);
+            if (cPlayer) fArms = pFieldFrom(cPlayer, "arms");
+            oArms = FieldOff(fArms);
+            if (cPEq) fWeapons = pFieldFrom(cPEq, "weapons");
+            oWeapons = FieldOff(fWeapons);
+            s_ammoMode = (mGetEq && oSel >= 0 && oArms >= 0) ? 1 : (oWeapons >= 0 ? 2 : 0);
             if (!s_ammoLogged) {
                 s_ammoLogged = true;
-                Log::Infof("[AMMO] offs inv=%d eq=%d sel=%d ammo=%d max=%d mGetEq=%d mGetDb=%d",
-                    oInv, oEq, oSel, oAmmo, oMax, mGetEq ? 1 : 0, mGetDb ? 1 : 0);
+                Log::Infof("[AMMO] offs inv=%d eq=%d arms=%d sel=%d ammo=%d max=%d weapons=%d mGetEq=%d mGetDb=%d modo=%d",
+                    oInv, oEq, oArms, oSel, oAmmo, oMax, oWeapons, mGetEq ? 1 : 0, mGetDb ? 1 : 0, s_ammoMode);
             }
-            if (oInv < 0 || oEq < 0 || oSel < 0 || oAmmo < 0 || !mGetEq) {
+            if (oInv < 0 || oEq < 0 || oAmmo < 0 || s_ammoMode == 0) {
                 Log::Warn("[AMMO] cadeia incompleta — municao infinita desativada (sem crash).");
                 s_ammoOk = false;
                 return;
@@ -1383,47 +1401,47 @@ namespace Mono {
             if (!pinv) return;
             void* peq = ReadP(pinv, oEq);
             if (!peq) return;
-            // selectedItem mora no PlayerArms (local.arms). Sem offset validado
-            // p/ arms: usa o proprio local? Nao — arms eh field de PlayerMain.
-            // Caminho: local -> arms -> selectedItem. Resolve arms 1x aqui.
-            static int oArms = -2;
-            static MonoClassField* fArms = nullptr;
-            if (oArms == -2) {
-                if (cPlayer) fArms = pFieldFrom(cPlayer, "arms");
-                oArms = FieldOff(fArms);
-                if (oArms < 0) {
-                    Log::Warn("[AMMO] campo arms nao resolvido — desativado.");
-                    s_ammoOk = false;
-                    return;
-                }
-            }
-            void* arms = ReadP(local, oArms);
-            if (!arms) return;
-            int sel = ReadI(arms, oSel, -1);
-            if (sel < 0 || sel > 32) return; // EquipmentIndex plausivel
-            // GetEquipment(EquipmentIndex): enum passa como int32 por valor.
-            int selArg = sel;
-            void* args[1] = { &selArg };
-            void* item = InvokeObj(mGetEq, peq, args);
-            if (!item) return;
-            int cur = ReadI(item, oAmmo, -1);
-            if (cur < 0) return;
-            // Teto: maxAmmo do DatabaseGun (via GetDataBaseItem), fallback = nao escreve.
-            int max = -1;
-            if (mGetDb && oMax >= 0) {
-                void* db = InvokeObj(mGetDb, item, nullptr);
-                if (db) max = ReadI(db, oMax, -1);
-            }
-            if (max <= 0 || max > 100000) {
-                // Sem max confiavel: mantem cheio com teto seguro (nao estoura UI).
-                // So escreve se caiu de um valor ja visto (evita plantar numero).
-                static int s_lastAmmo = -1;
-                if (cur > s_lastAmmo) s_lastAmmo = cur;
-                if (s_lastAmmo > 0 && cur < s_lastAmmo) WriteI(item, oAmmo, s_lastAmmo);
+            if (s_ammoMode == 1) {
+                void* arms = ReadP(local, oArms);
+                if (!arms) return;
+                int sel = ReadI(arms, oSel, -1);
+                if (sel < 0 || sel > 32) return; // EquipmentIndex plausivel
+                // GetEquipment(EquipmentIndex): enum passa como int32 por valor.
+                int selArg = sel;
+                void* args[1] = { &selArg };
+                void* item = InvokeObj(mGetEq, peq, args);
+                if (item) TopAmmo(item, oAmmo, oMax);
+                // invoke falhou (retorno nulo)? cai p/ modo lista no proximo ciclo.
+                else if (oWeapons >= 0) s_ammoMode = 2;
                 return;
             }
-            if (cur < max) WriteI(item, oAmmo, max);
+            // Modo lista: trava o ammo de cada InventoryItem em weapons.
+            void* list = ReadP(peq, oWeapons);
+            if (!list) return;
+            WalkList(list, 16, [&](void* item, int) {
+                TopAmmo(item, oAmmo, oMax);
+            });
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
+
+    // Leva o ammo de um InventoryItem ao teto (maxAmmo via DatabaseGun;
+    // fallback: segura o maior valor ja visto). So escreve se caiu.
+    static void TopAmmo(void* item, int oAmmo, int oMax) {
+        if (!item || oAmmo < 0) return;
+        int cur = ReadI(item, oAmmo, -1);
+        if (cur < 0) return;
+        int max = -1;
+        if (mGetDb && oMax >= 0) {
+            void* db = InvokeObj(mGetDb, item, nullptr);
+            if (db) max = ReadI(db, oMax, -1);
+        }
+        if (max <= 0 || max > 100000) {
+            static int s_lastAmmo = -1;
+            if (cur > s_lastAmmo) s_lastAmmo = cur;
+            if (s_lastAmmo > 0 && cur < s_lastAmmo) WriteI(item, oAmmo, s_lastAmmo);
+            return;
+        }
+        if (cur < max) WriteI(item, oAmmo, max);
     }
 
     // Defesa (God + Stamina): reescreve os campos do LOCAL player.
