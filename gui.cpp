@@ -163,6 +163,9 @@ namespace Config {
     int   iListDir = 0;
     float fListSpacing = 2.0f;
     float fPreviewHp = 87.0f;
+    // FIX nome afastado: defaults de fabrica do layout de fabrica (preset 1).
+    // Nome no TOPO centro (0.5), Dist na BASE centro (0.5), gaps zerados —
+    // mesma regra p/ todos os textos (Lado + Posicao + gap base).
     float fAlongN = 0.5f, fAlongD = 0.5f, fAlongH = 0.5f, fAlongP = 0.5f;
     float fGapN = 0.0f, fGapD = 0.0f, fGapH = 0.0f, fGapP = 0.0f;
     int iOrderN = 0, iOrderD = 2, iOrderH = 0, iOrderP = 1;
