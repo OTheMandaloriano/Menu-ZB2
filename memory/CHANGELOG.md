@@ -1,10 +1,5 @@
 # CHANGELOG.md (ZB2 Menu)
 
-## [não lançado] - 2026-09-17
-- refactor: removido Visible Check + Somente visíveis (como se nunca existissem):
-  flags, UI, JSON, 8 cores par → 4 cores únicas, engine de oclusão, estabilização
-  de cor, leitura de profundidade D3D11, telemetria, logs (~1000 linhas removidas)
-
 ## [não lançado] - 2026-09-15
 - perf: orçamento de 220 invokes/ciclo + cull fora da tela + teto 96 ent/ciclo (anti-crash em horda)
 - fix: watchdog SceneAlive no respawn + probe SEH na câmera + TryEnter nos locks + Map DO_NOT_WAIT (anti-hang tela branca)

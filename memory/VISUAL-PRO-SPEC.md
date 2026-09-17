@@ -10,9 +10,6 @@
 > Histórico, build Release|x64, `injector_state.txt` + tail por teste, sem stub,
 > sem TODO, sem chute de offset. Nada de aimbot/weapon/movement/magnet/
 > teleport/host — SOMENTE VISUAL.
-> REMOVIDO 17/09: Visible Check + Somente visíveis.
-> Motivo: 1 cor por elemento; sem teste de oclusão o par de cores não tem
-> sentido. ESP sempre na cor do elemento.
 
 ## 1. Layout final da aba (espelho do menu — implementar 1:1)
 
@@ -92,8 +89,7 @@ para presets antigos (chave ausente = default, nunca reset). `iCfgVer` 4→5.
 
 1. **1 linha = 1 checkbox + 1 cor.** Some dropdown "Elemento" e "Exibir elemento".
    Cada função tem a própria linha (padrão CS2_External `Checkbox+SameLine+ColorEdit4`).
-2. **1 cor por elemento, sempre.** Sem par de cores (removido 17/09):
-   elemento desenha com `sua_cor`, ponto final.
+2. **1 cor por elemento, sempre.** Elemento desenha com `sua_cor`, ponto final.
 3. **Par global só no XQZ do Chams** (`colChamsVis/Inv`).
 4. **Aliados sempre, 1 cor.** (decisão de design PvE coop).
 5. **Dist máx (zumbi):** cull ANTES de qualquer invoke (`dist > fMaxDistance` =

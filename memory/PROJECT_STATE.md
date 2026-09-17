@@ -11,8 +11,7 @@
 - [x] 11. Box 3D (AABB real) e Corners - TESTADO OK (prints 5m/20m/50m + corners, 14/09)
 - [x] 12. Skeleton — TESTADO OK (quat real + eixo travado, bracos ate a mao, 14/09)
 - [x] 13. Snapline e Head Dot — TESTADO OK (prints: linhas base->pe + ponto na HEAD, 14/09)
-- [x] 14. REMOVIDO 17/09 — Visible Check: 1 cor por elemento, sem par de cores.
-- [x] 14b. Estabilidade em horda — EM VALIDAÇÃO (snapshot double-buffer sem lock no Present + orçamento + skeleton 50m; LOS/depth removidos, sem raycast)
+- [x] 14. Estabilidade em horda — EM VALIDAÇÃO (snapshot double-buffer sem lock no Present + orçamento + skeleton 50m)
 - [ ] 15. ESP Aliados (azul)
 
 Metodologia: 1 funcao por ciclo, commit pt-BR, teste in-game antes de avancar.
