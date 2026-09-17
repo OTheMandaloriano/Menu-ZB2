@@ -78,10 +78,8 @@ namespace Config {
     extern bool  bZombieSkeleton;
     extern bool  bZombieSnap;
     extern bool  bZombieHeadDot;
-    extern bool  bZombieClass;      // mostra classe (tipo real via type+20, ciclo 6)
     extern int   iSnapFrom;         // 0=Base 1=Topo 2=Centro (origem da snapline)
     extern bool  bEspVisibleOnly;   // filtro: so desenha visiveis (custo zero)
-    extern float colZombieClass[4]; // cor da classe
     extern float colZombieSkel[4];  // cor propria do Skeleton
     extern float colZombieSnap[4];  // cor propria da Linha
     extern float colZombieDot[4];   // cor propria do HeadDot

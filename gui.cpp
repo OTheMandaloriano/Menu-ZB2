@@ -85,10 +85,8 @@ namespace Config {
     bool  bZombieSkeleton = false;
     bool  bZombieSnap = false;
     bool  bZombieHeadDot = false;
-    bool  bZombieClass = false; // tag [BOSS] (default OFF ate type+20 real)
     int   iSnapFrom = 0;           // 0=Base 1=Topo 2=Centro
     bool  bEspVisibleOnly = false;  // filtro: so desenha visiveis
-    float colZombieClass[4] = { 1, 0.85f, 0.2f, 1 };
     float colZombieSkel[4] = { 0, 1, 1, 1 };
     float colZombieSnap[4] = { 0, 1, 0, 1 };
     float colZombieDot[4] = { 1, 1, 0, 1 };
@@ -394,11 +392,11 @@ namespace GUI {
         s_editorVisible = true;
         if (!s_editorReady) { EspLayout::Reset(s_editor, ReadLayout()); s_editorReady = true; }
         auto& model = s_editor.draft;
-        ImGui::Checkbox("ESP Zumbis", &Config::bZombieEsp);
-        ImGui::SameLine();
-        ImGui::TextDisabled("Organize os elementos ao redor do box");
+        // FIX menu: sem Salvar/Cancelar — tudo aplica na hora (spec VISUAL-PRO).
+        // Preset/layout escreve direto via SaveLayoutDraft silencioso.
         static const char* presets[] = { "Personalizado", "Classico esquerda", "Classico direita", "Vida acima", "Vida abaixo", "Tudo a esquerda", "Tudo a direita", "Tudo acima", "Tudo abaixo", "Cantos esquerda", "Cantos direita" };
         int preset = model.preset;
+        ImGui::TextDisabled("Preset do layout (aplica na hora):");
         ImGui::SetNextItemWidth(220.0f);
         if (ImGui::Combo("Layout", &preset, presets, 11)) {
             EspLayout::CancelDrag(s_editor);
@@ -412,7 +410,7 @@ namespace GUI {
                 replacement.snapline = model.snapline;
                 model = replacement;
             } else model.preset = 0;
-            s_editor.dirty = true;
+            SaveLayoutDraft();
         }
         if (s_cfgStatus[0]) ImGui::TextWrapped("%s", s_cfgStatus);
 
@@ -434,71 +432,47 @@ namespace GUI {
         if (columns) ImGui::TableNextColumn();
         EspLayout::Model beforeControls = model;
         bool changed = false;
-        ImGui::Text("ELEMENTO SELECIONADO");
+        ImGui::Text("ELEMENTO");
         static const char* elements[] = { "Nome", "Distancia", "Barra de vida", "Porcentagem" };
         ImGui::SetNextItemWidth(190.0f);
         ImGui::Combo("Elemento", &s_editor.selected, elements, 4);
         auto& item = model.items[s_editor.selected];
-        changed |= ImGui::Checkbox("Exibir elemento", &item.enabled);
+        changed |= ImGui::Checkbox("Exibir", &item.enabled);
         static const char* sides[] = { "Acima", "Abaixo", "Esquerda", "Direita" };
         ImGui::SetNextItemWidth(160.0f);
         changed |= ImGui::Combo("Lado", &item.side, sides, 4);
-        int align = std::fabs(item.position) < 0.01f ? 0 : std::fabs(item.position - 0.5f) < 0.01f ? 1 : std::fabs(item.position - 1.0f) < 0.01f ? 2 : 3;
-        const char* horizontal[] = { "Esquerda", "Centro", "Direita", "Livre" };
-        const char* vertical[] = { "Topo", "Centro", "Base", "Livre" };
         ImGui::SetNextItemWidth(160.0f);
-        if (ImGui::Combo("Alinhamento", &align, EspLayout::IsHorizontal(item.side) ? horizontal : vertical, 4) && align < 3) { item.position = align * 0.5f; changed = true; }
-        ImGui::SetNextItemWidth(160.0f);
-        changed |= ImGui::SliderFloat("Posicao na borda", &item.position, 0.0f, 1.0f, "%.2f");
-        ImGui::SetNextItemWidth(160.0f);
-        changed |= ImGui::SliderFloat("Afastamento extra", &item.extraGap, 0.0f, 12.0f, "%.0fpx");
+        changed |= ImGui::SliderFloat("Posicao", &item.position, 0.0f, 1.0f, "%.2f");
         if (s_editor.selected == EspLayout::Health) {
             ImGui::SetNextItemWidth(160.0f);
             changed |= ImGui::SliderFloat("Comprimento", &model.barLength, 0.25f, 1.0f, "%.2f");
             ImGui::SetNextItemWidth(160.0f);
             changed |= ImGui::SliderFloat("Espessura", &model.barThickness, 2.0f, 6.0f, "%.0fpx");
-            if (model.barLength > 0.99f) ImGui::TextWrapped("Com 100%%, inicio, centro e fim ocupam a borda inteira.");
-        } else {
-            ImGui::SetNextItemWidth(160.0f);
-            changed |= ImGui::SliderInt("Ordem no grupo", &item.order, 0, 3);
         }
         ImGui::Separator();
         ImGui::SetNextItemWidth(160.0f);
-        changed |= ImGui::SliderFloat("Distancia do box", &model.gap, 2.0f, 12.0f, "%.0fpx");
+        changed |= ImGui::SliderFloat("Dist do box", &model.gap, 2.0f, 12.0f, "%.0fpx");
         ImGui::SetNextItemWidth(160.0f);
-        changed |= ImGui::SliderFloat("Espaco entre itens", &model.spacing, 2.0f, 8.0f, "%.0fpx");
-        changed |= ImGui::Checkbox("Agrupar textos alinhados", &model.stack);
-        changed |= ImGui::Checkbox("Linha no topo/base", &model.horizontalText);
-        changed |= ImGui::Checkbox("Encaixar na grade", &model.grid);
-        if (model.grid) {
-            ImGui::SetNextItemWidth(160.0f);
-            changed |= ImGui::SliderFloat("Passo da grade", &model.gridSize, 1.0f, 10.0f, "%.0fpx");
-        }
-        changed |= ImGui::Checkbox("Guias", &model.guides);
+        changed |= ImGui::SliderFloat("Espaco itens", &model.spacing, 2.0f, 8.0f, "%.0fpx");
         if (changed) {
             EspLayout::CancelDrag(s_editor);
             EspLayout::Normalize(model);
             auto content = LayoutContent(s_previewName, s_previewDistance, Config::fPreviewHp, 100.0f);
             auto candidate = EspLayout::Resolve(model, s_previewBox, s_previewViewport, content, LayoutStyle(content.health));
-            if (candidate.valid) { s_editor.dirty = true; model.preset = 0; SaveLayoutDraft(); }
-            else { model = beforeControls; _snprintf_s(s_cfgStatus, _TRUNCATE, "Sem espaco nessa combinacao. Amplie o canvas ou reduza o afastamento."); }
+            if (candidate.valid) { model.preset = 0; SaveLayoutDraft(); }
+            else { model = beforeControls; _snprintf_s(s_cfgStatus, _TRUNCATE, "Sem espaco. Amplie o canvas ou reduza o afastamento."); }
         }
         if (columns) ImGui::EndTable();
-        if (ImGui::CollapsingHeader("Simulacao e aparencia do preview")) {
+        if (ImGui::CollapsingHeader("Simulacao")) {
             ImGui::SetNextItemWidth(180.0f);
-            ImGui::InputText("Nome de exemplo", s_previewName, sizeof(s_previewName));
+            ImGui::InputText("Nome", s_previewName, sizeof(s_previewName));
             ImGui::SetNextItemWidth(180.0f);
-            ImGui::SliderFloat("Altura do box", &s_previewBoxHeight, 32.0f, 180.0f, "%.0fpx");
+            ImGui::SliderFloat("Altura", &s_previewBoxHeight, 32.0f, 180.0f, "%.0fpx");
             ImGui::SetNextItemWidth(180.0f);
-            ImGui::SliderFloat("HP simulado", &Config::fPreviewHp, 0.0f, 100.0f, "%.0f%%");
+            ImGui::SliderFloat("HP", &Config::fPreviewHp, 0.0f, 100.0f, "%.0f%%");
             ImGui::SetNextItemWidth(180.0f);
-            ImGui::SliderFloat("Distancia simulada", &s_previewDistance, 1.0f, 9999.0f, "%.0fm");
-            if (ImGui::Combo("Tipo de box", &model.boxStyle, kBoxType, 3)) s_editor.dirty = true;
-            if (ImGui::Checkbox("Skeleton", &model.skeleton)) s_editor.dirty = true;
-            ImGui::SameLine();
-            if (ImGui::Checkbox("Head Dot", &model.headDot)) s_editor.dirty = true;
-            ImGui::SameLine();
-            if (ImGui::Checkbox("Snapline", &model.snapline)) s_editor.dirty = true;
+            ImGui::SliderFloat("Dist", &s_previewDistance, 1.0f, 9999.0f, "%.0fm");
+            if (ImGui::Combo("Tipo de box", &model.boxStyle, kBoxType, 3)) SaveLayoutDraft();
         }
     }
 
@@ -647,7 +621,7 @@ namespace GUI {
         JF(fAlongN); JF(fAlongD); JF(fAlongH); JF(fAlongP); JF(fGapN); JF(fGapD); JF(fGapH); JF(fGapP);
         JI(iOrderN); JI(iOrderD); JI(iOrderH); JI(iOrderP); JF(fBarLength); JF(fBarThickness);
         JB(bZombieSkeleton); JB(bZombieSnap); JB(bZombieHeadDot); JV(colZombieSkel); JV(colZombieSnap); JV(colZombieDot);
-        JB(bZombieClass); JV(colZombieClass); JI(iSnapFrom); JB(bEspVisibleOnly);
+        JI(iSnapFrom); JB(bEspVisibleOnly);
         JV(colZombieVis); JV(colZombieInv); JV(colZombieNameVis); JV(colZombieNameInv);
         JV(colZombieDistVis); JV(colZombieDistInv); JV(colZombieHpVis); JV(colZombieHpInv);
         JB(bAllyEsp); JI(iAllyBox); JB(bAllyName); JB(bAllyDist); JB(bAllyHp);
@@ -734,7 +708,7 @@ namespace GUI {
         LB(bZombieEsp); LB(bZombieBoxShow); LI(iZombieBox); LB(bZombieName); LB(bZombieDist); LB(bZombieHp); LB(bZombiePct); LF(fPctX); LF(fPctY); LI(iNameA); LI(iDistA); LI(iHpA); LI(iPctA); LF(fPropN); LF(fPropD); LF(fPropH); LF(fPropP);
         LI(iSideN); LI(iSideD); LI(iSideH); LI(iSideP); LI(iAlinN); LI(iAlinD); LI(iAlinH); LI(iAlinP);
         LB(bZombieSkeleton); LB(bZombieSnap); LB(bZombieHeadDot); LV(colZombieSkel); LV(colZombieSnap); LV(colZombieDot);
-        LB(bZombieClass); LV(colZombieClass); LI(iSnapFrom); LB(bEspVisibleOnly);
+        LI(iSnapFrom); LB(bEspVisibleOnly);
         LV(colZombieVis); LV(colZombieInv); LV(colZombieNameVis); LV(colZombieNameInv);
         LV(colZombieDistVis); LV(colZombieDistInv); LV(colZombieHpVis); LV(colZombieHpInv);
         LB(bAllyEsp); LI(iAllyBox); LB(bAllyName); LB(bAllyDist); LB(bAllyHp);
@@ -987,13 +961,12 @@ namespace GUI {
                     envelope.min.y -= h * 0.10f;
                     envelope.max.x += w * 0.28f;
                 }
-                // Nome puro do snapshot (1 texto só, dentro do layout).
-                // FIX nome duplicado: removido bloco "%s [%s]" que gerava
-                // "Zombie [Zumbi]" (GetName stubado retorna "Zombie" fixo +
-                // sufixo "Zumbi" hardcoded). Tag [BOSS] via isBoss real abaixo.
+                // Nome + tag [BOSS] interna (sem checkbox, sem cor, sem var).
+                // FIX nome duplicado: 1 texto só dentro do layout; nunca AddText
+                // separado. Boss detectado via isBoss do snapshot (type+20).
                 char nameBuf[80];
                 const char* labelName = es[i].name;
-                if (Config::bZombieClass && es[i].isBoss) {
+                if (es[i].isBoss) {
                     _snprintf_s(nameBuf, _TRUNCATE, "%s [BOSS]", es[i].name);
                     labelName = nameBuf;
                 }
@@ -1102,8 +1075,6 @@ namespace GUI {
                     ImGui::SameLine(); ImGui::ColorEdit4("##CorLinhaZ", Config::colZombieSnap, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                     ImGui::Checkbox("HeadDot", &Config::bZombieHeadDot);
                     ImGui::SameLine(); ImGui::ColorEdit4("##CorDotZ", Config::colZombieDot, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
-                    ImGui::Checkbox("Classe", &Config::bZombieClass);
-                    ImGui::SameLine(); ImGui::ColorEdit4("##CorClasseZ", Config::colZombieClass, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
                     ImGui::Separator();
                     ImGui::Checkbox("Visible Check", &Config::bVisibleCheck);
                     ImGui::SameLine(); ImGui::ColorEdit4("##Vis", Config::colZombieVis, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
