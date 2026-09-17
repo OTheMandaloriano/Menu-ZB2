@@ -213,6 +213,7 @@ namespace Mono {
     static bool s_handLogged = false; // diagnostico HAND (1x: ponta da mao em mundo)
     static bool s_handLogged2 = false; // diagnostico HAND2 (1x: maos vivas pos-fix)
     static DWORD WINAPI EspThread(LPVOID); // forward (definida apos BuildEsp)
+    static void ApplyDefense(void* local); // forward (defesa rapida, worker)
     static void ReadAll(); // forward (chamada na worker, fora do Present)
     static void AuditBones(); // forward (chamada na worker, fora do Present)
     static MonoImage*  s_unity = nullptr;
@@ -1209,7 +1210,27 @@ namespace Mono {
         pAttach(s_dom); // worker precisa do proprio attach no Mono
         Log::Info("Thread ESP iniciada (30Hz, fora do Present).");
         static int s_deadN = 0;
+        static int s_defN = 0; // contador p/ defesa rapida (God/Stamina todo ciclo)
         while (s_espRun) {
+            // Defesa rapida: God/Stamina rodam TODO ciclo (~33ms), com ou sem
+            // ESP ligado. Leitura barata (1 lista curta + 2 floats); escrita so
+            // se a flag ligada E o valor caiu (custo zero no estado estavel).
+            // Comeca rapido e so desacelera se o proprio ciclo ficar caro.
+            bool wantDef = s.ready && (Config::bGodMode || Config::bInfStamina);
+            if (wantDef && SceneAlive()) {
+                void* pcs = nullptr;
+                if (StaticInstance(cPlayers, fPCInst, pcs)) {
+                    void* list = ReadP(pcs, Off::PCS_players);
+                    WalkList(list, 16, [&](void* e, int) {
+                        if (InvokeBool(mHasLocal, e)) ApplyDefense(e);
+                    });
+                }
+                if (++s_defN >= 60) {
+                    s_defN = 0;
+                    ReadAll();
+                    AuditBones();
+                }
+            }
             if (s.ready && Config::bZombieEsp) {
                 if (!SceneAlive()) {
                     // Cena morta/trocando (respawn): zera o snapshot e espera.
@@ -1232,7 +1253,9 @@ namespace Mono {
                 // e o ritmo adaptativo so reagia DEPOIS.
                 // Novo ritmo: posicao+skeleton TODO ciclo (barato, ~2ms).
                 BuildEsp();
-                {
+                // Defesa ja rodada no bloco rapido acima: aqui so o lento.
+                if (s_defN == 0) { /* ReadAll/AuditBones feitos no ciclo rapido */ }
+                else {
                     static int s_slowN = 0;
                     if (++s_slowN >= 60) {
                         s_slowN = 0;
