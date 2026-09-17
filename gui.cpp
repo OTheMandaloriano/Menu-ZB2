@@ -477,11 +477,14 @@ namespace GUI {
             else { model = beforeControls; _snprintf_s(s_cfgStatus, _TRUNCATE, "Sem espaco. Amplie o canvas ou reduza o afastamento."); }
         }
         if (columns) ImGui::EndTable();
-        if (ImGui::CollapsingHeader("Simulacao")) {
-            ImGui::SetNextItemWidth(180.0f);
-            ImGui::SliderFloat("Altura", &s_previewBoxHeight, 32.0f, 180.0f, "%.0fpx");
-            if (ImGui::Combo("Tipo de box", &model.boxStyle, kBoxType, 3)) SaveLayoutDraft();
-        }
+        // Simulação junto do ELEMENTO (mesma área): Altura + Tipo de box
+        // afetam o canvas direto — sem collapsing separado no fundo.
+        ImGui::Separator();
+        ImGui::TextDisabled("Simulacao do canvas:");
+        ImGui::SetNextItemWidth(160.0f);
+        ImGui::SliderFloat("Altura", &s_previewBoxHeight, 32.0f, 180.0f, "%.0fpx");
+        ImGui::SetNextItemWidth(160.0f);
+        if (ImGui::Combo("Tipo de box", &model.boxStyle, kBoxType, 3)) SaveLayoutDraft();
     }
 
 
