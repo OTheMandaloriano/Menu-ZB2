@@ -519,6 +519,13 @@ namespace GUI {
             ImGui::SetTooltip("%s", t);
     }
 
+    // Cabecalho de secao padrao mercado: texto acento colorido, sem linha.
+    // (SeparatorText risca a aba inteira e polui com 2 colunas.)
+    static void Section(const char* label) {
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(0.45f, 0.75f, 1.0f, 1.0f), "%s", label);
+    }
+
     // Swatch alinhado a direita da coluna atual. So apresentacao.
     // Comeca na mesma linha do widget anterior (SameLine interno).
     static void SwatchR(const char* id, float col[4], const char* tip = nullptr) {
@@ -1065,7 +1072,7 @@ namespace GUI {
                 static const char* kSnapFrom[] = { "Base", "Topo", "Centro" };
                 if (ImGui::BeginTable("visual_cols", 2)) {
                     ImGui::TableNextColumn();
-                    ImGui::SeparatorText("ZUMBIS");
+                    Section("Zumbis");
                     ImGui::Checkbox("Ativo##Z", &Config::bZombieEsp); Tip("Master do ESP de zumbis (worker + desenho).");
                     if (Config::bZombieEsp) {
                         ImGui::Indent();
@@ -1092,7 +1099,7 @@ namespace GUI {
                         ImGui::SliderFloat("Dist. maxima", &Config::fMaxDistance, 10, 500, "%.0fm"); Tip("Alem disso a entidade e ignorada (chefao ignora).");
                         ImGui::Unindent();
                     }
-                    ImGui::SeparatorText("ALIADOS");
+                    Section("Aliados");
                     ImGui::Checkbox("Ativo##A", &Config::bAllyEsp); Tip("ESP dos jogadores (sempre azul).");
                     if (Config::bAllyEsp) {
                         ImGui::Indent();
@@ -1107,7 +1114,7 @@ namespace GUI {
                         ImGui::SameLine(); ImGui::Checkbox("Ponto##A", &Config::bAllyHeadDot);
                         ImGui::Unindent();
                     }
-                    ImGui::SeparatorText("CHAMS");
+                    Section("Chams");
                     ImGui::Checkbox("Corpo (XQZ)", &Config::bChams); Tip("Atravessa parede. O proprio checkbox e o enable.");
                     if (Config::bChams) {
                         ImGui::Indent();
@@ -1116,7 +1123,7 @@ namespace GUI {
                         ImGui::Unindent();
                     }
                     ImGui::TableNextColumn();
-                    ImGui::SeparatorText("ITENS");
+                    Section("Itens");
                     ImGui::Checkbox("Ativo##I", &Config::bItemEsp); Tip("Master do ESP de itens no chao.");
                     if (Config::bItemEsp) {
                         ImGui::Indent();
@@ -1132,7 +1139,7 @@ namespace GUI {
                         ImGui::SliderFloat("Raio", &Config::fItemRadius, 10, 500, "%.0fm"); Tip("So mostra item dentro deste raio.");
                         ImGui::Unindent();
                     }
-                    ImGui::SeparatorText("PONTOS / MUNDO");
+                    Section("Pontos / Mundo");
                     ImGui::Checkbox("Ativo##P", &Config::bPoiEsp); Tip("Master dos pontos de interesse.");
                     if (Config::bPoiEsp) {
                         ImGui::Indent();
