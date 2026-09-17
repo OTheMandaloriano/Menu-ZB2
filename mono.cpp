@@ -146,6 +146,22 @@ namespace Mono {
     static MonoClass* cZombie = nullptr;
     static MonoClass* cZLoader = nullptr;
     static MonoClass* cPlayers = nullptr;
+    // Municao infinita (cadeia via dnlib/dnSpy estatico + IL do ShootGun):
+    // PlayerMain.inventory -> PlayerInventory.equippedItems ->
+    // PlayerEquippedItems.GetEquipment(selectedItem) -> InventoryItem.ammo.
+    // Offsets via mono_field_get_offset em runtime (nunca hardcode).
+    static MonoClass* cPInv = nullptr;   // PlayerInventory
+    static MonoClass* cPEq = nullptr;    // PlayerEquippedItems
+    static MonoClass* cItem = nullptr;   // InventoryItem
+    static MonoClass* cDbGun = nullptr;  // DatabaseGun (maxAmmo/ammoConsumption)
+    static MonoClassField* fInv = nullptr;      // PlayerMain.inventory
+    static MonoClassField* fEq = nullptr;       // PlayerInventory.equippedItems
+    static MonoClassField* fSel = nullptr;      // PlayerArms.selectedItem
+    static MonoClassField* fAmmo = nullptr;     // InventoryItem.ammo
+    static MonoClassField* fMaxAmmo = nullptr;  // DatabaseGun.maxAmmo
+    static MonoMethod* mGetEq = nullptr;   // PlayerEquippedItems.GetEquipment(EquipmentIndex)
+    static MonoMethod* mGetDb = nullptr;   // InventoryItem.GetDataBaseItem()
+    static bool s_ammoLogged = false; // diagnostico da cadeia 1x/sessao
 
     static MonoClassField* fDayInst = nullptr;
     static MonoClassField* fZLInst = nullptr;
@@ -214,6 +230,8 @@ namespace Mono {
     static bool s_handLogged2 = false; // diagnostico HAND2 (1x: maos vivas pos-fix)
     static DWORD WINAPI EspThread(LPVOID); // forward (definida apos BuildEsp)
     static void ApplyDefense(void* local); // forward (defesa rapida, worker)
+    static void ApplyAmmo(void* local); // forward (municao infinita, worker)
+    static int FieldOff(MonoClassField* f); // forward (offset via API, -1 se falhar)
     static void ReadAll(); // forward (chamada na worker, fora do Present)
     static void AuditBones(); // forward (chamada na worker, fora do Present)
     static MonoImage*  s_unity = nullptr;
@@ -315,6 +333,37 @@ namespace Mono {
         __try { memcpy(&v, (const char*)base + off, sizeof(v)); }
         __except (EXCEPTION_EXECUTE_HANDLER) {}
         return v;
+    }
+
+    // Offset de campo via API do Mono (layout decidido em runtime; nunca
+    // hardcode). Retorna bytes do inicio do objeto, ou -1 se indisponivel.
+    static int FieldOff(MonoClassField* f) {
+        if (!f || !pFieldGetOff) return -1;
+        int off = -1;
+        __try { off = pFieldGetOff(f); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { return -1; }
+        return (off >= 0 && off < 4096) ? off : -1;
+    }
+
+    // Escrita de int com SEH (espelho do WriteF), p/ InventoryItem.ammo.
+    static bool WriteI(void* base, int off, int v) {
+        if (!base || off < 0) return false;
+        __try { memcpy((char*)base + off, &v, sizeof(v)); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+        return true;
+    }
+
+    // Invoke generico que retorna objeto (GetEquipment/GetDataBaseItem).
+    // Sem telemetria Pi (fora do caminho do ESP); SEH total.
+    static void* InvokeObj(MonoMethod* m, void* obj, void** args) {
+        if (!m || !obj) return nullptr;
+        void* out = nullptr;
+        __try {
+            MonoObject* exc = nullptr;
+            MonoObject* ret = pInvoke(m, obj, args, &exc);
+            if (!exc && ret) out = ret;
+        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+        return out;
     }
 
         // Formata "atual/limite" p/ log (sem printf no caminho quente).
@@ -429,6 +478,29 @@ namespace Mono {
         ResolveField(cZLoader, "ZombieLoader", "Instance", fZLInst);
         ResolveField(cPlayers, "PlayersController", "instance", fPCInst);
         ResolveMethod(cPlayer, "PlayerMain", "get_HasLocalControl", 0, mHasLocal);
+        // Municao: classes/campos/metodos (falha = nao-fatal; ApplyAmmo desliga sozinho).
+        // selectedItem fica no PlayerArms (nao no PlayerMain): resolve via cPlayer? nao —
+        // via classe PlayerArms separada. Como arms eh field de PlayerMain, resolve a classe
+        // PlayerArms direto pelo nome.
+        ResolveClass("PlayerInventory", cPInv);
+        ResolveClass("PlayerEquippedItems", cPEq);
+        ResolveClass("InventoryItem", cItem);
+        ResolveClass("DatabaseGun", cDbGun);
+        ResolveField(cPlayer, "PlayerMain", "inventory", fInv);
+        ResolveField(cPInv, "PlayerInventory", "equippedItems", fEq);
+        ResolveField(cItem, "InventoryItem", "ammo", fAmmo);
+        ResolveField(cDbGun, "DatabaseGun", "maxAmmo", fMaxAmmo);
+        if (cPEq) {
+            MonoMethod* t = pMethodFrom(cPEq, "GetEquipment", 1);
+            if (t) { mGetEq = t; s.resolvedMethods++; }
+            else Log::Warn("Metodo nao resolvido: PlayerEquippedItems.GetEquipment/1");
+        }
+        if (cItem) ResolveMethod(cItem, "InventoryItem", "GetDataBaseItem", 0, mGetDb);
+        {
+            MonoClass* cArms = nullptr;
+            if (ResolveClass("PlayerArms", cArms))
+                ResolveField(cArms, "PlayerArms", "selectedItem", fSel);
+        }
         s_unity = pImgLoaded("UnityEngine.CoreModule");
         if (s_unity) {
             s.resolvedClasses++;
@@ -1216,13 +1288,15 @@ namespace Mono {
             // ESP ligado. Leitura barata (1 lista curta + 2 floats); escrita so
             // se a flag ligada E o valor caiu (custo zero no estado estavel).
             // Comeca rapido e so desacelera se o proprio ciclo ficar caro.
-            bool wantDef = s.ready && (Config::bGodMode || Config::bInfStamina);
+            bool wantDef = s.ready && (Config::bGodMode || Config::bInfStamina || Config::bInfAmmo);
             if (wantDef && SceneAlive()) {
                 void* pcs = nullptr;
                 if (StaticInstance(cPlayers, fPCInst, pcs)) {
                     void* list = ReadP(pcs, Off::PCS_players);
                     WalkList(list, 16, [&](void* e, int) {
-                        if (InvokeBool(mHasLocal, e)) ApplyDefense(e);
+                        if (!InvokeBool(mHasLocal, e)) return;
+                        ApplyDefense(e);
+                        if (Config::bInfAmmo) ApplyAmmo(e);
                     });
                 }
                 if (++s_defN >= 60) {
@@ -1277,6 +1351,79 @@ namespace Mono {
             Sleep(s_sleepMs);
         }
         return 0;
+    }
+
+    // Municao infinita (cadeia confirmada no IL do ShootGun via dnlib):
+    // local.inventory -> equippedItems -> GetEquipment(selectedItem do arms)
+    // -> InventoryItem.ammo. Reescreve ammo=maxAmmo quando cai.
+    // Regras: so no local, so se bInfAmmo, offsets via API, falha 1x loga e
+    // desliga sozinho (s_ammoOk=false) sem travar a worker.
+    static bool s_ammoOk = true;
+    static void ApplyAmmo(void* local) {
+        if (!local || !s_ammoOk) return;
+        // Resolve preguiçoso dos offsets (1x; API pode indisponivel no Unity 6).
+        static int oInv = -2, oEq = -2, oSel = -2, oAmmo = -2, oMax = -2;
+        if (oInv == -2) {
+            oInv = FieldOff(fInv); oEq = FieldOff(fEq); oSel = FieldOff(fSel);
+            oAmmo = FieldOff(fAmmo); oMax = FieldOff(fMaxAmmo);
+            if (!s_ammoLogged) {
+                s_ammoLogged = true;
+                Log::Infof("[AMMO] offs inv=%d eq=%d sel=%d ammo=%d max=%d mGetEq=%d mGetDb=%d",
+                    oInv, oEq, oSel, oAmmo, oMax, mGetEq ? 1 : 0, mGetDb ? 1 : 0);
+            }
+            if (oInv < 0 || oEq < 0 || oSel < 0 || oAmmo < 0 || !mGetEq) {
+                Log::Warn("[AMMO] cadeia incompleta — municao infinita desativada (sem crash).");
+                s_ammoOk = false;
+                return;
+            }
+        }
+        if (oInv < 0) return; // ja desativado acima
+        __try {
+            void* pinv = ReadP(local, oInv);
+            if (!pinv) return;
+            void* peq = ReadP(pinv, oEq);
+            if (!peq) return;
+            // selectedItem mora no PlayerArms (local.arms). Sem offset validado
+            // p/ arms: usa o proprio local? Nao — arms eh field de PlayerMain.
+            // Caminho: local -> arms -> selectedItem. Resolve arms 1x aqui.
+            static int oArms = -2;
+            static MonoClassField* fArms = nullptr;
+            if (oArms == -2) {
+                if (cPlayer) fArms = pFieldFrom(cPlayer, "arms");
+                oArms = FieldOff(fArms);
+                if (oArms < 0) {
+                    Log::Warn("[AMMO] campo arms nao resolvido — desativado.");
+                    s_ammoOk = false;
+                    return;
+                }
+            }
+            void* arms = ReadP(local, oArms);
+            if (!arms) return;
+            int sel = ReadI(arms, oSel, -1);
+            if (sel < 0 || sel > 32) return; // EquipmentIndex plausivel
+            // GetEquipment(EquipmentIndex): enum passa como int32 por valor.
+            int selArg = sel;
+            void* args[1] = { &selArg };
+            void* item = InvokeObj(mGetEq, peq, args);
+            if (!item) return;
+            int cur = ReadI(item, oAmmo, -1);
+            if (cur < 0) return;
+            // Teto: maxAmmo do DatabaseGun (via GetDataBaseItem), fallback = nao escreve.
+            int max = -1;
+            if (mGetDb && oMax >= 0) {
+                void* db = InvokeObj(mGetDb, item, nullptr);
+                if (db) max = ReadI(db, oMax, -1);
+            }
+            if (max <= 0 || max > 100000) {
+                // Sem max confiavel: mantem cheio com teto seguro (nao estoura UI).
+                // So escreve se caiu de um valor ja visto (evita plantar numero).
+                static int s_lastAmmo = -1;
+                if (cur > s_lastAmmo) s_lastAmmo = cur;
+                if (s_lastAmmo > 0 && cur < s_lastAmmo) WriteI(item, oAmmo, s_lastAmmo);
+                return;
+            }
+            if (cur < max) WriteI(item, oAmmo, max);
+        } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 
     // Defesa (God + Stamina): reescreve os campos do LOCAL player.
