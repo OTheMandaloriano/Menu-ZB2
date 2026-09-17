@@ -223,7 +223,6 @@ namespace Mono {
     // Snapshot double-buffer sem lock no frame (item 14b, Rodada 1 inocentou
     // a worker): Present NUNCA toca em CS — le o ponteiro do buffer pronto
     // (troca atomica). Worker publica no back e vira o ponteiro sob 1 CS curto.
-    // memcpy de ~38KB sob lock + Map/Unmap concorrendo = hang em iGPU (23:25).
     static EspEntry s_espA[128];
     static EspEntry s_espB[128];
     static EspEntry* s_espFront = s_espA; // lido pelo Present (sem lock)
@@ -1161,8 +1160,7 @@ namespace Mono {
     // (<12ms) = volta pros 33ms.
     static int s_sleepMs = 33;
     // Gate geracao de mapa (item 14b, crash 02:17): LOD gerando celulas
-    // (LotConstructor/MapHash) destroi e recria colliders em massa. Sinal
-    // observavel sem invoke: a lista de zumbis OSCILA (spawn/despawn em rajada)
+    // destroi e recria objetos em massa. Sinal observavel sem invoke: a lista de zumbis OSCILA (spawn/despawn em rajada)
     // ou o totalReal diverge. Oscilou = mapa assentando: dorme 500ms, sem invoke.
     static int s_lastListN = -1;
     static int s_unstableN = 0;
