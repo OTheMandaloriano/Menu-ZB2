@@ -520,6 +520,7 @@ namespace GUI {
     }
 
     // Swatch alinhado a direita da coluna atual. So apresentacao.
+    // Comeca na mesma linha do widget anterior (SameLine interno).
     static void SwatchR(const char* id, float col[4], const char* tip = nullptr) {
         ImGui::SameLine();
         float avail = ImGui::GetContentRegionAvail().x;
@@ -1155,6 +1156,7 @@ namespace GUI {
                         SwatchR("##PResp", Config::colPoiRespawn, "Sempre visivel (dinamico).");
                         ImGui::Unindent();
                     }
+                    ImGui::EndTable();
                 }
                 // ======== LAYOUT AVANCADO (colapsado) ========
                 if (ImGui::CollapsingHeader("Avancado (layout drag-drop)")) {
