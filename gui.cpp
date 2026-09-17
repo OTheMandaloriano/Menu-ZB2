@@ -32,6 +32,7 @@ namespace Config {
     bool  bGodMode = false;      // default OFF (escrita direta, ver mono.cpp)
     bool  bInfStamina = false;   // default OFF
     bool  bInfItems = false;     // default OFF (trava pilhas no stackMax)
+    bool  bInfMoney = false;     // default OFF (Dollars 99999)
 
     bool  bAimbot = false;
     int   iAimKey = VK_RBUTTON;
@@ -635,7 +636,7 @@ namespace GUI {
 #define JV(v) fprintf(f, "\"" #v "\":[%f,%f,%f,%f],\n", (double)(v)[0], (double)(v)[1], (double)(v)[2], (double)(v)[3])
 #define JS(v) fprintf(f, "\"" #v "\":\"%s\",\n", ConfigJson::Escape(v).c_str())
         JB(bMenuOpen); JI(iMenuKey); JB(bWatermark); JB(bDebugOverlay); JB(bTooltips);
-        JB(bGodMode); JB(bInfStamina); JB(bInfItems);
+        JB(bGodMode); JB(bInfStamina); JB(bInfItems); JB(bInfMoney);
         JB(bAimbot); JI(iAimKey); JI(iAimMode); JB(bAutoAim); JB(bSilentAim); JB(bAutoFire);
         JB(bTriggerbot); JI(iAimBone); JI(iAimPriority); JF(fSmoothing);
         JB(bLimitFov); JF(fFovAngle); JB(b360Mode); JB(bDrawFov); JF(fMaxDistance);
@@ -724,7 +725,7 @@ namespace GUI {
 #define LV(v) fields.push_back({ #v, ConfigJson::ColorField, (v) })
 #define LS(v) fields.push_back({ #v, ConfigJson::StringField, (v), sizeof(v) })
         LB(bMenuOpen); LI(iMenuKey); LB(bWatermark); LB(bDebugOverlay); LB(bTooltips);
-        LB(bGodMode); LB(bInfStamina); LB(bInfItems);
+        LB(bGodMode); LB(bInfStamina); LB(bInfItems); LB(bInfMoney);
         LB(bAimbot); LI(iAimKey); LI(iAimMode); LB(bAutoAim); LB(bSilentAim); LB(bAutoFire);
         LB(bTriggerbot); LI(iAimBone); LI(iAimPriority); LF(fSmoothing);
         LB(bLimitFov); LF(fFovAngle); LB(b360Mode); LB(bDrawFov); LF(fMaxDistance);
@@ -1044,12 +1045,6 @@ namespace GUI {
         if (ImGui::BeginTabBar("ZB2Tabs")) {
             // ---- 1 PLAYER ----
             if (ImGui::BeginTabItem("PLAYER")) {
-                ImGui::Text("Defesa");
-                ImGui::Checkbox("God Mode (HP travado)", &Config::bGodMode); Tip("Trava HP local em 100 (reescreve healthFast/healthSlow).");
-                ImGui::Checkbox("Infinite Stamina", &Config::bInfStamina); Tip("Trava stamina local no maximo (correr sem cansar).");
-                ImGui::Checkbox("Infinite Ammo (pente+reserva)", &Config::bInfAmmo); Tip("Trava pente no maxAmmo da arma + reserva no stackMax (HUD honesto).");
-                ImGui::Checkbox("Infinite Items (pilhas)", &Config::bInfItems); Tip("Trava stackCount=stackMax em TODAS as pilhas (granada/dinamite/bandagem).");
-                ImGui::Separator();
                 ImGui::Checkbox("Active Aimbot", &Config::bAimbot); Tip("Liga o aimbot (PvE: zumbis/chefes).");
                 ImGui::Combo("Aim Bone", &Config::iAimBone, kAimBones, 4); Tip("Head/Neck/Chest/Pelvis.");
                 ImGui::Combo("Aim Priority", &Config::iAimPriority, kAimPrio, 3);
@@ -1209,6 +1204,13 @@ namespace GUI {
             }
             // ---- 3 MISC (sempre 3a aba) ----
             if (ImGui::BeginTabItem("MISC")) {
+                ImGui::Text("Sobrevivencia");
+                ImGui::Checkbox("God Mode (HP travado)", &Config::bGodMode); Tip("Trava HP local em 100.");
+                ImGui::Checkbox("Infinite Stamina", &Config::bInfStamina); Tip("Stamina no maximo (correr sem cansar).");
+                ImGui::Checkbox("Infinite Ammo (pente+reserva)", &Config::bInfAmmo); Tip("Pente no maxAmmo + reserva do tipo no stackMax.");
+                ImGui::Checkbox("Infinite Items (granada/bandagem)", &Config::bInfItems); Tip("Pilhas pequenas no stackMax (materiais de fora, anti-flood).");
+                ImGui::Checkbox("Infinite Money (vendedor)", &Config::bInfMoney); Tip("Dollars travado em 99999 (compra Loadout I/II/III).");
+                ImGui::Separator();
                 ImGui::Checkbox("Enemy Magnet (H)", &Config::bEnemyMagnet);
                 ImGui::SliderFloat("Raio Magnet", &Config::fMagnetRadius, 10, 300, "%.0fm");
                 ImGui::Checkbox("Freeze Attracted", &Config::bMagnetFreeze);

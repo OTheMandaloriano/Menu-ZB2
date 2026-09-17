@@ -167,6 +167,16 @@ namespace Mono {
     static MonoClassField* fId = nullptr;       // InventoryItem.id
     static MonoMethod* mGetEq = nullptr;   // PlayerEquippedItems.GetEquipment(EquipmentIndex)
     static MonoMethod* mGetDb = nullptr;   // InventoryItem.GetDataBaseItem()
+    // Dinheiro (Currency singleton: Dollar/Silver/Gold -> CurrencyData.amount).
+    static MonoClass* cCur = nullptr;        // Currency
+    static MonoClassField* fCurInst = nullptr; // Currency.Instance
+    static MonoClassField* fDollar = nullptr;  // Currency.<Dollar>
+    static MonoClassField* fAmount = nullptr;  // CurrencyData.amount
+    static MonoMethod* mAddCur = nullptr;    // Currency.AddCurrency(CurrencyID,int)
+    static MonoClass* cCurId = nullptr;      // CurrencyID (enum: Dollars=0?)
+    static bool s_moneyLogged = false;
+    static bool s_moneyOk = true;
+    static bool s_moneyGiven = false; // AddCurrency 1x por sessao
     static bool s_ammoLogged = false; // diagnostico da cadeia 1x/sessao
 
     static MonoClassField* fDayInst = nullptr;
@@ -235,6 +245,7 @@ namespace Mono {
     static bool s_handLogged = false; // diagnostico HAND (1x: ponta da mao em mundo)
     static bool s_handLogged2 = false; // diagnostico HAND2 (1x: maos vivas pos-fix)
     static DWORD WINAPI EspThread(LPVOID); // forward (definida apos BuildEsp)
+    static void ApplyMoney(); // forward (dinheiro infinito, worker)
     static void ApplyDefense(void* local); // forward (defesa rapida, worker)
     static void TopAmmo(void* item, int oAmmo, int oMax); // forward (teto do ammo)
     static void TopStacks(void* local, int oInv, int oStorage, int oItems,
@@ -526,6 +537,22 @@ namespace Mono {
             MonoClass* cArms = nullptr;
             if (ResolveClass("PlayerArms", cArms))
                 ResolveField(cArms, "PlayerArms", "selectedItem", fSel);
+        }
+        // Dinheiro: Currency.Instance -> Dollar/Silver/Gold -> amount.
+        // AddCurrency(CurrencyID,int) p/ dar 1x; trava amount todo ciclo.
+        ResolveClass("Currency", cCur);
+        ResolveClass("CurrencyID", cCurId);
+        ResolveField(cCur, "Currency", "Instance", fCurInst);
+        ResolveField(cCur, "Currency", "<Dollar>k__BackingField", fDollar);
+        {
+            MonoClass* cData = nullptr;
+            if (ResolveClass("CurrencyData", cData))
+                ResolveField(cData, "CurrencyData", "amount", fAmount);
+        }
+        if (cCur) {
+            MonoMethod* t = pMethodFrom(cCur, "AddCurrency", 2);
+            if (t) { mAddCur = t; s.resolvedMethods++; }
+            else Log::Warn("Metodo nao resolvido: Currency.AddCurrency/2");
         }
         s_unity = pImgLoaded("UnityEngine.CoreModule");
         if (s_unity) {
@@ -1344,8 +1371,9 @@ namespace Mono {
             // ESP ligado. Leitura barata (1 lista curta + 2 floats); escrita so
             // se a flag ligada E o valor caiu (custo zero no estado estavel).
             // Comeca rapido e so desacelera se o proprio ciclo ficar caro.
-            bool wantDef = s.ready && (Config::bGodMode || Config::bInfStamina || Config::bInfAmmo || Config::bInfItems);
+            bool wantDef = s.ready && (Config::bGodMode || Config::bInfStamina || Config::bInfAmmo || Config::bInfItems || Config::bInfMoney);
             if (wantDef && SceneAlive()) {
+                if (Config::bInfMoney) ApplyMoney(); // singleton, sem player
                 void* pcs = nullptr;
                 if (StaticInstance(cPlayers, fPCInst, pcs)) {
                     void* list = ReadP(pcs, Off::PCS_players);
@@ -1483,7 +1511,9 @@ namespace Mono {
                 // invoke falhou (retorno nulo)? cai p/ modo lista no proximo ciclo.
                 else if (oWeapons >= 0) s_ammoMode = 2;
             } else {
-                // Modo lista: trava o ammo de cada InventoryItem em weapons.
+                // Modo lista (fallback sem invoke): trava o ammo de cada
+                // InventoryItem em weapons — so ARMAS (stackMax==1). Pilhas
+                // (granada etc.) nao entram aqui (TopStacks cuida, com filtro).
                 void* list = ReadP(peq, oWeapons);
                 if (list) WalkList(list, 16, [&](void* item, int) {
                     TopAmmo(item, oAmmo, oMax);
@@ -1505,8 +1535,21 @@ namespace Mono {
 
     // Leva o ammo de um InventoryItem ao teto (maxAmmo via DatabaseGun;
     // fallback: segura o maior valor ja visto). So escreve se caiu.
+    // Anti-flood: so mexe se o item for ARMA (stackMax==1 via DatabaseItem).
+    // Pilha (granada/bala solta) tem stackMax>1 e eh ignorada aqui.
     static void TopAmmo(void* item, int oAmmo, int oMax) {
         if (!item || oAmmo < 0) return;
+        static int oDbStackGun = -2;
+        if (oDbStackGun == -2) {
+            oDbStackGun = FieldOff(fDbStack);
+        }
+        if (mGetDb && oDbStackGun >= 0) {
+            void* db0 = InvokeObj(mGetDb, item, nullptr);
+            if (db0) {
+                int sm = ReadI(db0, oDbStackGun, -1);
+                if (sm > 1) return; // pilha: nao eh arma, TopStacks cuida
+            }
+        }
         int cur = ReadI(item, oAmmo, -1);
         if (cur < 0) return;
         int max = -1;
@@ -1527,8 +1570,11 @@ namespace Mono {
     // stackMax==1 -> o numero eh ammo; senao eh stackCount; teto = stackMax).
     // - Com bInfAmmo: trava stackCount=stackMax nas pilhas do storage cujo
     //   id == ammoID da arma (HUD reserva honesto: 30/150, nao 30/0).
-    // - Com bInfItems: trava stackCount=stackMax em TODAS as pilhas
-    //   (granada/dinamite/bandagem/municao solta — cada uma no seu teto).
+    // - Com bInfItems: trava stackCount=stackMax em pilhas PEQUENAS
+    //   (granada/dinamite/bandagem: stackMax<=32). Materiais (madeira/sucata,
+    //   stack alto) ficam DE FORA: travar material + ProcessItemStacking que
+    //   soma pilhas = saldo andando sozinho (flood, 17/09).
+    // - Anti-flood: so escreve se 0 <= cur < smax (nunca cria, nunca soma).
     static void TopStacks(void* local, int oInv, int oStorage, int oItems,
         int oStack, int oDbStack, int oId, bool items) {
         if (!local || oInv < 0 || oStorage < 0 || oItems < 0) return;
@@ -1547,6 +1593,7 @@ namespace Mono {
                 int smax = ReadI(db, oDbStack, -1);
                 if (smax <= 1) return; // stackMax==1 -> eh arma (ammo), nao pilha
                 if (smax > 100000) return;
+                if (items && smax > 32) return; // material: fora (anti-flood)
                 if (!items) {
                     // Reserva: so o mesmo tipo da arma (id == ammoID equipada).
                     if (oId < 0 || s_ammoIdCur < 0) return;
@@ -1556,6 +1603,46 @@ namespace Mono {
                 int cur = ReadI(it, oStack, -1);
                 if (cur >= 0 && cur < smax) WriteI(it, oStack, smax);
             });
+        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
+
+    // Dinheiro infinito (MISC/Sobrevivencia): 1x AddCurrency(Dollars, 99999)
+    // por sessao + trava amount=99999 todo ciclo. Singleton via Instance;
+    // offsets via API; falha = desliga sozinho, sem crash.
+    static void ApplyMoney() {
+        if (!s_moneyOk) return;
+        static int oDollar = -2, oAmount = -2;
+        if (oDollar == -2) {
+            oDollar = FieldOff(fDollar); oAmount = FieldOff(fAmount);
+            if (!s_moneyLogged) {
+                s_moneyLogged = true;
+                Log::Infof("[MONEY] offs dollar=%d amount=%d mAddCur=%d",
+                    oDollar, oAmount, mAddCur ? 1 : 0);
+            }
+            if (oDollar < 0 || oAmount < 0) {
+                Log::Warn("[MONEY] cadeia incompleta — desativado.");
+                s_moneyOk = false;
+                return;
+            }
+        }
+        if (oDollar < 0) return;
+        __try {
+            void* inst = nullptr;
+            if (!StaticInstance(cCur, fCurInst, inst) || !inst) return;
+            // 1x por sessao: AddCurrency(Dollars=0, 99999) via invoke.
+            if (mAddCur && !s_moneyGiven) {
+                s_moneyGiven = true;
+                int idDollars = 0, qty = 99999;
+                void* args[2] = { &idDollars, &qty };
+                MonoObject* exc = nullptr;
+                __try { pInvoke(mAddCur, inst, args, &exc); }
+                __except (EXCEPTION_EXECUTE_HANDLER) {}
+                Log::Info("[MONEY] AddCurrency 1x executado.");
+            }
+            void* dollar = ReadP(inst, oDollar);
+            if (!dollar) return;
+            int cur = ReadI(dollar, oAmount, -1);
+            if (cur >= 0 && cur < 99999) WriteI(dollar, oAmount, 99999);
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 

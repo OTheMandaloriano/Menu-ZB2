@@ -17,11 +17,12 @@ namespace Config {
     extern bool bDebugOverlay;      // overlay de debug sempre ativo (briefing)
     extern bool bTooltips;          // tooltips em todos os controles
 
-    // ---- PLAYER / Defesa (God + Stamina + Ammo + Items: escrita, ver mono.cpp) ----
+    // ---- Sobrevivencia (MISC): escrita direta, ver mono.cpp ----
     extern bool  bGodMode;        // trava HP local em 100 (healthFast+healthSlow)
     extern bool  bInfStamina;     // trava stamina local no maximo
-    extern bool  bInfItems;       // trava stackCount=stackMax em TODAS as pilhas
-                                 // (granada/dinamite/bandagem/municao solta)
+    extern bool  bInfItems;       // trava stackCount=stackMax em pilhas PEQUENAS
+                                 // (granada/dinamite/bandagem; material fora)
+    extern bool  bInfMoney;       // dinheiro infinito (Dollars travado em 99999)
 
     // ---- PLAYER / Aimbot ----
     extern bool  bAimbot;
