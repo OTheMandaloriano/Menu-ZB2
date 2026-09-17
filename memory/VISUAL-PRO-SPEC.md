@@ -4,16 +4,15 @@
 > Item/Player/Grenade Line) + Gamesense/Skeet (Player ESP: teammates, chams,
 > bounding box, health, name, weapon, distance; Other ESP: radar, dropped
 > weapons) + PhantomOverlay/Warzone (Filled box, Show team, Max distance, Loot
-> ESP separado) + Battlelog (Radar, Removals, Warnings) + Aimware V5
-> (`esp.chams.enemy.visible/occluded`) + UC (Skeleton ESP Preview separado,
-> thread-safety com array fixo).
+> ESP separado) + Battlelog (Radar, Removals, Warnings) + UC (Skeleton ESP
+> Preview separado, thread-safety com array fixo).
 > Regras herdadas: 1 função por ciclo, commit pt-BR Objetivo/Origem/Testes/
 > Histórico, build Release|x64, `injector_state.txt` + tail por teste, sem stub,
 > sem TODO, sem chute de offset. Nada de aimbot/weapon/movement/magnet/
 > teleport/host — SOMENTE VISUAL.
-> REMOVIDO 17/09: Visible Check + Somente visíveis (raycast LOS + filtro).
-> Motivo: 1 cor por elemento (padrão Gamesense `custom_esp.lua`); sem raycast
-> o par Visível/Oculto não tem sentido. ESP sempre na cor do elemento.
+> REMOVIDO 17/09: Visible Check + Somente visíveis.
+> Motivo: 1 cor por elemento; sem teste de oclusão o par de cores não tem
+> sentido. ESP sempre na cor do elemento.
 
 ## 1. Layout final da aba (espelho do menu — implementar 1:1)
 
@@ -93,28 +92,24 @@ para presets antigos (chave ausente = default, nunca reset). `iCfgVer` 4→5.
 
 1. **1 linha = 1 checkbox + 1 cor.** Some dropdown "Elemento" e "Exibir elemento".
    Cada função tem a própria linha (padrão CS2_External `Checkbox+SameLine+ColorEdit4`).
-2. **1 cor por elemento, sempre.** Sem par Visível/Oculto (removido 17/09):
+2. **1 cor por elemento, sempre.** Sem par de cores (removido 17/09):
    elemento desenha com `sua_cor`, ponto final.
-3. **Par global só no XQZ do Chams** (`colChamsVis/Inv`, padrão Aimware
-   `enemy.visible/occluded`).
-4. **Aliados sempre visíveis, 1 cor.** Sem Visible Check/Somente/Dist na seção
-   (decisão de design PvE coop).
+3. **Par global só no XQZ do Chams** (`colChamsVis/Inv`).
+4. **Aliados sempre, 1 cor.** (decisão de design PvE coop).
 5. **Dist máx (zumbi):** cull ANTES de qualquer invoke (`dist > fMaxDistance` =
    skip entidade). Chefão ignora (`get_IsBoss` = sempre).
 6. **Classe (zumbi):** texto `ZombieIdentity.type+20` (Comum/Riot/Queen/Reaper),
-   mesma linha do Nome. Zero invoke novo. Offset via `[FIELDS]` + CE MCP,
+   mesma linha do Nome. Zero invoke novo. Offset via auditoria + CE MCP,
    nunca chutar.
 6. **Linha origem:** `Base=(w/2,h)` / `Topo=(w/2,0)` / `Centro=(cx,cy)` da tela;
    destino fixo no pé (player/aliado) ou no item. `iSnapFrom`, zero invoke novo.
 7. **Itens:** `Estilo` master (Completo/Nome/Linha); `Box` Mini 2D proporcional
-   ao pickup (sem skeleton/headdot); Nome+Dist em par (padrão EO Item
-   Name+Distance); Linha Base→item (padrão EO Item Line). Nome+Dist+Linha por
-   categoria com sua cor, dentro de `fItemRadius`. Zero raycast.
+   ao pickup (sem skeleton/headdot); Nome+Dist em par. Nome+Dist+Linha por
+   categoria com sua cor, dentro de `fItemRadius`.
 8. **POI:** dinâmico (heli/chefão/missão/onda/respawn) sempre; estático (loot
     fixo/bancadas/fogueira/mercador) dentro de `fItemRadius`. Heli mostra
-    `HelicopterState`, Onda mostra direção (`WaveSpawner`), Chefão mostra
-    `healthStage+48`. Classes em `CLASSES_UTEIS.md`; instâncias via
-    `findInstancesOfClassListOnly` + CE MCP em partida.
+    estado, Onda mostra direção, Chefão mostra estágio de vida. Classes em
+    `CLASSES_UTEIS.md`; instâncias via CE MCP em partida.
 9. **Chams sem master:** 1 item só, o próprio checkbox é o enable (XQZ pode
     ficar ligado com ESP desligado).
 10. **Sem Salvar/Cancelar:** tudo escreve direto na var + JSON silencioso

@@ -1,11 +1,16 @@
 # CHANGELOG.md (ZB2 Menu)
 
+## [não lançado] - 2026-09-17
+- refactor: removido Visible Check + Somente visíveis (como se nunca existissem):
+  flags, UI, JSON, 8 cores par → 4 cores únicas, engine de oclusão, estabilização
+  de cor, leitura de profundidade D3D11, telemetria, logs (~1000 linhas removidas)
+
 ## [não lançado] - 2026-09-15
-- perf: orçamento de 220 invokes/ciclo + LOS em rodízio (perto sempre, longe 1/3) + cull fora da tela + teto 96 ent/ciclo (anti-crash em horda, crash 15:51 LODController)
+- perf: orçamento de 220 invokes/ciclo + cull fora da tela + teto 96 ent/ciclo (anti-crash em horda)
 - fix: watchdog SceneAlive no respawn + probe SEH na câmera + TryEnter nos locks + Map DO_NOT_WAIT (anti-hang tela branca)
-- fix: offset-16 no hitBuf cru (m_Distance raw=28, não 44) + histerese LOS anti-flicker (~3 ciclos)
-- fix: P0 crash pós-kill (GetName fora do caminho quente) + sem invoke em collider morto do LOD
-- feat: auditoria [SIG]/[FIELDS] (Raycast/5 + Linecast/4 confirmados, offset via API)
+- fix: offset de distância + estabilização anti-flicker (~3 ciclos)
+- fix: P0 crash pós-kill (GetName fora do caminho quente)
+- feat: auditoria de assinaturas e campos (métodos confirmados, offset via API)
 
 ## [v0.6.0] - 2026-09-12
 - feat: debug overlay com dados vivos + leitura de entidades (Fase 2 item 6)
