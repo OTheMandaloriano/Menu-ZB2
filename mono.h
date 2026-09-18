@@ -58,6 +58,7 @@ namespace Mono {
         float zHp0 = 0.0f;
         float espMs = 0.0f;    // custo do BuildEsp (diagnostico)
         int   espShown = 0;
+        int   coopMode = 0;     // 0=single 1=cliente 2=host (debug overlay)
         int   resolvedClasses = 0;
         int   resolvedFields = 0;
         int   resolvedMethods = 0;

@@ -1485,17 +1485,46 @@ namespace Mono {
                     WalkList(list, 16, [&](void* e, int) { (void)e; nPl++; });
                     // Host vs cliente: IsServer() diz se EU valido o dano.
                     // Host (ou single) = trava tudo. Cliente = recarga legitima.
+                    // Anti-crash transicao (18/09): IsServer com SEH + throttle
+                    // 2s (invoke 1x/60 ciclos); mudanca de modo = pausa 2s
+                    // (troca single<->coop remonta cena/LOD = mesma classe do
+                    // crash de loading). s_coopMode alimenta o debug overlay.
+                    static long long s_lastServerCheck = 0;
+                    static bool s_isServer = true;
+                    static int s_lastNPl = -1;
                     bool isServer = true;
                     if (nPl > 1) {
-                        void* mpInst = nullptr;
-                        if (StaticInstance(cMp, fMpInst, mpInst) && mpInst && mIsServer)
-                            isServer = InvokeBool(mIsServer, mpInst);
-                        else isServer = false; // sem info = assume cliente (seguro)
+                        long long nowS = PiNow();
+                        if (nowS - s_lastServerCheck > 2000000LL) {
+                            s_lastServerCheck = nowS;
+                            bool got = false;
+                            __try {
+                                void* mpInst = nullptr;
+                                if (StaticInstance(cMp, fMpInst, mpInst) && mpInst && mIsServer) {
+                                    s_isServer = InvokeBool(mIsServer, mpInst);
+                                    got = true;
+                                }
+                            } __except (EXCEPTION_EXECUTE_HANDLER) {}
+                            if (!got) s_isServer = false; // sem info = cliente (seguro)
+                        }
+                        isServer = s_isServer;
+                    } else {
+                        s_isServer = true;
+                        s_lastServerCheck = 0;
+                    }
+                    if (nPl != s_lastNPl) {
+                        // Modo mudou (entrou/saiu do coop): cena instavel, pausa.
+                        if (s_lastNPl >= 0) {
+                            Log::Infof("[COOP] transicao %d->%d players: pausa 2s.", s_lastNPl, nPl);
+                            Sleep(2000);
+                        }
+                        s_lastNPl = nPl;
                     }
                     bool coop = (nPl > 1 && !isServer);
                     bool hostCoop = (nPl > 1 && isServer);
                     static int s_coopLogged = -1;
                     int coopKey = coop ? 1 : (hostCoop ? 2 : 0);
+                    s.coopMode = coopKey; // debug overlay todo ciclo (0/1/2)
                     if (coopKey != s_coopLogged) {
                         s_coopLogged = coopKey;
                         Log::Infof("[COOP] players=%d modo=%s.", nPl,
@@ -1677,9 +1706,18 @@ namespace Mono {
             // o ammoID (leitura) e garante reserva (abaixo) — fluxo legitimo.
             // Recarga automatica: ammo==0 -> TryStartReload (fluxo normal do
             // jogo: PullStoredItems da reserva cheia; host aceita, dano conta).
-            // Telemetria: se nunca recarregou, diz o motivo (sem reload? sem
-            // reserva? ammo nunca zera?).
+            // Pente extra ao ativar: ao ligar bInfAmmo (borda de subida),
+            // garante 1 pilha cheia p/ CADA arma em weapons (nao espera zerar).
             bool lockMag = !coop && Config::bInfAmmo;
+            static bool s_ammoWasOn = false;
+            if (Config::bInfAmmo && !s_ammoWasOn) {
+                s_ammoWasOn = true;
+                // Reset 1x: permite recriar pilhas gastas na sessao anterior.
+                for (int k = 0; k < 8; ++k) s_pileMade[k] = false;
+                Log::Info("[AMMO] ativado: garantindo 1 pilha por arma.");
+            } else if (!Config::bInfAmmo) {
+                s_ammoWasOn = false;
+            }
             static int s_coopNoReloadWhy = 0;
             void* armsC = (oArms >= 0) ? ReadP(local, oArms) : nullptr;
             if (coop && Config::bInfAmmo && armsC && mTryReload && oAmmo >= 0) {
