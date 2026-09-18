@@ -256,7 +256,7 @@ namespace Mono {
     static void TopStacks(void* local, int oInv, int oStorage, int oItems,
         int oStack, int oDbStack, int oId, bool items); // forward (reserva+pilhas)
     static bool SubTypeOk(void* db); // forward (observa categoria, 1x por valor)
-    static void ApplyAmmo(void* local); // forward (municao infinita, worker)
+    static void ApplyAmmo(void* local, bool coop = false); // forward (coop=pente livre)
     static int FieldOff(MonoClassField* f); // forward (offset via API, -1 se falhar)
     static void ReadAll(); // forward (chamada na worker, fora do Present)
     static void AuditBones(); // forward (chamada na worker, fora do Present)
@@ -1460,11 +1460,25 @@ namespace Mono {
                 void* pcs = nullptr;
                 if (StaticInstance(cPlayers, fPCInst, pcs)) {
                     void* list = ReadP(pcs, Off::PCS_players);
+                    // Coop-safe (cliente, 17/09): com 2+ players o HOST valida o
+                    // dano (AccumulateDamage/DiedWithDamage + sync). Travar o
+                    // pente gera pacote inconsistente e o host descarta (tiro e
+                    // dinamite sem dano). Em coop: NAO trava pente — so garante
+                    // reserva cheia (fluxo consumir/recarregar segue legitimo,
+                    // dano conta, bala nunca falta). Single: tudo normal.
+                    int nPl = 0;
+                    WalkList(list, 16, [&](void* e, int) { (void)e; nPl++; });
+                    bool coop = (nPl > 1);
+                    static int s_coopLogged = -1;
+                    if (coop != (s_coopLogged == 1)) {
+                        s_coopLogged = coop ? 1 : 0;
+                        Log::Infof("[COOP] players=%d modo=%s.", nPl, coop ? "cliente-safe (pente livre, reserva cheia)" : "single (tudo travado)");
+                    }
                     WalkList(list, 16, [&](void* e, int) {
                         if (!InvokeBool(mHasLocal, e)) return;
                         ApplyDefense(e);
                         if (Config::bUnlockSlots) ApplySlots(e);
-                        if (Config::bInfAmmo || Config::bInfItems) ApplyAmmo(e);
+                        if (Config::bInfAmmo || Config::bInfItems) ApplyAmmo(e, coop);
                     });
                 }
                 if (++s_defN >= 60) {
@@ -1596,7 +1610,7 @@ namespace Mono {
             }
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
-    static void ApplyAmmo(void* local) {
+    static void ApplyAmmo(void* local, bool coop) {
         if (!local || !s_ammoOk) return;
         // Resolve preguiçoso dos offsets (1x; API pode indisponivel no Unity 6).
         static int oInv = -2, oEq = -2, oSel = -2, oAmmo = -2, oMax = -2;
@@ -1628,6 +1642,10 @@ namespace Mono {
             if (!pinv) return;
             void* peq = ReadP(pinv, oEq);
             if (!peq) return;
+            // Coop cliente: pente LIVRE (host valida o dano; travar gera
+            // pacote inconsistente e o tiro/dinamite nao conta). So identifica
+            // o ammoID (leitura) e garante reserva (abaixo) — fluxo legitimo.
+            bool lockMag = !coop && Config::bInfAmmo;
             if (s_ammoMode == 1) {
                 void* arms = ReadP(local, oArms);
                 if (!arms) return;
@@ -1638,7 +1656,7 @@ namespace Mono {
                 void* args[1] = { &selArg };
                 void* item = InvokeObj(mGetEq, peq, args);
                 if (item) {
-                    TopAmmo(item, oAmmo, oMax);
+                    if (lockMag) TopAmmo(item, oAmmo, oMax);
                     // Guarda o ammoID da arma p/ reserva travar so o mesmo tipo.
                     static int oAmmoId = -2;
                     if (oAmmoId == -2) {
@@ -1678,7 +1696,7 @@ namespace Mono {
                 void* armsL = (oArms >= 0) ? ReadP(local, oArms) : nullptr;
                 int selL = armsL ? ReadI(armsL, oSel, -1) : -1;
                 if (list) WalkList(list, 16, [&](void* item, int idx) {
-                    TopAmmo(item, oAmmo, oMax);
+                    if (lockMag) TopAmmo(item, oAmmo, oMax);
                     if (mGetDb && oAmmoId2 >= 0 && oAmmo >= 0) {
                         int cur = ReadI(item, oAmmo, -1);
                         if (cur > 0) {
