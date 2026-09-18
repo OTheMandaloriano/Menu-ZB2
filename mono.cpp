@@ -1553,7 +1553,9 @@ namespace Mono {
         return false;
     }
     static void AmmoIdAdd(int id) {
-        if (id <= 0 || AmmoIdKnown(id)) return;
+        // Faixa real do enum InventoryItem/ID: 2..116 (0=value__, 1=None).
+        // Fora disso = lixo (ex. +1 None) e nao entra na lista multi-tipo.
+        if (id < 10 || id > 116 || AmmoIdKnown(id)) return;
         for (int k = 0; k < 8; ++k) {
             if (s_ammoIds[k] < 0) {
                 s_ammoIds[k] = id;
@@ -1563,19 +1565,21 @@ namespace Mono {
         }
     }
     // Cria pilha do tipo quando zerada (pente extra no limite do jogo).
-    // Via CreateInventoryItem(id,qtd)+AddItem. Sem smax conhecido: cria com
-    // qtd alta e o proprio AddItem/WillStack clamp no stackMax (IL confirma:
-    // WillStack limita em stackMax-stackCount). Retry: tenta ate AddItem
-    // retornar true (inventario cheio = tenta de novo depois, sem marcar feito
-    // antes da hora). Sem chute de numero, sem flood (1 pilha por vez; a trava
-    // mantem no teto depois).
+    // Via CreateInventoryItem(id,qtd)+AddItem. Cria em doses de 30 (qtd que
+    // cabe em qualquer pilha de bala sem estourar clamp) e repete ate a pilha
+    // aparecer cheia: o proprio WillStack junta e limita no stackMax.
+    // Retry com backoff: tenta 1x/2s (inventario cheio = espera, sem spam e
+    // sem marcar feito antes da hora). 1 pilha por vez; a trava mantem depois.
     static bool s_pileMade[8] = { false,false,false,false,false,false,false,false };
+    static int s_pileTryN = 0;
     static void AmmoEnsurePile(void* pinv, int id, int smax) {
         (void)smax;
         if (!pinv || id <= 0) return;
         int slot = -1;
         for (int k = 0; k < 8; ++k) if (s_ammoIds[k] == id) slot = k;
         if (slot < 0 || s_pileMade[slot]) return;
+        // Backoff: 1 tentativa a cada ~2s (60 ciclos de ~33ms).
+        if (++s_pileTryN % 60 != 1) return;
         if (!mCreateItem && cItem) {
             MonoMethod* t = pMethodFrom(cItem, "CreateInventoryItem", 2);
             if (t) { mCreateItem = t; s.resolvedMethods++; }
@@ -1586,8 +1590,8 @@ namespace Mono {
         }
         if (!mCreateItem || !mAddItem) { Log::Warn("[AMMO] sem metodos p/ criar pilha."); return; }
         __try {
-            int big = 99999;
-            void* cargs[2] = { &id, &big };
+            int dose = 30; // cabe em qualquer pilha de bala; WillStack junta
+            void* cargs[2] = { &id, &dose };
             MonoObject* exc = nullptr;
             MonoObject* ret = pInvoke(mCreateItem, nullptr, cargs, &exc);
             if (exc || !ret) { Log::Warn("[AMMO] CreateInventoryItem falhou."); return; }
@@ -1599,14 +1603,9 @@ namespace Mono {
             bool ok = (!exc2 && ret2 && *(unsigned char*)pUnbox(ret2) != 0);
             if (ok) {
                 s_pileMade[slot] = true; // so marca depois do sucesso
-                Log::Infof("[AMMO] pilha criada: id=%d ok=1 (jogo clamp no stackMax)", id);
-            }
-            // falhou (sem espaco?) = tenta de novo no proximo ciclo, sem spam:
-            // loga 1x a cada ~2s via contador estatico.
-            else {
-                static int s_pileFailN = 0;
-                if (++s_pileFailN % 60 == 1)
-                    Log::Warn("[AMMO] AddItem recusou (inventario cheio?) — tentando de novo.");
+                Log::Infof("[AMMO] pilha criada: id=%d qtd=%d ok=1", id, dose);
+            } else {
+                Log::Warn("[AMMO] AddItem recusou (inventario cheio?) — nova tentativa em 2s.");
             }
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
