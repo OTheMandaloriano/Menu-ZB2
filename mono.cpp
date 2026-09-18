@@ -146,6 +146,9 @@ namespace Mono {
     static MonoClass* cZombie = nullptr;
     static MonoClass* cZLoader = nullptr;
     static MonoClass* cPlayers = nullptr;
+    static MonoClass* cMp = nullptr;          // MultiplayerController
+    static MonoClassField* fMpInst = nullptr; // MultiplayerController.instance
+    static MonoMethod* mIsServer = nullptr;   // MultiplayerController.IsServer()
     // Municao infinita (cadeia via dnlib/dnSpy estatico + IL do ShootGun):
     // PlayerMain.inventory -> PlayerInventory.equippedItems ->
     // PlayerEquippedItems.GetEquipment(selectedItem) -> InventoryItem.ammo.
@@ -507,6 +510,11 @@ namespace Mono {
         ResolveClass("Zombie", cZombie);
         ResolveClass("ZombieLoader", cZLoader);
         ResolveClass("PlayersController", cPlayers);
+        // Coop host vs cliente: MultiplayerController.IsServer() (IL do DropLoot).
+        // Host valida o proprio dano: trava tudo. Cliente: recarga legitima.
+        ResolveClass("MultiplayerController", cMp);
+        ResolveField(cMp, "MultiplayerController", "instance", fMpInst);
+        if (cMp) ResolveMethod(cMp, "MultiplayerController", "IsServer", 0, mIsServer);
         ResolveField(cDay, "DaytimeController", "instance", fDayInst);
         ResolveField(cZLoader, "ZombieLoader", "Instance", fZLInst);
         ResolveField(cPlayers, "PlayersController", "instance", fPCInst);
@@ -1475,11 +1483,24 @@ namespace Mono {
                     // dano conta, bala nunca falta). Single: tudo normal.
                     int nPl = 0;
                     WalkList(list, 16, [&](void* e, int) { (void)e; nPl++; });
-                    bool coop = (nPl > 1);
+                    // Host vs cliente: IsServer() diz se EU valido o dano.
+                    // Host (ou single) = trava tudo. Cliente = recarga legitima.
+                    bool isServer = true;
+                    if (nPl > 1) {
+                        void* mpInst = nullptr;
+                        if (StaticInstance(cMp, fMpInst, mpInst) && mpInst && mIsServer)
+                            isServer = InvokeBool(mIsServer, mpInst);
+                        else isServer = false; // sem info = assume cliente (seguro)
+                    }
+                    bool coop = (nPl > 1 && !isServer);
+                    bool hostCoop = (nPl > 1 && isServer);
                     static int s_coopLogged = -1;
-                    if (coop != (s_coopLogged == 1)) {
-                        s_coopLogged = coop ? 1 : 0;
-                        Log::Infof("[COOP] players=%d modo=%s.", nPl, coop ? "cliente-safe (pente livre, reserva cheia)" : "single (tudo travado)");
+                    int coopKey = coop ? 1 : (hostCoop ? 2 : 0);
+                    if (coopKey != s_coopLogged) {
+                        s_coopLogged = coopKey;
+                        Log::Infof("[COOP] players=%d modo=%s.", nPl,
+                            coop ? "cliente-safe (pente livre, reserva cheia)" :
+                            hostCoop ? "host (tudo travado, eu valido)" : "single (tudo travado)");
                     }
                     WalkList(list, 16, [&](void* e, int) {
                         if (!InvokeBool(mHasLocal, e)) return;
@@ -1656,7 +1677,10 @@ namespace Mono {
             // o ammoID (leitura) e garante reserva (abaixo) — fluxo legitimo.
             // Recarga automatica: ammo==0 -> TryStartReload (fluxo normal do
             // jogo: PullStoredItems da reserva cheia; host aceita, dano conta).
+            // Telemetria: se nunca recarregou, diz o motivo (sem reload? sem
+            // reserva? ammo nunca zera?).
             bool lockMag = !coop && Config::bInfAmmo;
+            static int s_coopNoReloadWhy = 0;
             void* armsC = (oArms >= 0) ? ReadP(local, oArms) : nullptr;
             if (coop && Config::bInfAmmo && armsC && mTryReload && oAmmo >= 0) {
                 // Le o ammo da equipada via weapons[sel] (sem invoke de Get).
@@ -1674,11 +1698,16 @@ namespace Mono {
                             __try {
                                 if (arrC) memcpy(&itemC, (char*)arrC + Off::A_data + (size_t)selC * 8, 8);
                             } __except (EXCEPTION_EXECUTE_HANDLER) {}
-                            if (itemC && ReadI(itemC, oAmmo, -1) == 0) {
+                            int ammoC = itemC ? ReadI(itemC, oAmmo, -1) : -1;
+                            if (itemC && ammoC == 0) {
                                 // Pente vazio: recarrega pelo fluxo do jogo.
                                 static long long s_lastReload = 0;
                                 long long nowR = PiNow();
-                                if (nowR - s_lastReload > 1000000LL) {
+                                if (!mTryReload && s_coopNoReloadWhy != 1) {
+                                    s_coopNoReloadWhy = 1;
+                                    Log::Warn("[AMMO-COOP] sem TryStartReload (nao resolvido).");
+                                }
+                                if (mTryReload && nowR - s_lastReload > 1000000LL) {
                                     s_lastReload = nowR;
                                     __try {
                                         MonoObject* excR = nullptr;

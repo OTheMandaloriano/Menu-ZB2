@@ -12,10 +12,21 @@ detecta, reinicia, recarrega e valida sozinho.
 
 ## 1. Detectar o bridge
 
-```powershell
-# pipe existe?
-py -c "import ctypes; k32=ctypes.windll.kernel32; h=k32.CreateFileW('\\\\\\\\.\\\\pipe\\\\CE_MCP_Bridge_v99',0x80000000,0,None,3,0,None); print('ABERTO' if int(h)!=-1 else 'ausente')"
+NUNCA testa pipe com `py -c` inline: a serializacao JSON dobra as
+barras (`\\\\.\pipe\\...`) e o teste falha com `err=161`
+(ERROR_BAD_PATHNAME) mesmo com o pipe aberto. Licao 18/09.
+
+Sempre via ARQUIVO `.py` (ex. `Temp/opencode/pipetest.py`):
+
+```python
+import ctypes
+k32 = ctypes.WinDLL('kernel32', use_last_error=True)
+h = k32.CreateFileW('\\\\.\\pipe\\CE_MCP_Bridge_v99', 0x80000000, 0, None, 3, 0, None)
+print('ABERTO' if h != -1 else 'ausente err=%d' % ctypes.get_last_error())
 ```
+
+Valida a tecnica com pipe que sempre existe (`InitShutdown`,
+`lsass`): se esses abrem e o MCP nao, o bridge caiu de verdade.
 
 Ou `cheatengine_ping`. Se responder, pula p/ secao 3.
 
@@ -60,3 +71,13 @@ Ou `cheatengine_ping`. Se responder, pula p/ secao 3.
 - `enumClasses` em imagem inteira (mata o pipe; 16/09 e 17/09).
 - Escrever 99999 de primeira em valor desconhecido.
 - Insistir >2 ciclos de reparo (cai p/ fallback dnlib+DLL).
+- Testar pipe com `py -c` inline (falso-negativo err=161; 18/09).
+
+## Diagnostico sem GUI (Lazarus esconde filhos Win32)
+
+- Janela Lua: `EnumWindows` acha `Lua script: Cheat Table` + `Lua Engine`.
+- Log do bridge: `WM_GETTEXT` no controle `Edit` filho da `Lua Engine`
+  (cadeia GetWindow GW_CHILD). Procura `MCP Server Listening on:`.
+- Sessao MCP (`cheatengine_ping`) pode estar ausente mesmo com pipe
+  aberto: pipe = servidor Lua ok; sessao = cliente conectado. Se a
+  sessao nao existe, usa fallback dnlib+DLL (secao 2, item 4).
