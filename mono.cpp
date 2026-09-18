@@ -246,10 +246,13 @@ namespace Mono {
     static bool s_handLogged2 = false; // diagnostico HAND2 (1x: maos vivas pos-fix)
     static DWORD WINAPI EspThread(LPVOID); // forward (definida apos BuildEsp)
     static void ApplyMoney(); // forward (dinheiro infinito, worker)
+    static void ApplySlots(void* local); // forward (slots desbloqueados, 1x)
+    static void DoGiveItem(void* local); // forward (spawn de item 1x por clique)
     static void ApplyDefense(void* local); // forward (defesa rapida, worker)
     static void TopAmmo(void* item, int oAmmo, int oMax); // forward (teto do ammo)
     static void TopStacks(void* local, int oInv, int oStorage, int oItems,
         int oStack, int oDbStack, int oId, bool items); // forward (reserva+pilhas)
+    static bool SubTypeOk(void* db); // forward (observa categoria, 1x por valor)
     static void ApplyAmmo(void* local); // forward (municao infinita, worker)
     static int FieldOff(MonoClassField* f); // forward (offset via API, -1 se falhar)
     static void ReadAll(); // forward (chamada na worker, fora do Present)
@@ -353,6 +356,54 @@ namespace Mono {
         __try { memcpy(&v, (const char*)base + off, sizeof(v)); }
         __except (EXCEPTION_EXECUTE_HANDLER) {}
         return v;
+    }
+
+    // ---- Guardiao Anti-Flood Inventario (A1-A5) ----
+    // Toda escrita em item passa por aqui ANTES do WriteI. Regras:
+    // A1 direcao unica: so autoriza repor QUEDA (cur < last). Se subiu
+    //   sozinho (jogo somou/juntou loot), atualiza a referencia e nega.
+    // A2 teto: novo > teto (stackMax/maxAmmo) = negado sempre.
+    // A3 material intocavel: quem chama ja filtra por SubType; o guardiao
+    //   recebe allowCat=false p/ material/chave/quest e nega.
+    // A4 quarentena: 3+ mudancas em 5s = 30s sem escrita + log.
+    // A5 auditoria: log [INV] 1x por negacao (item, regra).
+    struct InvHist { void* item; int last; long long win0; int nWin; long long ban; };
+    static InvHist s_invHist[32];
+    static long long InvNow() {
+        LARGE_INTEGER t, f; QueryPerformanceCounter(&t); QueryPerformanceFrequency(&f);
+        return t.QuadPart * 1000000LL / f.QuadPart;
+    }
+    static bool InvGuard_AllowWrite(void* item, int cur, int want, int teto, bool allowCat, const char* what) {
+        if (!Config::bAntiFlood) return true; // guardiao desligado = assume o risco
+        if (!item) return false;
+        if (!allowCat) return false; // A3 silencioso (categoria fora; log seria spam)
+        if (want > teto || teto <= 0 || teto > 100000) return false; // A2
+        long long now = InvNow();
+        InvHist* h = nullptr;
+        for (int i = 0; i < 32; ++i) {
+            if (s_invHist[i].item == item) { h = &s_invHist[i]; break; }
+            if (!h && !s_invHist[i].item) h = &s_invHist[i];
+        }
+        if (!h) h = &s_invHist[0];
+        if (h->item != item) { h->item = item; h->last = cur; h->win0 = now; h->nWin = 0; h->ban = 0; }
+        if (now < h->ban) return false; // A4 quarentena ativa
+        if (cur > h->last) {
+            // Subiu sozinho: atualiza referencia, nega escrita.
+            h->last = cur;
+            h->nWin = 0; h->win0 = now;
+            return false;
+        }
+        // Oscilacao: conta mudancas na janela de 5s.
+        if (now - h->win0 > 5000000LL) { h->win0 = now; h->nWin = 0; }
+        if (++h->nWin >= 3 && cur != h->last) {
+            h->ban = now + 30000000LL;
+            h->nWin = 0;
+            Log::Infof("[FLOOD-GUARD] item=0x%p quarentena 30s (%s).", item, what ? what : "?");
+            return false;
+        }
+        if (cur >= want) { h->last = cur; return false; } // nada a repor
+        h->last = want; // vai escrever: referencia = novo valor
+        return true;
     }
 
     // Offset de campo via API do Mono (layout decidido em runtime; nunca
@@ -851,32 +902,85 @@ namespace Mono {
         long long len = 0;
         __try { memcpy(&len, (char*)arr + Off::A_len, sizeof(len)); }
         __except (EXCEPTION_EXECUTE_HANDLER) { out.skN = 0; return; }
-        // Boss tem rig diferente (asas/cauda, outro tamanho): aceita rig menor
-        // e mapeia por posicao relativa (head=0, pes=fim) em vez de descartar.
-        // Comum continua exigindo 19 (indices auditados [BONE] 14/09).
-        bool isBossRig = (len > 0 && len < 19);
-        if (len < 19 && !isBossRig) { out.skN = 0; return; } // rig vazio: sem skeleton
-        if (isBossRig) {
-            // Mapeamento relativo: head=primeiro, neck=segundo, pes=ultimos.
-            // Desenha o que projetar (skV por junta); sem maos estimadas.
-            static const int kRel[6] = { 0, 1, 2, 3, 4, 5 };
-            int upto = (int)len < 6 ? (int)len : 6;
-            for (int k = 0; k < upto; ++k) {
+        // Boss tem rig diferente (outro tamanho/ordem): mapeia POR NOME
+        // (head/neck/sp*/hl/sl/sr/a1*/a2*/l1*/l2*/fl/fr), igual a auditoria
+        // [BONE] faz. Rig vazio (len<=0) = sem skeleton. Comum com 19 usa os
+        // indices auditados abaixo (caminho rapido, sem strings).
+        if (len <= 0) { out.skN = 0; return; }
+        if (len != 19) {
+            // Rig nao-padrao (boss): resolve cada junta pelo nome do Transform.
+            // GetName via invoke 1x/junta (rig curto, poucas entidades boss).
+            static int s_rigLenLogged = -1;
+            if ((int)len != s_rigLenLogged) {
+                s_rigLenLogged = (int)len;
+                Log::Infof("[RIG] rig nao-padrao len=%d (mapeando por nome).", (int)len);
+            }
+            for (long long k = 0; k < len && k < 64; ++k) {
                 void* bone = nullptr;
                 __try { memcpy(&bone, (char*)arr + Off::A_data + (size_t)k * 8, 8); }
                 __except (EXCEPTION_EXECUTE_HANDLER) { bone = nullptr; }
                 if (!bone) continue;
+                // Nome via Object.get_name no GameObject do Transform
+                // (mesma tecnica da AuditBones; 1x/junta, so em rig nao-padrao).
+                char nmB[64] = { 0 };
+                const char* nm = nullptr;
+                __try {
+                    if (mGetGO && mGetName) {
+                        MonoObject* exc = nullptr;
+                        MonoObject* go = pInvoke(mGetGO, bone, nullptr, &exc);
+                        if (!exc && go) {
+                            MonoObject* exc2 = nullptr;
+                            MonoObject* ret = pInvoke(mGetName, go, nullptr, &exc2);
+                            if (!exc2 && ret) {
+                                char* u = pStrUtf8(ret);
+                                if (u) { strncpy_s(nmB, u, _TRUNCATE); pFree(u); nm = nmB; }
+                            }
+                        }
+                    }
+                } __except (EXCEPTION_EXECUTE_HANDLER) {}
+                if (!nm || !nm[0]) continue;
+                int dst = -1;
+                if (!strcmp(nm, "head")) dst = SkJoint::SK_HEAD;
+                else if (!strcmp(nm, "neck")) dst = SkJoint::SK_NECK;
+                else if (!strcmp(nm, "sp3")) dst = SkJoint::SK_SP3;
+                else if (!strcmp(nm, "sp2")) dst = SkJoint::SK_SP2;
+                else if (!strcmp(nm, "sp1")) dst = SkJoint::SK_SP1;
+                else if (!strcmp(nm, "hl")) dst = SkJoint::SK_HL;
+                else if (!strcmp(nm, "sl")) dst = SkJoint::SK_SL;
+                else if (!strcmp(nm, "sr")) dst = SkJoint::SK_SR;
+                else if (!strcmp(nm, "a1l")) dst = SkJoint::SK_A1L;
+                else if (!strcmp(nm, "a2l")) dst = SkJoint::SK_A2L;
+                else if (!strcmp(nm, "a1r")) dst = SkJoint::SK_A1R;
+                else if (!strcmp(nm, "a2r")) dst = SkJoint::SK_A2R;
+                else if (!strcmp(nm, "l1l")) dst = SkJoint::SK_L1L;
+                else if (!strcmp(nm, "l2l")) dst = SkJoint::SK_L2L;
+                else if (!strcmp(nm, "fl")) dst = SkJoint::SK_FL;
+                else if (!strcmp(nm, "l1r")) dst = SkJoint::SK_L1R;
+                else if (!strcmp(nm, "l2r")) dst = SkJoint::SK_L2R;
+                else if (!strcmp(nm, "fr")) dst = SkJoint::SK_FR;
+                if (dst < 0) {
+                    static char s_unk[8][32] = { 0 };
+                    static int s_unkN = 0;
+                    bool seen = false;
+                    for (int u = 0; u < 8 && s_unk[u][0]; ++u)
+                        if (!strcmp(s_unk[u], nm)) { seen = true; break; }
+                    if (!seen) {
+                        Log::Infof("[RIG] junta desconhecida: %s", nm);
+                        if (s_unkN < 8) {
+                            strncpy_s(s_unk[s_unkN], nm, _TRUNCATE);
+                            s_unkN++;
+                        }
+                    }
+                    continue;
+                }
                 Vec3 w, s3;
                 if (!GetPos(bone, w)) continue;
                 if (!Fin(w.x) || !Fin(w.y) || !Fin(w.z)) continue;
                 if (!W2S(cam, w, s3)) continue;
                 if (!Sane2(s3.x, s3.y)) continue;
-                int dst = (k == 0) ? SkJoint::SK_HEAD : (k == 1) ? SkJoint::SK_NECK :
-                    (k == 2) ? SkJoint::SK_SP3 : (k == 3) ? SkJoint::SK_SP1 :
-                    (k == 4) ? SkJoint::SK_FL : SkJoint::SK_FR;
                 out.skX[dst] = s3.x; out.skY[dst] = s3.y; out.skV[dst] = true;
             }
-            return; // boss: sem resto do pipeline (indices de comum nao valem)
+            return; // rig nao-padrao: sem maos estimadas (indices de comum nao valem)
         }
         void* bones[SkJoint::SK_PHYS] = { nullptr };
         for (int k = 0; k < SkJoint::SK_PHYS; ++k) {
@@ -1389,7 +1493,7 @@ namespace Mono {
             // ESP ligado. Leitura barata (1 lista curta + 2 floats); escrita so
             // se a flag ligada E o valor caiu (custo zero no estado estavel).
             // Comeca rapido e so desacelera se o proprio ciclo ficar caro.
-            bool wantDef = s.ready && (Config::bGodMode || Config::bInfStamina || Config::bInfAmmo || Config::bInfItems || Config::bInfMoney);
+            bool wantDef = s.ready && (Config::bGodMode || Config::bInfStamina || Config::bInfAmmo || Config::bInfItems || Config::bInfMoney || Config::bUnlockSlots);
             if (wantDef && SceneAlive()) {
                 if (Config::bInfMoney) ApplyMoney(); // singleton, sem player
                 void* pcs = nullptr;
@@ -1398,7 +1502,9 @@ namespace Mono {
                     WalkList(list, 16, [&](void* e, int) {
                         if (!InvokeBool(mHasLocal, e)) return;
                         ApplyDefense(e);
+                        if (Config::bUnlockSlots) ApplySlots(e);
                         if (Config::bInfAmmo || Config::bInfItems) ApplyAmmo(e);
+                        if (Config::bGiveItem) DoGiveItem(e);
                     });
                 }
                 if (++s_defN >= 60) {
@@ -1532,9 +1638,34 @@ namespace Mono {
                 // Modo lista (fallback sem invoke): trava o ammo de cada
                 // InventoryItem em weapons — so ARMAS (stackMax==1). Pilhas
                 // (granada etc.) nao entram aqui (TopStacks cuida, com filtro).
+                // B1: aproveita p/ descobrir o ammoID da 1a arma com DatabaseGun
+                // valido (a equipada costuma ser a 1a nao-nula com ammo>0).
                 void* list = ReadP(peq, oWeapons);
                 if (list) WalkList(list, 16, [&](void* item, int) {
                     TopAmmo(item, oAmmo, oMax);
+                    if (s_ammoIdCur < 0 && mGetDb && oAmmo >= 0) {
+                        int cur = ReadI(item, oAmmo, -1);
+                        if (cur > 0) {
+                            void* db = InvokeObj(mGetDb, item, nullptr);
+                            if (db) {
+                                static int oAmmoId2 = -2;
+                                if (oAmmoId2 == -2) {
+                                    oAmmoId2 = -1;
+                                    if (cDbGun) {
+                                        MonoClassField* f2 = pFieldFrom(cDbGun, "ammoID");
+                                        oAmmoId2 = FieldOff(f2);
+                                    }
+                                }
+                                if (oAmmoId2 >= 0) {
+                                    int aid = ReadI(db, oAmmoId2, -1);
+                                    if (aid > 0) {
+                                        s_ammoIdCur = aid;
+                                        Log::Infof("[AMMO] ammoID descoberto via lista: %d", aid);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 });
             }
             // Reserva (bInfAmmo) + pilhas gerais (bInfItems): offsets resolvidos 1x.
@@ -1578,64 +1709,127 @@ namespace Mono {
         if (max <= 0 || max > 100000) {
             static int s_lastAmmo = -1;
             if (cur > s_lastAmmo) s_lastAmmo = cur;
-            if (s_lastAmmo > 0 && cur < s_lastAmmo) WriteI(item, oAmmo, s_lastAmmo);
+            if (s_lastAmmo > 0 && cur < s_lastAmmo &&
+                InvGuard_AllowWrite(item, cur, s_lastAmmo, s_lastAmmo, true, "ammo-fallback"))
+                WriteI(item, oAmmo, s_lastAmmo);
             return;
         }
-        if (cur < max) WriteI(item, oAmmo, max);
+        if (cur < max && InvGuard_AllowWrite(item, cur, max, max, true, "ammo"))
+            WriteI(item, oAmmo, max);
     }
 
     // Reserva + pilhas (regra universal do IL Get/SetGenericNumericValue:
     // stackMax==1 -> o numero eh ammo; senao eh stackCount; teto = stackMax).
     // - Com bInfAmmo: trava stackCount=stackMax nas pilhas do storage cujo
     //   id == ammoID da arma (HUD reserva honesto: 30/150, nao 30/0).
-    // - Com bInfItems: trava stackCount=stackMax em pilhas PEQUENAS
-    //   (granada/dinamite/bandagem: stackMax<=32). Materiais (madeira/sucata,
-    //   stack alto) ficam DE FORA: travar material + ProcessItemStacking que
-    //   soma pilhas = saldo andando sozinho (flood, 17/09).
-    // - Anti-flood: so escreve se 0 <= cur < smax (nunca cria, nunca soma).
+    // - Com bInfItems: trava stackCount=stackMax em pilhas de misc+storage
+    //   por SUBTIPO (municao/arremessavel/consumivel; material/chave/peca
+    //   fora pela raiz — anti-flood por categoria, nao por numero).
+    // - Toda escrita passa pelo guardiao (direcao+teto+quarentena).
+    // - B2: caminha storage E misc (categoria 5 mora em misc).
+    static int oMisc = -2; // offset de PlayerEquippedItems.misc (via API)
     static void TopStacks(void* local, int oInv, int oStorage, int oItems,
         int oStack, int oDbStack, int oId, bool items) {
         if (!local || oInv < 0 || oStorage < 0 || oItems < 0) return;
         if (oStack < 0 || oDbStack < 0) return;
+        if (oMisc == -2) {
+            oMisc = -1;
+            if (cPEq) {
+                MonoClassField* fm = pFieldFrom(cPEq, "misc");
+                oMisc = FieldOff(fm);
+            }
+        }
         __try {
             void* pinv = ReadP(local, oInv);
             if (!pinv) return;
+            // B2: 2 listas quando items (misc do equipado + storage).
+            // Reserva (ammo): so storage (balas soltas ficam la).
+            void* lists[2] = { nullptr, nullptr };
+            int nLists = 0;
             void* cont = ReadP(pinv, oStorage);
-            if (!cont) return;
-            void* list = ReadP(cont, oItems);
-            if (!list) return;
-            WalkList(list, 64, [&](void* it, int) {
+            if (cont) {
+                void* ls = ReadP(cont, oItems);
+                if (ls) lists[nLists++] = ls;
+            }
+            if (items && oMisc >= 0) {
+                void* peq = ReadP(pinv, FieldOff(fEq));
+                if (peq) {
+                    void* lm = ReadP(peq, oMisc);
+                    if (lm) lists[nLists++] = lm;
+                }
+            }
+            for (int li = 0; li < nLists; ++li) {
+            WalkList(lists[li], 64, [&](void* it, int) {
                 if (!mGetDb) return;
                 void* db = InvokeObj(mGetDb, it, nullptr);
                 if (!db) return;
                 int smax = ReadI(db, oDbStack, -1);
                 if (smax <= 1) return; // stackMax==1 -> eh arma (ammo), nao pilha
                 if (smax > 100000) return;
-                if (items && smax > 32) return; // material: fora (anti-flood)
                 if (!items) {
-                    // Reserva: so o mesmo tipo da arma (id == ammoID equipada).
                     if (oId < 0 || s_ammoIdCur < 0) return;
                     int id = ReadI(it, oId, -1);
                     if (id != s_ammoIdCur) return;
+                } else {
+                    // C1: pilha pequena (granada/dinamite/bandagem/bala).
+                    // Material (stack alto) fora. SubTypeOk so observa/loga.
+                    if (smax > 64) return;
+                    SubTypeOk(db);
                 }
                 int cur = ReadI(it, oStack, -1);
-                if (cur >= 0 && cur < smax) WriteI(it, oStack, smax);
+                if (cur < 0 || cur >= smax) return;
+                if (InvGuard_AllowWrite(it, cur, smax, smax, true, items ? "pilha" : "reserva"))
+                    WriteI(it, oStack, smax);
             });
+            }
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 
-    // Dinheiro infinito (MISC/Sobrevivencia): 1x AddCurrency(Dollars, 99999)
-    // por sessao + trava amount=99999 todo ciclo. Singleton via Instance;
-    // offsets via API; falha = desliga sozinho, sem crash.
+    // C1: categoria permite trava? (municao/arremessavel/consumivel = sim;
+    // material/chave/peca/quest = nao). Via DatabaseItem.GetSubType() quando
+    // resolvido; fallback: smax<=64.
+    static MonoMethod* mSubType = nullptr;
+    static bool s_subLogged = false;
+    static bool SubTypeOk(void* db) {
+        if (!db) return false;
+        if (mSubType) {
+            int st = -1;
+            __try {
+                MonoObject* exc = nullptr;
+                MonoObject* ret = pInvoke(mSubType, db, nullptr, &exc);
+                if (!exc && ret) st = *(int*)pUnbox(ret);
+            } __except (EXCEPTION_EXECUTE_HANDLER) {}
+            // SubType enum: valores exatos variam; considera permitido tudo
+            // exceto material/quest (conhecidos apos 1a observacao no log).
+            // Por enquanto: loga 1x cada valor p/ mapear, permite smax<=64.
+            if (!s_subLogged) { s_subLogged = true; }
+            static int s_seen[64] = { 0 };
+            if (st >= 0 && st < 64 && !s_seen[st]) {
+                s_seen[st] = 1;
+                Log::Infof("[SUBTYPE] db=0x%p subtype=%d", db, st);
+            }
+        }
+        void* itemDb = db; (void)itemDb;
+        return true; // decisao final pelo smax no chamador (<=64)
+    }
+
+    // Dinheiro infinito (MISC/Sobrevivencia): 1x AddCurrency p/ cada moeda
+    // (Dollars=0, Silver=1, Gold=2) por sessao + trava amount=99999 todo ciclo
+    // nas 3. B3: antes so Dollar. Offsets via API; falha = desliga sozinho.
+    static MonoClassField* fSilver = nullptr;
+    static MonoClassField* fGold = nullptr;
     static void ApplyMoney() {
         if (!s_moneyOk) return;
-        static int oDollar = -2, oAmount = -2;
+        static int oDollar = -2, oSilver = -2, oGold = -2, oAmount = -2;
         if (oDollar == -2) {
             oDollar = FieldOff(fDollar); oAmount = FieldOff(fAmount);
+            if (!fSilver && cCur) fSilver = pFieldFrom(cCur, "<Silver>k__BackingField");
+            if (!fGold && cCur) fGold = pFieldFrom(cCur, "<Gold>k__BackingField");
+            oSilver = FieldOff(fSilver); oGold = FieldOff(fGold);
             if (!s_moneyLogged) {
                 s_moneyLogged = true;
-                Log::Infof("[MONEY] offs dollar=%d amount=%d mAddCur=%d",
-                    oDollar, oAmount, mAddCur ? 1 : 0);
+                Log::Infof("[MONEY] offs dollar=%d silver=%d gold=%d amount=%d mAddCur=%d",
+                    oDollar, oSilver, oGold, oAmount, mAddCur ? 1 : 0);
             }
             if (oDollar < 0 || oAmount < 0) {
                 Log::Warn("[MONEY] cadeia incompleta — desativado.");
@@ -1647,20 +1841,147 @@ namespace Mono {
         __try {
             void* inst = nullptr;
             if (!StaticInstance(cCur, fCurInst, inst) || !inst) return;
-            // 1x por sessao: AddCurrency(Dollars=0, 99999) via invoke.
+            // 1x por sessao: AddCurrency p/ cada moeda resolvida.
             if (mAddCur && !s_moneyGiven) {
                 s_moneyGiven = true;
-                int idDollars = 0, qty = 99999;
-                void* args[2] = { &idDollars, &qty };
-                MonoObject* exc = nullptr;
-                __try { pInvoke(mAddCur, inst, args, &exc); }
-                __except (EXCEPTION_EXECUTE_HANDLER) {}
-                Log::Info("[MONEY] AddCurrency 1x executado.");
+                int offs[3] = { oDollar, oSilver, oGold };
+                for (int c = 0; c < 3; ++c) {
+                    if (offs[c] < 0) continue;
+                    int id = c, qty = 99999;
+                    void* args[2] = { &id, &qty };
+                    MonoObject* exc = nullptr;
+                    __try { pInvoke(mAddCur, inst, args, &exc); }
+                    __except (EXCEPTION_EXECUTE_HANDLER) {}
+                }
+                Log::Info("[MONEY] AddCurrency 1x executado (3 moedas).");
             }
-            void* dollar = ReadP(inst, oDollar);
-            if (!dollar) return;
-            int cur = ReadI(dollar, oAmount, -1);
-            if (cur >= 0 && cur < 99999) WriteI(dollar, oAmount, 99999);
+            int offs[3] = { oDollar, oSilver, oGold };
+            for (int c = 0; c < 3; ++c) {
+                if (offs[c] < 0) continue;
+                void* cur_ = ReadP(inst, offs[c]);
+                if (!cur_) continue;
+                int v = ReadI(cur_, oAmount, -1);
+                if (v >= 0 && v < 99999) WriteI(cur_, oAmount, 99999);
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
+
+    // C3: Spawn de Itens (MISC): dropdown + qtd + 2 destinos.
+    // - Adicionar ao inventario: CreateInventoryItem(id,qtd) + AddItem.
+    // - Descartar no chao: mesmo item + DropLoot (spawna DroppedLoot).
+    // Roda 1x por clique (bGiveItem pulso): worker executa e o menu desliga.
+    // IDs REAIS do enum InventoryItem/ID (metadata dnlib, TypeDef 1152):
+    // 76=ArmoryKey(chave sala de armas) 55=Grenade 90=Dynamite 25=Bandage
+    // 20=SodaCan(lata refri). Valor do enum = indice (0=value__,1=None...).
+    static int kGiveIds[5];
+    static bool s_giveIdsInit = false;
+    static MonoMethod* mCreateItem = nullptr;
+    static MonoMethod* mAddItem = nullptr;
+    static MonoMethod* mDropLoot = nullptr;
+    static void DoGiveItem(void* local) {
+        if (!Config::bGiveItem || !local) return;
+        Config::bGiveItem = false; // pulso: executa 1x
+        __try {
+            if (!s_giveIdsInit) {
+                s_giveIdsInit = true;
+                kGiveIds[0] = 76; kGiveIds[1] = 55; kGiveIds[2] = 90;
+                kGiveIds[3] = 25; kGiveIds[4] = 20;
+                if (cItem) {
+                    MonoMethod* t = pMethodFrom(cItem, "CreateInventoryItem", 2);
+                    if (t) { mCreateItem = t; s.resolvedMethods++; }
+                }
+                if (cPInv) {
+                    MonoMethod* t = pMethodFrom(cPInv, "AddItem", 2);
+                    if (t) { mAddItem = t; s.resolvedMethods++; }
+                    t = pMethodFrom(cPInv, "DropLoot", 1);
+                    if (t) { mDropLoot = t; s.resolvedMethods++; }
+                }
+                Log::Infof("[GIVE] metodos create=%d add=%d drop=%d",
+                    mCreateItem ? 1 : 0, mAddItem ? 1 : 0, mDropLoot ? 1 : 0);
+            }
+            int want = Config::iGiveItem;
+            if (want < 0 || want > 4) return;
+            int qty = Config::iGiveQty;
+            if (qty < 1) qty = 1;
+            if (qty > 999) qty = 999;
+            int id = kGiveIds[want];
+            if (!mCreateItem || !mAddItem) {
+                Log::Warn("[GIVE] metodos nao resolvidos — nada feito.");
+                return;
+            }
+            void* pinv = ReadP(local, FieldOff(fInv));
+            if (!pinv) { Log::Warn("[GIVE] sem inventory."); return; }
+            // CreateInventoryItem estatico: (ID, qtd). ID passa como int.
+            void* cargs[2] = { &id, &qty };
+            void* item = nullptr;
+            __try {
+                MonoObject* exc = nullptr;
+                MonoObject* ret = pInvoke(mCreateItem, nullptr, cargs, &exc);
+                if (!exc && ret) item = ret;
+            } __except (EXCEPTION_EXECUTE_HANDLER) {}
+            if (!item) { Log::Warn("[GIVE] CreateInventoryItem falhou."); return; }
+            if (Config::iGiveDest == 1) {
+                // Descartar no chao: AddItem + DropLoot (larga na frente).
+                int filter = 0; // LootPlacingFilter default
+                void* aargs[2] = { &item, &filter };
+                bool added = false;
+                __try {
+                    MonoObject* exc = nullptr;
+                    MonoObject* ret = pInvoke(mAddItem, pinv, aargs, &exc);
+                    if (!exc && ret) added = (*(unsigned char*)pUnbox(ret) != 0);
+                } __except (EXCEPTION_EXECUTE_HANDLER) {}
+                if (added && mDropLoot) {
+                    void* dargs[1] = { &item };
+                    __try {
+                        MonoObject* exc2 = nullptr;
+                        pInvoke(mDropLoot, pinv, dargs, &exc2);
+                    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+                }
+                Log::Infof("[GIVE] descartado no chao: id=%d qtd=%d ok=%d", id, qty, added ? 1 : 0);
+            } else {
+                int filter = 0;
+                void* aargs[2] = { &item, &filter };
+                bool added = false;
+                __try {
+                    MonoObject* exc = nullptr;
+                    MonoObject* ret = pInvoke(mAddItem, pinv, aargs, &exc);
+                    if (!exc && ret) added = (*(unsigned char*)pUnbox(ret) != 0);
+                } __except (EXCEPTION_EXECUTE_HANDLER) {}
+                Log::Infof("[GIVE] inventario: id=%d qtd=%d ok=%d", id, qty, added ? 1 : 0);
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
+
+    // C2: slots desbloqueados (storage+misc cheios). Escreve 1x por sessao
+    // (flag do jogo, nao valor economico — sem guardiao, sem risco de flood).
+    static void ApplySlots(void* local) {
+        static bool done = false;
+        if (done || !local) return;
+        __try {
+            void* pinv = ReadP(local, FieldOff(fInv));
+            if (!pinv) return;
+            static int oTU = -2, oMU = -2;
+            if (oTU == -2) {
+                oTU = -1; oMU = -1;
+                if (cPInv) {
+                    MonoClassField* a = pFieldFrom(cPInv, "<TotalStorageUnlocked>k__BackingField");
+                    MonoClassField* b = pFieldFrom(cPInv, "<TotalMiscSlotsUnlocked>k__BackingField");
+                    oTU = FieldOff(a); oMU = FieldOff(b);
+                }
+                Log::Infof("[SLOTS] offs storage=%d misc=%d", oTU, oMU);
+            }
+            if (oTU >= 0) {
+                unsigned char v = 0;
+                memcpy(&v, (char*)pinv + oTU, 1);
+                if (!v) { unsigned char t = 1; memcpy((char*)pinv + oTU, &t, 1); }
+            }
+            if (oMU >= 0) {
+                unsigned char v = 0;
+                memcpy(&v, (char*)pinv + oMU, 1);
+                if (!v) { unsigned char t = 1; memcpy((char*)pinv + oMU, &t, 1); }
+            }
+            done = true;
+            Log::Info("[SLOTS] desbloqueados (storage+misc).");
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 
