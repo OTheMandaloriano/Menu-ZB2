@@ -1945,10 +1945,15 @@ namespace Mono {
                 if (smax <= 1) return; // stackMax==1 -> eh arma (ammo), nao pilha
                 if (smax > 100000) return;
                 if (!items) {
-                    // Reserva: equipada OU qualquer ammoID conhecido (multi-tipo).
+                    // Reserva como CATEGORIA (igual ao Items): toda pilha de
+                    // bala (ammoID 10-13/108, faixa do enum) trava, em qualquer
+                    // modo (single/host/cliente). Sem depender de ammoID
+                    // conhecido: lootou 1 bala 1x, vira pilha infinita.
                     if (oId < 0) return;
                     int id = ReadI(it, oId, -1);
-                    if (id != s_ammoIdCur && !AmmoIdKnown(id)) return;
+                    bool isBullet = (id >= 10 && id <= 13) || id == 108;
+                    if (!isBullet) return;
+                    AmmoIdAdd(id); // registra p/ pente extra + telemetria
                     // Conta por tipo (cria 1 pilha se o tipo zerou).
                     for (int k = 0; k < 8; ++k) {
                         if (s_ammoIds[k] == id || (s_ammoIdCur == id && k == 0)) {
@@ -2069,8 +2074,10 @@ namespace Mono {
     // C2: slots desbloqueados (storage+misc cheios). Escreve 1x por sessao
     // (flag do jogo, nao valor economico — sem guardiao, sem risco de flood).
     static void ApplySlots(void* local) {
-        static bool done = false;
-        if (done || !local) return;
+        // Roda a cada ativacao (borda de subida) + reforco todo ciclo (o jogo
+        // pode re-travar ao trocar de cena). Sem 'done' permanente: barato
+        // (2 bytes) e visivel no debug ([SLOTS] mostra estado atual).
+        if (!local) return;
         __try {
             void* pinv = ReadP(local, FieldOff(fInv));
             if (!pinv) return;
@@ -2083,6 +2090,8 @@ namespace Mono {
                     oTU = FieldOff(a); oMU = FieldOff(b);
                 }
                 Log::Infof("[SLOTS] offs storage=%d misc=%d", oTU, oMU);
+                s.slotsOk = (oTU >= 0 && oMU >= 0);
+                if (!s.slotsOk) Log::Warn("[SLOTS] campos nao resolveram — slots intactos.");
             }
             if (oTU >= 0) {
                 unsigned char v = 0;
@@ -2094,8 +2103,7 @@ namespace Mono {
                 memcpy(&v, (char*)pinv + oMU, 1);
                 if (!v) { unsigned char t = 1; memcpy((char*)pinv + oMU, &t, 1); }
             }
-            done = true;
-            Log::Info("[SLOTS] desbloqueados (storage+misc).");
+            s.slotsOn = true;
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 

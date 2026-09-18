@@ -833,9 +833,10 @@ namespace GUI {
             if (st.ready) {
                 const char* modo = st.coopMode == 2 ? "HOST" : st.coopMode == 1 ? "CLIENTE" : "SINGLE";
                 const char* ammoSt = Config::bInfAmmo ? (st.ammoOk ? "AMMO:ON" : "AMMO:OFF") : "AMMO:-";
-                _snprintf_s(b, _TRUNCATE, "LOCAL HP %.0f | STAM %.0f | ALIADO %.0f | ZUMBIS %d (hp0 %.0f) | DAY %.2fh | ESP %d %.1fms | %s | %s wr=%d | %.0f fps",
+                const char* slotSt = Config::bUnlockSlots ? (st.slotsOk ? "SLOTS:ON" : "SLOTS:OFF") : "SLOTS:-";
+                _snprintf_s(b, _TRUNCATE, "LOCAL HP %.0f | STAM %.0f | ALIADO %.0f | ZUMBIS %d (hp0 %.0f) | DAY %.2fh | ESP %d %.1fms | %s | %s wr=%d | %s | %.0f fps",
                     (double)st.localHp, (double)st.localStam, (double)st.allyHp,
-                    st.zombies, (double)st.zHp0, (double)st.dayTime, st.espShown, (double)st.espMs, modo, ammoSt, st.ammoWrites, (double)io.Framerate);
+                    st.zombies, (double)st.zHp0, (double)st.dayTime, st.espShown, (double)st.espMs, modo, ammoSt, st.ammoWrites, slotSt, (double)io.Framerate);
             }
             else
                 _snprintf_s(b, _TRUNCATE, "MONO aguardando cena... | %.0f fps", (double)io.Framerate);

@@ -61,6 +61,8 @@ namespace Mono {
         int   coopMode = 0;     // 0=single 1=cliente 2=host (debug overlay)
         int   ammoWrites = 0;   // escritas no pente (0 = trava nao roda)
         bool  ammoOk = true;    // false = cadeia incompleta (AMMO:OFF)
+        bool  slotsOk = true;   // false = campos nao resolveram
+        bool  slotsOn = false;  // true = ApplySlots rodou (SLOTS:ON)
         int   resolvedClasses = 0;
         int   resolvedFields = 0;
         int   resolvedMethods = 0;
