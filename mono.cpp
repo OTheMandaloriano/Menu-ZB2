@@ -167,6 +167,9 @@ namespace Mono {
     static MonoClassField* fId = nullptr;       // InventoryItem.id
     static MonoMethod* mGetEq = nullptr;   // PlayerEquippedItems.GetEquipment(EquipmentIndex)
     static MonoMethod* mGetDb = nullptr;   // InventoryItem.GetDataBaseItem()
+    static MonoMethod* mCreateItem = nullptr; // InventoryItem.CreateInventoryItem(ID,int)
+    static MonoMethod* mAddItem = nullptr;    // PlayerInventory.AddItem(item,filter)
+    static MonoMethod* mDropLoot = nullptr;   // PlayerInventory.DropLoot(item)
     // Dinheiro (Currency singleton: Dollar/Silver/Gold -> CurrencyData.amount).
     static MonoClass* cCur = nullptr;        // Currency
     static MonoClassField* fCurInst = nullptr; // Currency.Instance
@@ -1530,6 +1533,56 @@ namespace Mono {
     static bool s_ammoOk = true;
     static int s_ammoMode = 0; // 0=desconhecido 1=invoke 2=lista
     static int s_ammoIdCur = -1; // ammoID da arma equipada (reserva filtra por ele)
+    static int s_ammoIds[8] = { -1,-1,-1,-1,-1,-1,-1,-1 }; // multi-tipo (troca de arma)
+    static bool AmmoIdKnown(int id) {
+        if (id < 0) return false;
+        for (int k = 0; k < 8; ++k) if (s_ammoIds[k] == id) return true;
+        return false;
+    }
+    static void AmmoIdAdd(int id) {
+        if (id <= 0 || AmmoIdKnown(id)) return;
+        for (int k = 0; k < 8; ++k) {
+            if (s_ammoIds[k] < 0) {
+                s_ammoIds[k] = id;
+                Log::Infof("[AMMO] ammoID +%d (tipo %d)", id, k);
+                break;
+            }
+        }
+    }
+    // Cria 1 pilha cheia do tipo quando zerada (pente extra no limite).
+    // Via CreateInventoryItem(id,stackMax)+AddItem, 1x por tipo por sessao.
+    // Metodos resolvidos no DoGiveItem (mCreateItem/mAddItem); se ainda nulos,
+    // resolve aqui (mesmas classes). Sem chute: sem metodo = sem criacao.
+    static bool s_pileMade[8] = { false,false,false,false,false,false,false,false };
+    static void AmmoEnsurePile(void* pinv, int id, int smax) {
+        if (!pinv || id <= 0 || smax <= 0 || smax > 100000) return;
+        int slot = -1;
+        for (int k = 0; k < 8; ++k) if (s_ammoIds[k] == id) slot = k;
+        if (slot < 0 || s_pileMade[slot]) return;
+        s_pileMade[slot] = true; // tenta 1x (AddItem diz se coube)
+        if (!mCreateItem && cItem) {
+            MonoMethod* t = pMethodFrom(cItem, "CreateInventoryItem", 2);
+            if (t) { mCreateItem = t; s.resolvedMethods++; }
+        }
+        if (!mAddItem && cPInv) {
+            MonoMethod* t = pMethodFrom(cPInv, "AddItem", 2);
+            if (t) { mAddItem = t; s.resolvedMethods++; }
+        }
+        if (!mCreateItem || !mAddItem) { Log::Warn("[AMMO] sem metodos p/ criar pilha."); return; }
+        __try {
+            void* cargs[2] = { &id, &smax };
+            MonoObject* exc = nullptr;
+            MonoObject* ret = pInvoke(mCreateItem, nullptr, cargs, &exc);
+            if (exc || !ret) { Log::Warn("[AMMO] CreateInventoryItem falhou."); return; }
+            void* item = ret;
+            int filter = 0;
+            void* aargs[2] = { &item, &filter };
+            MonoObject* exc2 = nullptr;
+            MonoObject* ret2 = pInvoke(mAddItem, pinv, aargs, &exc2);
+            bool ok = (!exc2 && ret2 && *(unsigned char*)pUnbox(ret2) != 0);
+            Log::Infof("[AMMO] pilha criada: id=%d qtd=%d ok=%d", id, smax, ok ? 1 : 0);
+        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
     static void ApplyAmmo(void* local) {
         if (!local || !s_ammoOk) return;
         // Resolve preguiçoso dos offsets (1x; API pode indisponivel no Unity 6).
@@ -1596,30 +1649,35 @@ namespace Mono {
                 // Modo lista (fallback sem invoke): trava o ammo de cada
                 // InventoryItem em weapons — so ARMAS (stackMax==1). Pilhas
                 // (granada etc.) nao entram aqui (TopStacks cuida, com filtro).
-                // B1: aproveita p/ descobrir o ammoID da 1a arma com DatabaseGun
-                // valido (a equipada costuma ser a 1a nao-nula com ammo>0).
+                // ammoID: da arma EQUIPADA via weapons[sel] (arms.selectedItem),
+                // nao da 1a da lista (era SniperAmmo da pistola guardada).
+                // Fallback: acumula TODOS os ammoIDs das armas (multi-tipo).
                 void* list = ReadP(peq, oWeapons);
-                if (list) WalkList(list, 16, [&](void* item, int) {
+                static int oAmmoId2 = -2;
+                if (oAmmoId2 == -2) {
+                    oAmmoId2 = -1;
+                    if (cDbGun) {
+                        MonoClassField* f2 = pFieldFrom(cDbGun, "ammoID");
+                        oAmmoId2 = FieldOff(f2);
+                    }
+                }
+                // Tenta a equipada primeiro (weapons[sel]).
+                void* armsL = (oArms >= 0) ? ReadP(local, oArms) : nullptr;
+                int selL = armsL ? ReadI(armsL, oSel, -1) : -1;
+                if (list) WalkList(list, 16, [&](void* item, int idx) {
                     TopAmmo(item, oAmmo, oMax);
-                    if (s_ammoIdCur < 0 && mGetDb && oAmmo >= 0) {
+                    if (mGetDb && oAmmoId2 >= 0 && oAmmo >= 0) {
                         int cur = ReadI(item, oAmmo, -1);
                         if (cur > 0) {
                             void* db = InvokeObj(mGetDb, item, nullptr);
                             if (db) {
-                                static int oAmmoId2 = -2;
-                                if (oAmmoId2 == -2) {
-                                    oAmmoId2 = -1;
-                                    if (cDbGun) {
-                                        MonoClassField* f2 = pFieldFrom(cDbGun, "ammoID");
-                                        oAmmoId2 = FieldOff(f2);
-                                    }
-                                }
-                                if (oAmmoId2 >= 0) {
-                                    int aid = ReadI(db, oAmmoId2, -1);
-                                    if (aid > 0) {
+                                int aid = ReadI(db, oAmmoId2, -1);
+                                if (aid > 0) {
+                                    if (idx == selL && s_ammoIdCur != aid) {
                                         s_ammoIdCur = aid;
-                                        Log::Infof("[AMMO] ammoID descoberto via lista: %d", aid);
+                                        Log::Infof("[AMMO] ammoID da equipada: %d (slot %d)", aid, idx);
                                     }
+                                    AmmoIdAdd(aid);
                                 }
                             }
                         }
@@ -1714,6 +1772,10 @@ namespace Mono {
                     if (lm) lists[nLists++] = lm;
                 }
             }
+            // Reserva: conta pilhas por tipo (p/ criar 1 se zerada).
+            static int s_pileCount[8] = { 0,0,0,0,0,0,0,0 };
+            static int s_pileSmax[8] = { 0,0,0,0,0,0,0,0 };
+            if (!items) for (int k = 0; k < 8; ++k) { s_pileCount[k] = 0; s_pileSmax[k] = 0; }
             for (int li = 0; li < nLists; ++li) {
             WalkList(lists[li], 64, [&](void* it, int) {
                 if (!mGetDb) return;
@@ -1723,9 +1785,18 @@ namespace Mono {
                 if (smax <= 1) return; // stackMax==1 -> eh arma (ammo), nao pilha
                 if (smax > 100000) return;
                 if (!items) {
-                    if (oId < 0 || s_ammoIdCur < 0) return;
+                    // Reserva: equipada OU qualquer ammoID conhecido (multi-tipo).
+                    if (oId < 0) return;
                     int id = ReadI(it, oId, -1);
-                    if (id != s_ammoIdCur) return;
+                    if (id != s_ammoIdCur && !AmmoIdKnown(id)) return;
+                    // Conta por tipo (cria 1 pilha se o tipo zerou).
+                    for (int k = 0; k < 8; ++k) {
+                        if (s_ammoIds[k] == id || (s_ammoIdCur == id && k == 0)) {
+                            s_pileCount[k]++;
+                            if (smax > s_pileSmax[k]) s_pileSmax[k] = smax;
+                            break;
+                        }
+                    }
                 } else {
                     // C1: pilha pequena (granada/dinamite/bandagem/bala).
                     // Material (stack alto) fora. SubTypeOk so observa/loga.
@@ -1736,6 +1807,21 @@ namespace Mono {
                 if (cur < 0 || cur >= smax) return;
                 WriteI(it, oStack, smax);
             });
+            }
+            // Pente extra: tipo conhecido SEM pilha = cria 1 cheia (1x/tipo).
+            // smax do tipo: maior smax ja visto p/ ele; se nunca visto, usa o
+            // smax da 1a pilha de QUALQUER bala (mesma ordem de grandeza) —
+            // nao: sem chute. Guarda smax por tipo quando ve pilha.
+            if (!items) {
+                void* pinv2 = ReadP(local, oInv);
+                // smax por tipo: carrega do historico estatico.
+                for (int k = 0; k < 8; ++k) {
+                    int id = (k == 0 && s_ammoIdCur > 0) ? s_ammoIdCur : s_ammoIds[k];
+                    if (id > 0 && s_pileCount[k] == 0 && s_pileSmax[k] > 0)
+                        AmmoEnsurePile(pinv2, id, s_pileSmax[k]);
+                }
+                // Lembra smax por tipo p/ sessoes sem pilha: salva ao ver.
+                // (s_pileSmax ja guarda o maior visto por slot.)
             }
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
@@ -1830,9 +1916,6 @@ namespace Mono {
     // 20=SodaCan(lata refri). Valor do enum = indice (0=value__,1=None...).
     static int kGiveIds[5];
     static bool s_giveIdsInit = false;
-    static MonoMethod* mCreateItem = nullptr;
-    static MonoMethod* mAddItem = nullptr;
-    static MonoMethod* mDropLoot = nullptr;
     static void DoGiveItem(void* local) {
         if (!Config::bGiveItem || !local) return;
         Config::bGiveItem = false; // pulso: executa 1x
