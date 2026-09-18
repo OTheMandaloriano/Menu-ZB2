@@ -358,53 +358,11 @@ namespace Mono {
         return v;
     }
 
-    // ---- Guardiao Anti-Flood Inventario (A1-A5) ----
-    // Toda escrita em item passa por aqui ANTES do WriteI. Regras:
-    // A1 direcao unica: so autoriza repor QUEDA (cur < last). Se subiu
-    //   sozinho (jogo somou/juntou loot), atualiza a referencia e nega.
-    // A2 teto: novo > teto (stackMax/maxAmmo) = negado sempre.
-    // A3 material intocavel: quem chama ja filtra por SubType; o guardiao
-    //   recebe allowCat=false p/ material/chave/quest e nega.
-    // A4 quarentena: 3+ mudancas em 5s = 30s sem escrita + log.
-    // A5 auditoria: log [INV] 1x por negacao (item, regra).
-    struct InvHist { void* item; int last; long long win0; int nWin; long long ban; };
-    static InvHist s_invHist[32];
-    static long long InvNow() {
-        LARGE_INTEGER t, f; QueryPerformanceCounter(&t); QueryPerformanceFrequency(&f);
-        return t.QuadPart * 1000000LL / f.QuadPart;
-    }
-    static bool InvGuard_AllowWrite(void* item, int cur, int want, int teto, bool allowCat, const char* what) {
-        if (!Config::bAntiFlood) return true; // guardiao desligado = assume o risco
-        if (!item) return false;
-        if (!allowCat) return false; // A3 silencioso (categoria fora; log seria spam)
-        if (want > teto || teto <= 0 || teto > 100000) return false; // A2
-        long long now = InvNow();
-        InvHist* h = nullptr;
-        for (int i = 0; i < 32; ++i) {
-            if (s_invHist[i].item == item) { h = &s_invHist[i]; break; }
-            if (!h && !s_invHist[i].item) h = &s_invHist[i];
-        }
-        if (!h) h = &s_invHist[0];
-        if (h->item != item) { h->item = item; h->last = cur; h->win0 = now; h->nWin = 0; h->ban = 0; }
-        if (now < h->ban) return false; // A4 quarentena ativa
-        if (cur > h->last) {
-            // Subiu sozinho: atualiza referencia, nega escrita.
-            h->last = cur;
-            h->nWin = 0; h->win0 = now;
-            return false;
-        }
-        // Oscilacao: conta mudancas na janela de 5s.
-        if (now - h->win0 > 5000000LL) { h->win0 = now; h->nWin = 0; }
-        if (++h->nWin >= 3 && cur != h->last) {
-            h->ban = now + 30000000LL;
-            h->nWin = 0;
-            Log::Infof("[FLOOD-GUARD] item=0x%p quarentena 30s (%s).", item, what ? what : "?");
-            return false;
-        }
-        if (cur >= want) { h->last = cur; return false; } // nada a repor
-        h->last = want; // vai escrever: referencia = novo valor
-        return true;
-    }
+    // REMOVIDO 17/09 (pedido do operador): guardiao Anti-Flood.
+    // Motivo: a quarentena bania o proprio infinito (escrevia 3x e se
+    // auto-bloqueava 30s). Volta o modelo simples: trava direta no teto
+    // (maxAmmo/stackMax lidos do item), sem historico, sem quarentena.
+    // Repeticao eh esperada (todo ciclo repoe) e nao eh problema.
 
     // Offset de campo via API do Mono (layout decidido em runtime; nunca
     // hardcode). Retorna bytes do inicio do objeto, ou -1 se indisponivel.
@@ -1709,13 +1667,11 @@ namespace Mono {
         if (max <= 0 || max > 100000) {
             static int s_lastAmmo = -1;
             if (cur > s_lastAmmo) s_lastAmmo = cur;
-            if (s_lastAmmo > 0 && cur < s_lastAmmo &&
-                InvGuard_AllowWrite(item, cur, s_lastAmmo, s_lastAmmo, true, "ammo-fallback"))
+            if (s_lastAmmo > 0 && cur < s_lastAmmo)
                 WriteI(item, oAmmo, s_lastAmmo);
             return;
         }
-        if (cur < max && InvGuard_AllowWrite(item, cur, max, max, true, "ammo"))
-            WriteI(item, oAmmo, max);
+        if (cur < max) WriteI(item, oAmmo, max);
     }
 
     // Reserva + pilhas (regra universal do IL Get/SetGenericNumericValue:
@@ -1778,8 +1734,7 @@ namespace Mono {
                 }
                 int cur = ReadI(it, oStack, -1);
                 if (cur < 0 || cur >= smax) return;
-                if (InvGuard_AllowWrite(it, cur, smax, smax, true, items ? "pilha" : "reserva"))
-                    WriteI(it, oStack, smax);
+                WriteI(it, oStack, smax);
             });
             }
         } __except (EXCEPTION_EXECUTE_HANDLER) {}

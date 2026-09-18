@@ -23,7 +23,7 @@ namespace Config {
     extern bool  bInfItems;       // trava stackCount=stackMax em pilhas por SubType
                                  // (municao/arremessavel/consumivel; resto fora)
     extern bool  bInfMoney;       // dinheiro infinito (3 moedas em 99999)
-    extern bool  bAntiFlood;      // guardiao do inventario (default ON)
+    // REMOVIDO 17/09: bAntiFlood (guardiao bania o proprio infinito).
     extern bool  bUnlockSlots;    // storage+misc desbloqueados (1x por sessao)
     // Spawn de Itens (MISC): pulso 1x por clique (worker executa e desliga).
     extern bool  bGiveItem;       // pulso: executar pedido

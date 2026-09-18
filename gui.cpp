@@ -33,7 +33,7 @@ namespace Config {
     bool  bInfStamina = false;   // default OFF
     bool  bInfItems = false;     // default OFF (trava pilhas por SubType)
     bool  bInfMoney = false;     // default OFF (3 moedas 99999)
-    bool  bAntiFlood = true;     // default ON (guardiao do inventario)
+    // REMOVIDO 17/09: bAntiFlood (guardiao bania o proprio infinito).
     bool  bUnlockSlots = false;  // default OFF (desbloqueia 1x)
     bool  bGiveItem = false;     // pulso (worker executa e desliga)
     int   iGiveItem = 0;         // 0=Chave arma
@@ -642,7 +642,7 @@ namespace GUI {
 #define JV(v) fprintf(f, "\"" #v "\":[%f,%f,%f,%f],\n", (double)(v)[0], (double)(v)[1], (double)(v)[2], (double)(v)[3])
 #define JS(v) fprintf(f, "\"" #v "\":\"%s\",\n", ConfigJson::Escape(v).c_str())
         JB(bMenuOpen); JI(iMenuKey); JB(bWatermark); JB(bDebugOverlay); JB(bTooltips);
-        JB(bGodMode); JB(bInfStamina); JB(bInfItems); JB(bInfMoney); JB(bAntiFlood); JB(bUnlockSlots); JB(bGiveItem); JI(iGiveItem); JI(iGiveQty); JI(iGiveDest);
+        JB(bGodMode); JB(bInfStamina); JB(bInfItems); JB(bInfMoney); JB(bUnlockSlots); JB(bGiveItem); JI(iGiveItem); JI(iGiveQty); JI(iGiveDest);
         JB(bAimbot); JI(iAimKey); JI(iAimMode); JB(bAutoAim); JB(bSilentAim); JB(bAutoFire);
         JB(bTriggerbot); JI(iAimBone); JI(iAimPriority); JF(fSmoothing);
         JB(bLimitFov); JF(fFovAngle); JB(b360Mode); JB(bDrawFov); JF(fMaxDistance);
@@ -731,7 +731,7 @@ namespace GUI {
 #define LV(v) fields.push_back({ #v, ConfigJson::ColorField, (v) })
 #define LS(v) fields.push_back({ #v, ConfigJson::StringField, (v), sizeof(v) })
         LB(bMenuOpen); LI(iMenuKey); LB(bWatermark); LB(bDebugOverlay); LB(bTooltips);
-        LB(bGodMode); LB(bInfStamina); LB(bInfItems); LB(bInfMoney); LB(bAntiFlood); LB(bUnlockSlots); LB(bGiveItem); LI(iGiveItem); LI(iGiveQty); LI(iGiveDest);
+        LB(bGodMode); LB(bInfStamina); LB(bInfItems); LB(bInfMoney); LB(bUnlockSlots); LB(bGiveItem); LI(iGiveItem); LI(iGiveQty); LI(iGiveDest);
         LB(bAimbot); LI(iAimKey); LI(iAimMode); LB(bAutoAim); LB(bSilentAim); LB(bAutoFire);
         LB(bTriggerbot); LI(iAimBone); LI(iAimPriority); LF(fSmoothing);
         LB(bLimitFov); LF(fFovAngle); LB(b360Mode); LB(bDrawFov); LF(fMaxDistance);
@@ -1216,7 +1216,7 @@ namespace GUI {
                 ImGui::Checkbox("Infinite Ammo (pente+reserva)", &Config::bInfAmmo); Tip("Pente no maxAmmo + reserva do tipo no stackMax.");
                 ImGui::Checkbox("Infinite Items (por categoria)", &Config::bInfItems); Tip("Municao/arremessavel/consumivel no teto (material/chave fora).");
                 ImGui::Checkbox("Infinite Money (3 moedas)", &Config::bInfMoney); Tip("Dolar/prata/ouro em 99999 (compra Loadout I/II/III).");
-                ImGui::Checkbox("Anti-Flood Inventario", &Config::bAntiFlood); Tip("Guardiao: so repoe queda, nunca soma (default ON).");
+                // REMOVIDO 17/09: Anti-Flood (quarentena bania o proprio infinito).
                 ImGui::Checkbox("Desbloquear Slots", &Config::bUnlockSlots); Tip("Storage+misc cheios (1x por sessao).");
                 ImGui::Separator();
                 ImGui::Text("Spawn de Itens");
