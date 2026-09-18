@@ -167,6 +167,7 @@ namespace Mono {
     static MonoClassField* fId = nullptr;       // InventoryItem.id
     static MonoMethod* mGetEq = nullptr;   // PlayerEquippedItems.GetEquipment(EquipmentIndex)
     static MonoMethod* mGetDb = nullptr;   // InventoryItem.GetDataBaseItem()
+    static MonoMethod* mTryReload = nullptr; // PlayerArms.TryStartReload (coop: recarga legitima)
     static MonoMethod* mCreateItem = nullptr; // InventoryItem.CreateInventoryItem(ID,int)
     static MonoMethod* mAddItem = nullptr;    // PlayerInventory.AddItem(item,filter)
     static MonoMethod* mDropLoot = nullptr;   // PlayerInventory.DropLoot(item)
@@ -547,8 +548,14 @@ namespace Mono {
         if (cItem) ResolveMethod(cItem, "InventoryItem", "GetDataBaseItem", 0, mGetDb);
         {
             MonoClass* cArms = nullptr;
-            if (ResolveClass("PlayerArms", cArms))
+            if (ResolveClass("PlayerArms", cArms)) {
                 ResolveField(cArms, "PlayerArms", "selectedItem", fSel);
+                // Coop: recarga automatica legitima (ammo==0 -> ReloadGun).
+                // Fluxo normal do jogo: host aceita, dano conta.
+                MonoMethod* t = pMethodFrom(cArms, "TryStartReload", 0);
+                if (t) { mTryReload = t; s.resolvedMethods++; }
+                else Log::Warn("Metodo nao resolvido: PlayerArms.TryStartReload/0");
+            }
         }
         // Dinheiro: Currency.Instance -> Dollar/Silver/Gold -> amount.
         // AddCurrency(CurrencyID,int) p/ dar 1x; trava amount todo ciclo.
@@ -1644,7 +1651,43 @@ namespace Mono {
             // Coop cliente: pente LIVRE (host valida o dano; travar gera
             // pacote inconsistente e o tiro/dinamite nao conta). So identifica
             // o ammoID (leitura) e garante reserva (abaixo) — fluxo legitimo.
+            // Recarga automatica: ammo==0 -> TryStartReload (fluxo normal do
+            // jogo: PullStoredItems da reserva cheia; host aceita, dano conta).
             bool lockMag = !coop && Config::bInfAmmo;
+            void* armsC = (oArms >= 0) ? ReadP(local, oArms) : nullptr;
+            if (coop && Config::bInfAmmo && armsC && mTryReload && oAmmo >= 0) {
+                // Le o ammo da equipada via weapons[sel] (sem invoke de Get).
+                int selC = ReadI(armsC, oSel, -1);
+                if (selC >= 0 && selC <= 32 && oWeapons >= 0) {
+                    void* listC = ReadP(peq, oWeapons);
+                    if (listC) {
+                        int nC = 0;
+                        __try {
+                            memcpy(&nC, (char*)listC + Off::L_size, sizeof(nC));
+                        } __except (EXCEPTION_EXECUTE_HANDLER) { nC = 0; }
+                        if (selC < nC) {
+                            void* arrC = ReadP(listC, Off::L_items);
+                            void* itemC = nullptr;
+                            __try {
+                                if (arrC) memcpy(&itemC, (char*)arrC + Off::A_data + (size_t)selC * 8, 8);
+                            } __except (EXCEPTION_EXECUTE_HANDLER) {}
+                            if (itemC && ReadI(itemC, oAmmo, -1) == 0) {
+                                // Pente vazio: recarrega pelo fluxo do jogo.
+                                static long long s_lastReload = 0;
+                                long long nowR = PiNow();
+                                if (nowR - s_lastReload > 1000000LL) {
+                                    s_lastReload = nowR;
+                                    __try {
+                                        MonoObject* excR = nullptr;
+                                        pInvoke(mTryReload, armsC, nullptr, &excR);
+                                        Log::Info("[AMMO-COOP] recarga automatica (pente vazio).");
+                                    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             if (s_ammoMode == 1) {
                 void* arms = ReadP(local, oArms);
                 if (!arms) return;
