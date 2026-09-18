@@ -59,6 +59,8 @@ namespace Mono {
         float espMs = 0.0f;    // custo do BuildEsp (diagnostico)
         int   espShown = 0;
         int   coopMode = 0;     // 0=single 1=cliente 2=host (debug overlay)
+        int   ammoWrites = 0;   // escritas no pente (0 = trava nao roda)
+        bool  ammoOk = true;    // false = cadeia incompleta (AMMO:OFF)
         int   resolvedClasses = 0;
         int   resolvedFields = 0;
         int   resolvedMethods = 0;

@@ -1373,6 +1373,8 @@ namespace Mono {
             for (int i = 0; i < s_lastN; ++i) s_lastEnts[i] = tmp[i].ent;
             s_espNBack = s_lastN;
             s.espShown = s_espNBack;
+            extern long s_ammoWritesExt();
+            s.ammoWrites = (int)s_ammoWritesExt();
             for (int i = 0; i < s_espNBack; ++i) s_espBack[i] = tmp[i];
             // Vira o ponteiro: front novo = back cheio (troca atomica de ptr).
             EspEntry* t = s_espFront; s_espFront = s_espBack; s_espBack = t;
@@ -1513,10 +1515,16 @@ namespace Mono {
                         s_lastServerCheck = 0;
                     }
                     if (nPl != s_lastNPl) {
-                        // Modo mudou (entrou/saiu do coop): cena instavel, pausa.
+                        // Modo mudou (entrou/saiu do coop): cena instavel.
+                        // Espera em fatias de 100ms checando SceneAlive (volta
+                        // assim que a cena vive; overlay nao congela 2s e o
+                        // Present segue copiando snapshot velho, sem travar).
                         if (s_lastNPl >= 0) {
-                            Log::Infof("[COOP] transicao %d->%d players: pausa 2s.", s_lastNPl, nPl);
-                            Sleep(2000);
+                            Log::Infof("[COOP] transicao %d->%d players: aguardando cena.", s_lastNPl, nPl);
+                            for (int w = 0; w < 20; ++w) {
+                                Sleep(100);
+                                if (SceneAlive()) break;
+                            }
                         }
                         s_lastNPl = nPl;
                     }
@@ -1601,6 +1609,8 @@ namespace Mono {
     // List<InventoryItem>.weapons de PlayerEquippedItems e trava o ammo de
     // TODOS os itens da lista (custo: 2-4 escritas/ciclo, sem invoke).
     static bool s_ammoOk = true;
+    static long s_ammoWrites = 0; // telemetria: escritas no pente (debug overlay)
+    long s_ammoWritesExt() { return s_ammoWrites; }
     static int s_ammoMode = 0; // 0=desconhecido 1=invoke 2=lista
     static int s_ammoIdCur = -1; // ammoID da arma equipada (reserva filtra por ele)
     static int s_ammoIds[8] = { -1,-1,-1,-1,-1,-1,-1,-1 }; // multi-tipo (troca de arma)
@@ -1692,8 +1702,10 @@ namespace Mono {
             if (oInv < 0 || oEq < 0 || oAmmo < 0 || s_ammoMode == 0) {
                 Log::Warn("[AMMO] cadeia incompleta — municao infinita desativada (sem crash).");
                 s_ammoOk = false;
+                s.ammoOk = false; // debug overlay mostra AMMO:OFF
                 return;
             }
+            s.ammoOk = true;
         }
         if (oInv < 0) return; // ja desativado acima
         __try {
@@ -1868,11 +1880,16 @@ namespace Mono {
         if (max <= 0 || max > 100000) {
             static int s_lastAmmo = -1;
             if (cur > s_lastAmmo) s_lastAmmo = cur;
-            if (s_lastAmmo > 0 && cur < s_lastAmmo)
+            if (s_lastAmmo > 0 && cur < s_lastAmmo) {
                 WriteI(item, oAmmo, s_lastAmmo);
+                s_ammoWrites++;
+            }
             return;
         }
-        if (cur < max) WriteI(item, oAmmo, max);
+        if (cur < max) {
+            WriteI(item, oAmmo, max);
+            s_ammoWrites++;
+        }
     }
 
     // Reserva + pilhas (regra universal do IL Get/SetGenericNumericValue:
