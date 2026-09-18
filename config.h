@@ -25,11 +25,7 @@ namespace Config {
     extern bool  bInfMoney;       // dinheiro infinito (3 moedas em 99999)
     // REMOVIDO 17/09: bAntiFlood (guardiao bania o proprio infinito).
     extern bool  bUnlockSlots;    // storage+misc desbloqueados (1x por sessao)
-    // Spawn de Itens (MISC): pulso 1x por clique (worker executa e desliga).
-    extern bool  bGiveItem;       // pulso: executar pedido
-    extern int   iGiveItem;       // 0=Chave arma 1=Granada 2=Dinamite 3=Bandagem 4=Refri
-    extern int   iGiveQty;        // quantidade (1-999)
-    extern int   iGiveDest;       // 0=inventario 1=chao (Descartar)
+    // REMOVIDO 17/09: Spawn de Itens (bGiveItem/iGiveItem/iGiveQty/iGiveDest).
 
     // ---- PLAYER / Aimbot ----
     extern bool  bAimbot;

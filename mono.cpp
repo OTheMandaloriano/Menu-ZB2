@@ -250,7 +250,7 @@ namespace Mono {
     static DWORD WINAPI EspThread(LPVOID); // forward (definida apos BuildEsp)
     static void ApplyMoney(); // forward (dinheiro infinito, worker)
     static void ApplySlots(void* local); // forward (slots desbloqueados, 1x)
-    static void DoGiveItem(void* local); // forward (spawn de item 1x por clique)
+    // REMOVIDO 17/09: DoGiveItem (spawn de itens).
     static void ApplyDefense(void* local); // forward (defesa rapida, worker)
     static void TopAmmo(void* item, int oAmmo, int oMax); // forward (teto do ammo)
     static void TopStacks(void* local, int oInv, int oStorage, int oItems,
@@ -1465,7 +1465,6 @@ namespace Mono {
                         ApplyDefense(e);
                         if (Config::bUnlockSlots) ApplySlots(e);
                         if (Config::bInfAmmo || Config::bInfItems) ApplyAmmo(e);
-                        if (Config::bGiveItem) DoGiveItem(e);
                     });
                 }
                 if (++s_defN >= 60) {
@@ -1916,88 +1915,9 @@ namespace Mono {
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 
-    // C3: Spawn de Itens (MISC): dropdown + qtd + 2 destinos.
-    // - Adicionar ao inventario: CreateInventoryItem(id,qtd) + AddItem.
-    // - Descartar no chao: mesmo item + DropLoot (spawna DroppedLoot).
-    // Roda 1x por clique (bGiveItem pulso): worker executa e o menu desliga.
-    // IDs REAIS do enum InventoryItem/ID (metadata dnlib, TypeDef 1152):
-    // 76=ArmoryKey(chave sala de armas) 55=Grenade 90=Dynamite 25=Bandage
-    // 20=SodaCan(lata refri). Valor do enum = indice (0=value__,1=None...).
-    static int kGiveIds[5];
-    static bool s_giveIdsInit = false;
-    static void DoGiveItem(void* local) {
-        if (!Config::bGiveItem || !local) return;
-        Config::bGiveItem = false; // pulso: executa 1x
-        __try {
-            if (!s_giveIdsInit) {
-                s_giveIdsInit = true;
-                kGiveIds[0] = 76; kGiveIds[1] = 55; kGiveIds[2] = 90;
-                kGiveIds[3] = 25; kGiveIds[4] = 20;
-                if (cItem) {
-                    MonoMethod* t = pMethodFrom(cItem, "CreateInventoryItem", 2);
-                    if (t) { mCreateItem = t; s.resolvedMethods++; }
-                }
-                if (cPInv) {
-                    MonoMethod* t = pMethodFrom(cPInv, "AddItem", 2);
-                    if (t) { mAddItem = t; s.resolvedMethods++; }
-                    t = pMethodFrom(cPInv, "DropLoot", 1);
-                    if (t) { mDropLoot = t; s.resolvedMethods++; }
-                }
-                Log::Infof("[GIVE] metodos create=%d add=%d drop=%d",
-                    mCreateItem ? 1 : 0, mAddItem ? 1 : 0, mDropLoot ? 1 : 0);
-            }
-            int want = Config::iGiveItem;
-            if (want < 0 || want > 4) return;
-            int qty = Config::iGiveQty;
-            if (qty < 1) qty = 1;
-            if (qty > 999) qty = 999;
-            int id = kGiveIds[want];
-            if (!mCreateItem || !mAddItem) {
-                Log::Warn("[GIVE] metodos nao resolvidos — nada feito.");
-                return;
-            }
-            void* pinv = ReadP(local, FieldOff(fInv));
-            if (!pinv) { Log::Warn("[GIVE] sem inventory."); return; }
-            // CreateInventoryItem estatico: (ID, qtd). ID passa como int.
-            void* cargs[2] = { &id, &qty };
-            void* item = nullptr;
-            __try {
-                MonoObject* exc = nullptr;
-                MonoObject* ret = pInvoke(mCreateItem, nullptr, cargs, &exc);
-                if (!exc && ret) item = ret;
-            } __except (EXCEPTION_EXECUTE_HANDLER) {}
-            if (!item) { Log::Warn("[GIVE] CreateInventoryItem falhou."); return; }
-            if (Config::iGiveDest == 1) {
-                // Descartar no chao: AddItem + DropLoot (larga na frente).
-                int filter = 0; // LootPlacingFilter default
-                void* aargs[2] = { &item, &filter };
-                bool added = false;
-                __try {
-                    MonoObject* exc = nullptr;
-                    MonoObject* ret = pInvoke(mAddItem, pinv, aargs, &exc);
-                    if (!exc && ret) added = (*(unsigned char*)pUnbox(ret) != 0);
-                } __except (EXCEPTION_EXECUTE_HANDLER) {}
-                if (added && mDropLoot) {
-                    void* dargs[1] = { &item };
-                    __try {
-                        MonoObject* exc2 = nullptr;
-                        pInvoke(mDropLoot, pinv, dargs, &exc2);
-                    } __except (EXCEPTION_EXECUTE_HANDLER) {}
-                }
-                Log::Infof("[GIVE] descartado no chao: id=%d qtd=%d ok=%d", id, qty, added ? 1 : 0);
-            } else {
-                int filter = 0;
-                void* aargs[2] = { &item, &filter };
-                bool added = false;
-                __try {
-                    MonoObject* exc = nullptr;
-                    MonoObject* ret = pInvoke(mAddItem, pinv, aargs, &exc);
-                    if (!exc && ret) added = (*(unsigned char*)pUnbox(ret) != 0);
-                } __except (EXCEPTION_EXECUTE_HANDLER) {}
-                Log::Infof("[GIVE] inventario: id=%d qtd=%d ok=%d", id, qty, added ? 1 : 0);
-            }
-        } __except (EXCEPTION_EXECUTE_HANDLER) {}
-    }
+    // REMOVIDO 17/09: C3 Spawn de Itens (DoGiveItem + kGiveIds 76/55/90/25/20).
+    // IDs reais preservados no historico do commit p/ fase futura.
+    // mCreateItem/mAddItem continuam (AmmoEnsurePile cria pilha de reserva).
 
     // C2: slots desbloqueados (storage+misc cheios). Escreve 1x por sessao
     // (flag do jogo, nao valor economico — sem guardiao, sem risco de flood).

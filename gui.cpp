@@ -35,10 +35,7 @@ namespace Config {
     bool  bInfMoney = false;     // default OFF (3 moedas 99999)
     // REMOVIDO 17/09: bAntiFlood (guardiao bania o proprio infinito).
     bool  bUnlockSlots = false;  // default OFF (desbloqueia 1x)
-    bool  bGiveItem = false;     // pulso (worker executa e desliga)
-    int   iGiveItem = 0;         // 0=Chave arma
-    int   iGiveQty = 1;          // quantidade
-    int   iGiveDest = 0;         // 0=inventario 1=chao
+    // REMOVIDO 17/09: Spawn de Itens (bGiveItem/iGiveItem/iGiveQty/iGiveDest).
 
     bool  bAimbot = false;
     int   iAimKey = VK_RBUTTON;
@@ -642,7 +639,7 @@ namespace GUI {
 #define JV(v) fprintf(f, "\"" #v "\":[%f,%f,%f,%f],\n", (double)(v)[0], (double)(v)[1], (double)(v)[2], (double)(v)[3])
 #define JS(v) fprintf(f, "\"" #v "\":\"%s\",\n", ConfigJson::Escape(v).c_str())
         JB(bMenuOpen); JI(iMenuKey); JB(bWatermark); JB(bDebugOverlay); JB(bTooltips);
-        JB(bGodMode); JB(bInfStamina); JB(bInfItems); JB(bInfMoney); JB(bUnlockSlots); JB(bGiveItem); JI(iGiveItem); JI(iGiveQty); JI(iGiveDest);
+        JB(bGodMode); JB(bInfStamina); JB(bInfItems); JB(bInfMoney); JB(bUnlockSlots);
         JB(bAimbot); JI(iAimKey); JI(iAimMode); JB(bAutoAim); JB(bSilentAim); JB(bAutoFire);
         JB(bTriggerbot); JI(iAimBone); JI(iAimPriority); JF(fSmoothing);
         JB(bLimitFov); JF(fFovAngle); JB(b360Mode); JB(bDrawFov); JF(fMaxDistance);
@@ -731,7 +728,7 @@ namespace GUI {
 #define LV(v) fields.push_back({ #v, ConfigJson::ColorField, (v) })
 #define LS(v) fields.push_back({ #v, ConfigJson::StringField, (v), sizeof(v) })
         LB(bMenuOpen); LI(iMenuKey); LB(bWatermark); LB(bDebugOverlay); LB(bTooltips);
-        LB(bGodMode); LB(bInfStamina); LB(bInfItems); LB(bInfMoney); LB(bUnlockSlots); LB(bGiveItem); LI(iGiveItem); LI(iGiveQty); LI(iGiveDest);
+        LB(bGodMode); LB(bInfStamina); LB(bInfItems); LB(bInfMoney); LB(bUnlockSlots);
         LB(bAimbot); LI(iAimKey); LI(iAimMode); LB(bAutoAim); LB(bSilentAim); LB(bAutoFire);
         LB(bTriggerbot); LI(iAimBone); LI(iAimPriority); LF(fSmoothing);
         LB(bLimitFov); LF(fFovAngle); LB(b360Mode); LB(bDrawFov); LF(fMaxDistance);
@@ -1219,16 +1216,7 @@ namespace GUI {
                 // REMOVIDO 17/09: Anti-Flood (quarentena bania o proprio infinito).
                 ImGui::Checkbox("Desbloquear Slots", &Config::bUnlockSlots); Tip("Storage+misc cheios (1x por sessao).");
                 ImGui::Separator();
-                ImGui::Text("Spawn de Itens");
-                static const char* kGive[] = { "Chave sala de armas", "Granada", "Dinamite", "Bandagem", "Lata de refri" };
-                ImGui::Combo("Item", &Config::iGiveItem, kGive, 5); Tip("Item a spawnar (ID real do jogo).");
-                ImGui::SliderInt("Qtd", &Config::iGiveQty, 1, 99);
-                static const char* kDest[] = { "Inventario", "Chao (Descartar)" };
-                ImGui::Combo("Destino", &Config::iGiveDest, kDest, 2); Tip("Inventario = Adicionar; Chao = Descartar p/ amigo pegar.");
-                if (ImGui::Button("Adicionar ao inventario")) { Config::iGiveDest = 0; Config::bGiveItem = true; } Tip("Cria e poe no inventario (1x por clique).");
-                ImGui::SameLine();
-                if (ImGui::Button("Descartar no chao")) { Config::iGiveDest = 1; Config::bGiveItem = true; } Tip("Spawna no chao na frente (pro amigo pegar).");
-                ImGui::Separator();
+                // REMOVIDO 17/09: Spawn de Itens (nao util; IDs ficam no historico p/ fase futura).
                 ImGui::Checkbox("Enemy Magnet (H)", &Config::bEnemyMagnet);
                 ImGui::SliderFloat("Raio Magnet", &Config::fMagnetRadius, 10, 300, "%.0fm");
                 ImGui::Checkbox("Freeze Attracted", &Config::bMagnetFreeze);
