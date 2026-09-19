@@ -91,6 +91,8 @@
 | PlayerHUD.instance → innerCrossHairTransform → localScale | Mira Fechada (visual) | FieldOff + singleton via vtable | escala trava na metade da base |
 | MeleeAttackBase.Instance → AllAttacks (dict ID→attack) | Fast Knife global (toda arma branca) | FieldOff + singleton | Duration de todos / mult |
 | PlayerMovement.fallDamageThreshold | Super Pulo (anti-podador LimitVerticalVelocity) | FieldOff, acompanha mult | threshold × mult |
+| DatabaseGun.fullAuto (bool) = true | Rapid Fire: 1-tiro vira automatica (pistola 12/12, Riot 1/1) | FieldOff, asset compartilhado | segura gatilho = rajada |
+| DatabaseGun.burstCount = 0 | Rapid Fire: rajada vira auto continuo | FieldOff | sem pausa de burst |
 | PlayerArms.selectedItem (EquipmentIndex struct) | arma equipada real | arms+sel: SetType@+0, Value@+4 (rel. campo; +16/+20 absolutos no CE) | SetType==1 → weapons[Value] |
 | PlayerEquippedItems.weapons / misc | listas de equipados | FieldOff | WalkList |
 | PlayerArms.TryStartReload | recarga legitima (coop) | metodo, invoke 1x | pente 0 → recarrega |

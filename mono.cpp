@@ -220,6 +220,8 @@ namespace Mono {
     static MonoClassField* fGunRecoilRnd = nullptr; // DatabaseGun.recoilRandomness
     static MonoClassField* fGunSpread = nullptr;  // DatabaseGun.spread
     static MonoClassField* fGunRof = nullptr;     // DatabaseGun.rof
+    static MonoClassField* fGunFullAuto = nullptr; // DatabaseGun.fullAuto (1-tiro -> rajada)
+    static MonoClassField* fGunBurst = nullptr;   // DatabaseGun.burstCount (rajada -> auto)
     static MonoClassField* fAtkDur = nullptr;     // PlayerMeleeAttack.Duration
     static MonoClassField* fNodeTMin = nullptr;   // MeleeMoveSetNode.transitionTimeMinimum
     static MonoClassField* fNodeTMax = nullptr;   // MeleeMoveSetNode.transitionTimeMaximum
@@ -678,6 +680,8 @@ namespace Mono {
         ResolveField(cDbGun, "DatabaseGun", "recoilRandomness", fGunRecoilRnd);
         ResolveField(cDbGun, "DatabaseGun", "spread", fGunSpread);
         ResolveField(cDbGun, "DatabaseGun", "rof", fGunRof);
+        ResolveField(cDbGun, "DatabaseGun", "fullAuto", fGunFullAuto);
+        ResolveField(cDbGun, "DatabaseGun", "burstCount", fGunBurst);
         ResolveClass("PlayerMeleeAttack", cPMeleeAtk);
         ResolveField(cPMeleeAtk, "PlayerMeleeAttack", "<Duration>k__BackingField", fAtkDur);
         ResolveClass("MeleeMoveSet", cMoveSet);
@@ -2501,6 +2505,7 @@ namespace Mono {
         // Resolve preguiçoso 1x (offsets via API; singleton via vtable).
         static int oAmmoId = -2, oMax = -2, oSpread = -2, oRof = -2;
         static int oRecoil = -2, oRecoilRnd = -2;
+        static int oFull = -2, oBurst = -2;
         static int oPrec = -2, oSway = -2, oBoolVal = -2;
         static int oGen = -2, oDisSway = -2;
         static int oWep = -2;                       // PlayerEquippedItems.weapons
@@ -2511,6 +2516,7 @@ namespace Mono {
             oAmmoId = FieldOff(fAmmo); oMax = FieldOff(fMaxAmmo);
             oSpread = FieldOff(fGunSpread); oRof = FieldOff(fGunRof);
             oRecoil = FieldOff(fGunRecoil); oRecoilRnd = FieldOff(fGunRecoilRnd);
+            oFull = FieldOff(fGunFullAuto); oBurst = FieldOff(fGunBurst);
             oPrec = FieldOff(fPrecMult); oSway = FieldOff(fGunSway);
             oBoolVal = FieldOff(fBoolVal);
             oGen = FieldOff(fDbgGen); oDisSway = FieldOff(fDisSway);
@@ -2585,7 +2591,39 @@ namespace Mono {
                 if ((Config::bNoSpread || Config::bTightAim) && oSpread >= 0) {
                     if (ReadF(db, oSpread, -1.0f) != 0.0f) WriteF(db, oSpread, 0.0f);
                 }
-                // Rapid Fire universal: rof x mult em TODA arma (ate 1 tiro:
+                // Full Auto universal: 1-tiro/rajada vira automatica.
+                // fullAuto=true + burstCount=0 em TODA arma (asset): pistola
+                // 12/12, Riot 1/1, sniper — todas seguram o gatilho.
+                // Restore ao desligar (bool/int via WriteI direto).
+                if (Config::bRapidFire) {
+                    if (oFull >= 0) {
+                        __try {
+                            unsigned char fa = 0;
+                            memcpy(&fa, (char*)db + oFull, 1);
+                            if (!fa) {
+                                unsigned char t = 1;
+                                memcpy((char*)db + oFull, &t, 1);
+                            }
+                        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+                    }
+                    if (oBurst >= 0) {
+                        int bc = ReadI(db, oBurst, -1);
+                        if (bc != 0 && bc >= 0 && bc < 100) WriteI(db, oBurst, 0);
+                    }
+                } else {
+                    // Restore fullAuto/burst ao desligar (1x por db).
+                    if (oFull >= 0) {
+                        __try {
+                            unsigned char fa = 0;
+                            memcpy(&fa, (char*)db + oFull, 1);
+                            if (fa) {
+                                unsigned char f = 0;
+                                memcpy((char*)db + oFull, &f, 1);
+                            }
+                        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+                    }
+                }
+                // Rapid Fire: rof x mult em TODA arma (ate 1 tiro:
                 // BaseCooldownTime=1/rof cai p/ todas). Base guardada por db
                 // + restore ao desligar (volta ao rof original).
                 if (Config::bRapidFire && oRof >= 0) {
