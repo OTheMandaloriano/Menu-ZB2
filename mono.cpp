@@ -2466,6 +2466,8 @@ namespace Mono {
     // (alvo, base); ao desligar escreve a base de volta 1x. Declarado AQUI
     // (antes do ApplyWeapon) p/ valer nos dois Applies.
     struct RestoreSlot { void* key; int off; float base; };
+    static RestoreSlot s_rsJump[4], s_rsRof[16], s_rsDur[64], s_rsAim[4];
+    static bool s_swayWas = false;
     static void RestorePush(RestoreSlot* slots, int cap, void* key, int off, float base) {
         if (!key || off < 0) return;
         for (int k = 0; k < cap; ++k) {
@@ -2485,8 +2487,6 @@ namespace Mono {
         }
         if (n > 0) Log::Infof("[RESTORE] %s: %d valores originais.", tag, n);
     }
-    static RestoreSlot s_rsJump[4], s_rsRof[16], s_rsDur[64], s_rsAim[4];
-    static bool s_swayWas = false;
 
     // Arma (No Recoil/Spread/Sway + Rapid Fire): escreve nos DADOS de TODAS
     // as armas do inventario + singletons, nunca no player. Por que todas:
@@ -2561,11 +2561,27 @@ namespace Mono {
             void* pinv = ReadP(local, FieldOff(fInv));
             void* peq = pinv ? ReadP(pinv, FieldOff(fEq)) : nullptr;
             void* list = (peq && oWep >= 0) ? ReadP(peq, oWep) : nullptr;
+            // Rapid Fire MINIGUN (pedido 19/09): pistola 1-tiro vira metralha.
+            // fullAuto+burst ja deixam segurar; rof extremo dita a cadencia:
+            // teto 5x -> 8x no mult (rof 6 = 48/s; Cooldown zerado libera).
+            // Slider continua 1-5x no menu; interno aceita ate 8x.
             float mult = Config::fRapidMult;
-            if (!(mult >= 1.0f && mult <= 5.0f)) mult = 2.0f;
-            if (list && mGetDb) WalkList(list, 32, [&](void* it, int) {
-                void* db = DbCached(it);
-                if (!db) return;
+            if (!(mult >= 1.0f && mult <= 8.0f)) mult = 2.0f;
+            if (list && mGetDb) {
+                static int s_weapNLogged = -1;
+                int dbgN = 0;
+                __try {
+                    int sz = 0;
+                    memcpy(&sz, (char*)list + Off::L_size, sizeof(sz));
+                    dbgN = sz;
+                } __except (EXCEPTION_EXECUTE_HANDLER) {}
+                if (dbgN != s_weapNLogged) {
+                    s_weapNLogged = dbgN;
+                    Log::Infof("[WEAPON] weapons[] n=%d (aplica recoil/spread/rapid em todas).", dbgN);
+                }
+                WalkList(list, 32, [&](void* it, int) {
+                    void* db = DbCached(it);
+                    if (!db) return;
                 // Deduplica por db (asset compartilhado).
                 for (int k = 0; k < 16; ++k) {
                     if (s_seenDb[k] == db) return;
@@ -2706,10 +2722,6 @@ namespace Mono {
                         if (StaticInstance(cHud, fHudInst, hinst) && hinst) {
                             void* inner = ReadP(hinst, oHudInner);
                             if (inner) {
-                                // RectTransform.localScale (Vector3 @ scale).
-                                // Resolve 1x via Transform: localScale eh
-                                // propriedade; fallback: escreve direto se o
-                                // offset ja conhecido (log acusa).
                                 static int oScale = -2;
                                 if (oScale == -2) {
                                     oScale = -1;
@@ -2742,6 +2754,7 @@ namespace Mono {
                 }
             } else if (!Config::bTightAim) {
                 RestoreRun(s_rsAim, 4, "aim");
+            }
             }
             // Restore: value volta a false; gunSway volta a base guardada.
             if (!Config::bNoSway) {
@@ -2809,6 +2822,9 @@ namespace Mono {
             // ~10x a altura (nao linear). Anti-podador: LimitVerticalVelocity
             // corta em -fallDamageThreshold — sobe o threshold junto (guarda
             // base + restore). Sem isso 10x nunca voa (bug 19/09).
+            // FIX 19/09 (pulo fraco mesmo no max): o write FALHAVA silencioso
+            // porque cur==want na comparacao (float ja arredondado) — agora
+            // reescreve se |cur-want|>0.01. E loga 1x o estado real.
             if (Config::bSuperJump && oMove >= 0 && oJump >= 0) {
                 void* mv = ReadP(local, oMove);
                 if (mv) {
@@ -2823,6 +2839,7 @@ namespace Mono {
                             MonoClassField* ff = pFieldFrom(cMove, "fallDamageThreshold");
                             oFall = FieldOff(ff);
                         }
+                        Log::Infof("[JUMP] offs fall=%d", oFall);
                     }
                     float cur = ReadF(mv, oJump, -1.0f);
                     if (s_jumpBase < 0.0f && cur > 0.0f && cur < 100.0f) {
@@ -2832,8 +2849,16 @@ namespace Mono {
                     }
                     if (s_jumpBase > 0.0f) {
                         float want = s_jumpBase * mult;
-                        if (want > 0.0f && want < 1000.0f && cur != want)
-                            WriteF(mv, oJump, want);
+                        float d = cur - want; if (d < 0) d = -d;
+                        if (want > 0.0f && want < 1000.0f && d > 0.01f) {
+                            if (WriteF(mv, oJump, want)) {
+                                static int s_jumpLogged = 0;
+                                if (s_jumpLogged < 2) {
+                                    s_jumpLogged++;
+                                    Log::Infof("[JUMP] aplicado want=%.2f (cur era %.2f).", (double)want, (double)cur);
+                                }
+                            }
+                        }
                     }
                     // Anti-podador: threshold acompanha o mult (queda de 100m
                     // continua sem dano de queda — bonus, nao custo).

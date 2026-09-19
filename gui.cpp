@@ -1080,7 +1080,7 @@ namespace GUI {
                 ImGui::Checkbox("No Sway", &Config::bNoSway);
                 ImGui::Checkbox("Mira Fechada", &Config::bTightAim); Tip("Crosshair junto: tamanho minimo (visual) + spread zero (tiro).");
                 ImGui::Checkbox("Rapid Fire", &Config::bRapidFire);
-                ImGui::SliderFloat("Rapid Mult", &Config::fRapidMult, 1, 5, "%.1fx");
+                ImGui::SliderFloat("Rapid Mult", &Config::fRapidMult, 1, 8, "%.1fx"); Tip("8x = minigun (pistola 1-tiro vira rajada).");
                 ImGui::Checkbox("Fast Knife", &Config::bFastKnife); Tip("Arma branca rapida: pa, pa, facao, faca, taco (Duration curto).");
                 ImGui::SliderFloat("Knife Mult", &Config::fKnifeMult, 1, 5, "%.1fx");
                 ImGui::Checkbox("Instant Reload", &Config::bInstantReload); Tip("Ver Defesa: Infinite Ammo ja recarrega sozinho (pente nunca esvazia).");
