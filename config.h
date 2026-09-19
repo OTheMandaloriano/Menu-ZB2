@@ -25,6 +25,7 @@ namespace Config {
     extern bool  bInfMoney;       // dinheiro infinito (3 moedas em 99999)
     // REMOVIDO 17/09: bAntiFlood (guardiao bania o proprio infinito).
     extern bool  bUnlockSlots;    // storage+misc desbloqueados (1x por sessao)
+    extern bool  bUnlockLoadout;  // LoadoutSelector.UnlockAll (vendedor desbloqueado)
     // REMOVIDO 17/09: Spawn de Itens (bGiveItem/iGiveItem/iGiveQty/iGiveDest).
 
     // ---- PLAYER / Aimbot ----
@@ -52,6 +53,8 @@ namespace Config {
     extern bool  bNoSway;
     extern bool  bRapidFire;
     extern float fRapidMult;        // 1x-5x
+    extern bool  bFastKnife;        // faca rapida (Duration curto nos golpes Knife*)
+    extern float fKnifeMult;        // 1x-5x (divisor do Duration)
     extern bool  bInfAmmo;
     extern bool  bInstantReload;
     extern bool  bFullAuto;

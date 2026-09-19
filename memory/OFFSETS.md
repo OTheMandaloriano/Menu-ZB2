@@ -88,6 +88,10 @@
 | PlayerMovement.jumpSpeed | Super Pulo | PlayerMain.movement+40 → jumpSpeed | subir valor, pular |
 | PlayerMain.arms / PlayerMain.cam | Base das cadeias acima | FieldOff no local | ler ponteiro != null |
 | WeaponBase.instance / DebugModifiers.General | Singletons das cadeias | FieldOff static | ler != null |
+| PlayerArms.selectedItem (EquipmentIndex struct) | arma equipada real | arms+sel: SetType@+0, Value@+4 (rel. campo; +16/+20 absolutos no CE) | SetType==1 → weapons[Value] |
+| PlayerEquippedItems.weapons / misc | listas de equipados | FieldOff | WalkList |
+| PlayerArms.TryStartReload | recarga legitima (coop) | metodo, invoke 1x | pente 0 → recarrega |
+| DatabaseGun.ammoID / maxAmmo | tipo + teto do pente | FieldOff no db da equipada | ammoID 10-116 |
 
 ## Alternativas conhecidas (rejeitadas ou secundarias)
 

@@ -63,6 +63,8 @@ namespace Mono {
         bool  ammoOk = true;    // false = cadeia incompleta (AMMO:OFF)
         bool  slotsOk = true;   // false = campos nao resolveram
         bool  slotsOn = false;  // true = ApplySlots rodou (SLOTS:ON)
+        bool  inMap = false;   // true = dentro do mapa (localHp>0 E players>=1)
+        bool  loadoutOn = false; // true = LoadoutSelector.UnlockAll rodou
         int   resolvedClasses = 0;
         int   resolvedFields = 0;
         int   resolvedMethods = 0;

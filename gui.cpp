@@ -35,6 +35,7 @@ namespace Config {
     bool  bInfMoney = false;     // default OFF (3 moedas 99999)
     // REMOVIDO 17/09: bAntiFlood (guardiao bania o proprio infinito).
     bool  bUnlockSlots = false;  // default OFF (desbloqueia 1x)
+    bool  bUnlockLoadout = false; // default OFF (vendedor desbloqueado)
     // REMOVIDO 17/09: Spawn de Itens (bGiveItem/iGiveItem/iGiveQty/iGiveDest).
 
     bool  bAimbot = false;
@@ -60,6 +61,8 @@ namespace Config {
     bool  bNoSway = false;
     bool  bRapidFire = false;
     float fRapidMult = 2.0f;
+    bool  bFastKnife = false;
+    float fKnifeMult = 2.0f;
     bool  bInfAmmo = false;
     bool  bInstantReload = false;
     bool  bFullAuto = false;
@@ -639,12 +642,12 @@ namespace GUI {
 #define JV(v) fprintf(f, "\"" #v "\":[%f,%f,%f,%f],\n", (double)(v)[0], (double)(v)[1], (double)(v)[2], (double)(v)[3])
 #define JS(v) fprintf(f, "\"" #v "\":\"%s\",\n", ConfigJson::Escape(v).c_str())
         JB(bMenuOpen); JI(iMenuKey); JB(bWatermark); JB(bDebugOverlay); JB(bTooltips);
-        JB(bGodMode); JB(bInfStamina); JB(bInfItems); JB(bInfMoney); JB(bUnlockSlots);
+        JB(bGodMode); JB(bInfStamina); JB(bInfItems); JB(bInfMoney); JB(bUnlockSlots); JB(bUnlockLoadout);
         JB(bAimbot); JI(iAimKey); JI(iAimMode); JB(bAutoAim); JB(bSilentAim); JB(bAutoFire);
         JB(bTriggerbot); JI(iAimBone); JI(iAimPriority); JF(fSmoothing);
         JB(bLimitFov); JF(fFovAngle); JB(b360Mode); JB(bDrawFov); JF(fMaxDistance);
         JB(bPrediction); JF(fLagComp);
-        JB(bNoRecoil); JB(bNoSpread); JB(bNoSway); JB(bRapidFire); JF(fRapidMult);
+        JB(bNoRecoil); JB(bNoSpread); JB(bNoSway); JB(bRapidFire); JF(fRapidMult); JB(bFastKnife); JF(fKnifeMult);
         JB(bInfAmmo); JB(bInstantReload); JB(bFullAuto); JB(bSaitama); JF(fNadeTime);
         JF(fExplRadius); JF(fExplDamage); JB(bContactExpl); JB(bPowerDrop);
         JS(szItemSearch); JI(iItemAmount);
@@ -728,12 +731,12 @@ namespace GUI {
 #define LV(v) fields.push_back({ #v, ConfigJson::ColorField, (v) })
 #define LS(v) fields.push_back({ #v, ConfigJson::StringField, (v), sizeof(v) })
         LB(bMenuOpen); LI(iMenuKey); LB(bWatermark); LB(bDebugOverlay); LB(bTooltips);
-        LB(bGodMode); LB(bInfStamina); LB(bInfItems); LB(bInfMoney); LB(bUnlockSlots);
+        LB(bGodMode); LB(bInfStamina); LB(bInfItems); LB(bInfMoney); LB(bUnlockSlots); LB(bUnlockLoadout);
         LB(bAimbot); LI(iAimKey); LI(iAimMode); LB(bAutoAim); LB(bSilentAim); LB(bAutoFire);
         LB(bTriggerbot); LI(iAimBone); LI(iAimPriority); LF(fSmoothing);
         LB(bLimitFov); LF(fFovAngle); LB(b360Mode); LB(bDrawFov); LF(fMaxDistance);
         LB(bPrediction); LF(fLagComp);
-        LB(bNoRecoil); LB(bNoSpread); LB(bNoSway); LB(bRapidFire); LF(fRapidMult);
+        LB(bNoRecoil); LB(bNoSpread); LB(bNoSway); LB(bRapidFire); LF(fRapidMult); LB(bFastKnife); LF(fKnifeMult);
         LB(bInfAmmo); LB(bInstantReload); LB(bFullAuto); LB(bSaitama); LF(fNadeTime);
         LF(fExplRadius); LF(fExplDamage); LB(bContactExpl); LB(bPowerDrop);
         LS(szItemSearch); LI(iItemAmount);
@@ -831,12 +834,13 @@ namespace GUI {
             const Mono::State& st = Mono::Get();
             char b[256];
             if (st.ready) {
-                const char* modo = st.coopMode == 2 ? "HOST" : st.coopMode == 1 ? "CLIENTE" : "SINGLE";
+                const char* modo = st.coopMode == 3 ? "HOST" : st.coopMode == 2 ? "CLIENTE" : st.coopMode == 1 ? "SINGLE" : "LOBBY";
                 const char* ammoSt = Config::bInfAmmo ? (st.ammoOk ? "AMMO:ON" : "AMMO:OFF") : "AMMO:-";
                 const char* slotSt = Config::bUnlockSlots ? (st.slotsOk ? "SLOTS:ON" : "SLOTS:OFF") : "SLOTS:-";
-                _snprintf_s(b, _TRUNCATE, "LOCAL HP %.0f | STAM %.0f | ALIADO %.0f | ZUMBIS %d (hp0 %.0f) | DAY %.2fh | ESP %d %.1fms | %s | %s wr=%d | %s | %.0f fps",
+                const char* loadSt = Config::bUnlockLoadout ? (st.loadoutOn ? "LOAD:ON" : "LOAD:OFF") : "LOAD:-";
+                _snprintf_s(b, _TRUNCATE, "LOCAL HP %.0f | STAM %.0f | ALIADO %.0f | ZUMBIS %d (hp0 %.0f) | DAY %.2fh | ESP %d %.1fms | %s | %s wr=%d | %s | %s | %.0f fps",
                     (double)st.localHp, (double)st.localStam, (double)st.allyHp,
-                    st.zombies, (double)st.zHp0, (double)st.dayTime, st.espShown, (double)st.espMs, modo, ammoSt, st.ammoWrites, slotSt, (double)io.Framerate);
+                    st.zombies, (double)st.zHp0, (double)st.dayTime, st.espShown, (double)st.espMs, modo, ammoSt, st.ammoWrites, slotSt, loadSt, (double)io.Framerate);
             }
             else
                 _snprintf_s(b, _TRUNCATE, "MONO aguardando cena... | %.0f fps", (double)io.Framerate);
@@ -1075,6 +1079,8 @@ namespace GUI {
                 ImGui::Checkbox("No Sway", &Config::bNoSway);
                 ImGui::Checkbox("Rapid Fire", &Config::bRapidFire);
                 ImGui::SliderFloat("Rapid Mult", &Config::fRapidMult, 1, 5, "%.1fx");
+                ImGui::Checkbox("Fast Knife", &Config::bFastKnife); Tip("Golpes de faca mais rapidos (Duration curto).");
+                ImGui::SliderFloat("Knife Mult", &Config::fKnifeMult, 1, 5, "%.1fx");
                 ImGui::Checkbox("Instant Reload", &Config::bInstantReload); Tip("Ver Defesa: Infinite Ammo ja recarrega sozinho (pente nunca esvazia).");
                 ImGui::Checkbox("Full Auto for All", &Config::bFullAuto);
                 ImGui::Checkbox("Saitama Mode (4M dano)", &Config::bSaitama);
@@ -1215,10 +1221,11 @@ namespace GUI {
                 ImGui::Checkbox("God Mode (HP travado)", &Config::bGodMode); Tip("Trava HP local em 100.");
                 ImGui::Checkbox("Infinite Stamina", &Config::bInfStamina); Tip("Stamina no maximo (correr sem cansar).");
                 ImGui::Checkbox("Infinite Ammo (pente+reserva)", &Config::bInfAmmo); Tip("Pente no maxAmmo + reserva do tipo no stackMax.");
-                ImGui::Checkbox("Infinite Items (por categoria)", &Config::bInfItems); Tip("Municao/arremessavel/consumivel no teto (material/chave fora).");
+                ImGui::Checkbox("Infinite Items (por categoria)", &Config::bInfItems); Tip("Tudo no teto: bala, granada, bandagem, madeira 999x.");
                 ImGui::Checkbox("Infinite Money (3 moedas)", &Config::bInfMoney); Tip("Dolar/prata/ouro em 99999 (compra Loadout I/II/III).");
                 // REMOVIDO 17/09: Anti-Flood (quarentena bania o proprio infinito).
                 ImGui::Checkbox("Desbloquear Slots", &Config::bUnlockSlots); Tip("Storage+misc cheios (1x por sessao).");
+                ImGui::Checkbox("Desbloquear Loadout", &Config::bUnlockLoadout); Tip("Kits do loadout livres (a loja compra com Money: use Infinite Money).");
                 ImGui::Separator();
                 // REMOVIDO 17/09: Spawn de Itens (nao util; IDs ficam no historico p/ fase futura).
                 ImGui::Checkbox("Enemy Magnet (H)", &Config::bEnemyMagnet);
