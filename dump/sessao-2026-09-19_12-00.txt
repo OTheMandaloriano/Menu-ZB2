@@ -1,0 +1,33 @@
+SESSAO 2026-09-19 ~12:00 BRT - Extracao estatica dnlib (sem partida, sem CE MCP)
+Alvo: Assembly-CSharp.dll SHA c41a298975d35f0dad0a05531bce6e0b6e274d0ddf265217d65ce3ac5cbc84e1 (igual 12/09, sem update do jogo)
+Ferramenta: dumpasm2 (rebuild do dumpasm; o antigo perdeu runtimeconfig.json). dnlib C:\Tools\dnSpy\bin\dnlib.dll. dotnet 10.0.400.
+Comando: dumpasm2.exe <Assembly-CSharp.dll> <FiltroTipo> <saida.txt> (FIELD nome : Tipo + METHOD nome + assinatura; IL so p/ lista do Program.cs)
+
+Tipos dumpados (17 arquivos brutos; resumidos aqui, brutos descartados):
+- PlayerArms (pa.txt + pa_il2.txt): fields playerMain/arms/input/selectedItem/hands; IL ShootGun/CanReload/GunNotFilled/ReloadGun/GetDudChance/GetGunSpread/GetChokeMultiplier/TryMeleeAttacks
+- PlayerMovement (pm.txt + pm_il.txt): fields body/jumpSpeed/walkSpeed/rollSpeed/speedCoef/state; IL GetSprintSpeed/JumpState/TryWallJump/JumpSystem/DealEntryMeleeAttack/MeleeAttack
+- PlayerMeleeAttack + PlayerMeleeAttackID (pme.txt): fields Duration/SpeedCurve/StaminaDrain/MovementSpeed; 50+ IDs (KnifeStab/Restab/CrossStab/ReverseStab, Katana*, 6 Reaper*)
+- DatabaseGun (dbg.txt): fields recoil(Vector2)/recoilRandomness/recoilSpeedMultiplier/spread/rof/pelletCount/fullAuto/burstCount/burstSpace/choke/maxAmmo/ammoConsumption/ammoID/dmg/pierce/hsMultiplier
+- PhysicalGun (pg.txt + pg_il.txt): fields barrel/DbReference/Cooldown/BufferedShot/BufferedBurst/meleeRange; IL Shoot/ShootSingleProjectile/GetShotDirectionWithSpread/GetChokeMultiplier/ShouldFire/ResetCooldown/get_BaseCooldownTime
+- PhysicalMelee (pme2.txt): fields MoveSet/reach/IsThrowable/ThrowableID/databaseReference
+- DatabaseMelee (dbm.txt): MeleeType/DudChance
+- MeleeMoveSet + MeleeMoveSetNode (mms.txt): entryWeakAttack/entryStrongAttack/nodes[]/transitionTimeMinimum+Maximum
+- PlayerCamera (pc.txt + pc_il.txt): fields recoilMagnitude/recoilSpeed/recoilTimer/swayTimer/verticalRecoilCurve/horizontalRecoilCurve/recoilMultiplier/gunSway(via WeaponBase); IL Recoil/RecoilAndSwayVector
+- PlayerMain (pmain.txt): confirma arms/cam/movement/inventory/healthFast+healthSlow/maxStamina+staminaFast+staminaSlow/SpawnedSkin
+- WeaponBase (wb.txt): singleton instance; fields precisionMultiplier/gunSway/noiseMultiplier/chokeMultiplier[]/guns(DatabaseGun[])
+- DebugGeneralModifiers (dgm.txt): DebugBoolean GodMode/DisableSway/DisableAdsCameraMovement/CountReloadTime/DrawMeleeRaycasts/... (kill-switches oficiais)
+- DebugBoolean (db2.txt): FIELD value : Boolean; op_Implicit -> bool
+
+Conclusoes por funcao (pedido do operador; NADA aplicado no codigo):
+1. No Recoil: DatabaseGun.recoil(Vector2)+recoilRandomness+recoilSpeedMultiplier*rof -> PlayerCamera.Recoil() -> recoilMagnitude/recoilSpeed/recoilTimer. Zerar recoil+recoilRandomness da arma equipada. Cadeia: PlayerMain.cam->PlayerCamera + PhysicalGun.DbReference->DatabaseGun (tudo via FieldOff).
+2. No Spread: DatabaseGun.spread x WeaponBase.precisionMultiplier (GetGunSpread); GetShotDirectionWithSpread sorteia Random.Range(0,spread). choke so escopeta via WeaponBase.GetChoke(). spread=0 agrupa tiro.
+3. No Sway: RecoilAndSwayVector so soma sway se IsAimingGunAndNotHipFire && !DisableSway. DebugGeneralModifiers.General.DisableSway.value=true zera por caminho legitimo. Alt: WeaponBase.gunSway (global), congelar PlayerCamera.swayTimer.
+4. Rapid Fire: BaseCooldownTime=1/rof; IsCoolingDown=!(Cooldown<0); ResetCooldown() grava -0.001. Subir rof ou ResetCooldown por ciclo. Campos: PhysicalGun.Cooldown/BufferedShot/BufferedBurst + DatabaseGun.burstCount/burstSpace/pelletCount/fullAuto.
+5. Fast Knife: PlayerMeleeAttack.Duration (+AverageHitTime/SpeedCurve/MovementSpeed/StaminaDrain/HitStopStrength) por golpe; faca = KnifeStab/Restab/CrossStab/ReverseStab; transicao via MeleeMoveSetNode.transitionTimeMinimum+Maximum. Cadeia: arma equipada->MoveSet->nodes[]->attack->Duration.
+6. Super Pulo: JumpState faz body.linearVelocity += up*jumpSpeed. Campo: PlayerMovement.jumpSpeed (via FieldOff em PlayerMain.movement+40). Vizinhos: walkSpeed/airSpeedForce/fallDamageThreshold.
+
+Pendencias (validar em partida via CE MCP antes de qualquer WriteF):
+- Resolver via FieldOff e ler ao vivo: PlayerMain.arms, PlayerMain.cam (offsets ainda nao validados), DbReference da arma equipada, WeaponBase.instance, DebugModifiers.General.
+- Confirmar com valor vivo: spread=0 agrupa; DisableSway.value=true tira flutuacao em ADS; jumpSpeed maior pula mais alto.
+
+Proximo: validacao CE MCP em partida (ler campos acima no player/arma real) -> so entao implementar.

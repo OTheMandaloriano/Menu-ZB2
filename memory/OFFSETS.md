@@ -54,6 +54,53 @@
 | Explosion.dmgMin/dmgMax | +24/+28 | float | dump Explosion | - | OK-struct |
 | PlayerInventory.AddItem | metodo | giveaway itens | dump PlayerInventory | - | OK-struct |
 
+## Cadeias resolvidas via FieldOff (runtime, nome do campo — sem hardcode)
+
+> Implementado em `mono.cpp` (offsets via `mono_field_get_offset`, nunca numero fixo).
+> Evidencia estatica: `dump/sessao-2026-09-19_12-00.txt` (dnlib). Validacao viva quando citada.
+
+| Cadeia (nomes) | Uso | Status |
+|---|---|---|
+| PlayerMain.inventory → PlayerInventory.equippedItems → GetEquipment(selectedItem) → InventoryItem.ammo | Municao infinita (pente) | OK-uso |
+| InventoryItem.GetDataBaseItem() → DatabaseGun.maxAmmo / ammoConsumption / ammoID | Teto do pente + tipo da reserva | OK-uso |
+| PlayerInventory.storage → ItemContainer.items[] → InventoryItem.stackCount / id + DatabaseItem.stackMax | Pilhas no teto (reserva) | OK-uso |
+| Currency.Instance → Dollar/Silver/Gold → CurrencyData.amount (=99999) | Dinheiro infinito | OK-uso |
+| LoadoutSelector.instance → UnlockAll() | Desbloquear slots (1x) | OK-uso |
+| InventoryItem.CreateInventoryItem(ID,int) + PlayerInventory.AddItem(item,filter) | Spawn (REMOVIDO 17/09; IDs no historico) | REMOVIDO |
+| PlayerArms.TryStartReload | Recarga legitima (coop, pente zera) | OK-uso |
+| ZombieIdentity.type+20 + get_IsBoss | Boss real (Assalto/Rainha/Ceifador), cor propria | OK-uso |
+
+## PENDENTE (extraido do IL 19/09, sem validacao viva — nao usar em WriteF ainda)
+
+| Campo (nome exato) | Funcao | Cadeia | Como validar (MCP) |
+|---|---|---|---|
+| DatabaseGun.recoil (Vector2) + recoilRandomness | No Recoil | PhysicalGun.DbReference → DatabaseGun | zerar na arma equipada, atirar, mira nao sobe |
+| DatabaseGun.recoilSpeedMultiplier × rof | No Recoil (velocidade) | idem | idem |
+| DatabaseGun.spread × WeaponBase.precisionMultiplier | No Spread | DbReference + WeaponBase.instance | spread=0 agrupa tiro num ponto |
+| DatabaseGun.choke (enum) via WeaponBase.GetChoke() | Spread escopeta | idem | so escopeta |
+| DebugGeneralModifiers.General.DisableSway.value (=true) | No Sway | singleton DebugModifiers.General | mirar ADS, flutuacao some |
+| WeaponBase.gunSway | No Sway (global alternativo) | WeaponBase.instance | idem |
+| PlayerCamera.swayTimer (congelar) | No Sway (alternativo) | PlayerMain.cam → PlayerCamera | idem |
+| DatabaseGun.rof (BaseCooldownTime=1/rof) | Rapid Fire | DbReference da equipada | subir rof, rajada acelera |
+| PhysicalGun.Cooldown (ResetCooldown grava -0.001) | Rapid Fire (alternativo) | PlayerArms → EquippedGun | forcar por ciclo |
+| PlayerMeleeAttack.Duration (+SpeedCurve/MovementSpeed) | Fast Knife | arma equipada → MoveSet → nodes[] → attack | reduzir Duration do KnifeStab |
+| MeleeMoveSetNode.transitionTimeMinimum+Maximum | Fast Knife (transicao) | idem | idem |
+| PlayerMovement.jumpSpeed | Super Pulo | PlayerMain.movement+40 → jumpSpeed | subir valor, pular |
+| PlayerMain.arms / PlayerMain.cam | Base das cadeias acima | FieldOff no local | ler ponteiro != null |
+| WeaponBase.instance / DebugModifiers.General | Singletons das cadeias | FieldOff static | ler != null |
+
+## Alternativas conhecidas (rejeitadas ou secundarias)
+
+| Duvida | Alternativas | Decisao |
+|---|---|---|
+| HP real | healthFast+204 (usado no dano) vs healthSlow+208 (regen/lento) | God trava os dois; leitura usa Fast |
+| Stamina real | staminaFast+228 vs staminaSlow+232; maxStamina+224 | trava Fast no Max; Slow p/ sprint (GetSprintSpeed usa staminaSlow) |
+| Pente vs reserva | InventoryItem.ammo (pente) vs pilhas storage (reserva por ammoID) | coop: so reserva (host valida dano); solo: os dois |
+| Sway | DisableSway.value (legitimo) vs gunSway=0 (global) vs swayTimer (congelado) | preferir DisableSway; resto fallback |
+| Cooldown | rof alto vs ResetCooldown por ciclo | ResetCooldown e mais estavel (nao muda DPS nominal) |
+| Tipo do zumbi | get_IsBoss (metodo) vs ZombieIdentity.type+20 (campo) | campo direto + fallback metodo |
+| Spawn de itens | AddItem direto (bania/flood) vs doses de 30 + backoff | REMOVIDO 17/09; se voltar, doses |
+
 VTable D3D11 (spec, nao do jogo): Present=8, ResizeBuffers=13.
 
 ## Ponteiros base (via Mono, sem AOB - Unity Mono usa reflection)
