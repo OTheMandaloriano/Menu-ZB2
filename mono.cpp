@@ -202,6 +202,9 @@ namespace Mono {
     static MonoClass* cDbgBool = nullptr;     // DebugBoolean (value : Boolean)
     static MonoClass* cPMeleeAtk = nullptr;   // PlayerMeleeAttack (Duration por golpe)
     static MonoClass* cMoveSet = nullptr;     // MeleeMoveSet (nodes[] por arma)
+    static MonoClass* cAtkBase = nullptr;     // MeleeAttackBase (singleton: AllAttacks)
+    static MonoClassField* fAtkInst = nullptr; // MeleeAttackBase.Instance
+    static MonoClassField* fAtkAll = nullptr;  // MeleeAttackBase.AllAttacks (dict ID->attack)
     static MonoClass* cMove = nullptr;        // PlayerMovement (jumpSpeed)
     static MonoClassField* fWBaseInst = nullptr;  // WeaponBase.instance
     static MonoClassField* fPrecMult = nullptr;   // WeaponBase.precisionMultiplier
@@ -674,6 +677,11 @@ namespace Mono {
         ResolveClass("PlayerMeleeAttack", cPMeleeAtk);
         ResolveField(cPMeleeAtk, "PlayerMeleeAttack", "<Duration>k__BackingField", fAtkDur);
         ResolveClass("MeleeMoveSet", cMoveSet);
+        // Base global de golpes: MeleeAttackBase.Instance.AllAttacks cobre
+        // TODA arma branca (pa/pa/facao/faca/taco) sem depender da mao.
+        ResolveClass("MeleeAttackBase", cAtkBase);
+        ResolveField(cAtkBase, "MeleeAttackBase", "Instance", fAtkInst);
+        ResolveField(cAtkBase, "MeleeAttackBase", "AllAttacks", fAtkAll);
         // Node = nested ValueType (MeleeMoveSet/MeleeMoveSetNode): resolve via
         // classe pai + get_nested_types? nao ha API simples — usa o field do
         // array (nodes) e calcula tMin/tMax por posicao (attack=ptr@0,
@@ -2650,8 +2658,9 @@ namespace Mono {
         }
         __try {
             // Super Pulo: jumpSpeed x fJumpMult (guarda base 1x).
-            // Teto 10x (slider); LimitVerticalVelocity do jogo pode podar
-            // no alto — se podar, o log [JUMP] mostra cur<want todo ciclo.
+            // Teto 10x (slider). Altura fisica = v²/2g: jumpSpeed 6→60 =
+            // ~10x a altura (nao linear). Se ainda fraco, o culpado eh o
+            // LimitVerticalVelocity podando no alto (log [JUMP] acusa).
             if (Config::bSuperJump && oMove >= 0 && oJump >= 0) {
                 void* mv = ReadP(local, oMove);
                 if (mv) {
@@ -2670,16 +2679,110 @@ namespace Mono {
                     }
                 }
             }
-            // Fast Knife: encadeamento rapido em TODA arma branca (pa, pa,
-            // facao, faca, taco). MoveSet nodes[]: cada node = struct inline de
-            // 32 bytes { attack(ptr)@0, tMin(f)@8, tMax(f)@12, nomes@16.. }.
-            // O que atrasa o proximo golpe = transitionTime (janela p/ chain):
-            // divide tMin/tMax pelo mult + Duration do attack (efeito total).
-            // Resolve 1x aqui fora (classe/campos), nao por ciclo.
-            if (Config::bFastKnife && cMoveSet) {
-                float mult = Config::fKnifeMult;
-                if (!(mult >= 1.0f && mult <= 5.0f)) mult = 2.0f;
-                // Resolve 1x (static): classe PhysicalMelee + campos.
+            // Fast Knife: TODA arma branca via base global (pa, pa, facao,
+            // faca, taco, cano). Caminho: MeleeAttackBase.Instance.AllAttacks
+            // (Dictionary ID->PlayerMeleeAttack) — cobre tudo sem depender da
+            // mao. Dict Mono: entries[] vetor de {key, value}; value =
+            // PlayerMeleeAttack -> Duration / mult. Alem disso mantem o
+            // caminho do MoveSet da mao (transitionTime, chain rapido).
+            if (Config::bFastKnife) {
+                float multK = Config::fKnifeMult;
+                if (!(multK >= 1.0f && multK <= 5.0f)) multK = 2.0f;
+                // 1) Base global: AllAttacks (resolve 1x, static).
+                static int oAll = -2;
+                if (oAll == -2) {
+                    oAll = -1;
+                    oAll = FieldOff(fAtkAll);
+                    Log::Infof("[KNIFE] offs all=%d dur=%d", oAll, oDur);
+                    if (oAll < 0)
+                        Log::Warn("[KNIFE] AllAttacks sem offset — so MoveSet da mao.");
+                }
+                if (oAll >= 0 && cAtkBase && s_dom) {
+                    __try {
+                        void* inst = nullptr;
+                        if (StaticInstance(cAtkBase, fAtkInst, inst) && inst) {
+                            void* dict = ReadP(inst, oAll);
+                            if (dict) {
+                                // Dictionary<K,V>: entries = campo 1 (entries[]
+                                // apos buckets). Layout Mono: count@20,
+                                // entries@24 (confirmar via log [KNIFE-DICT]).
+                                static int oEnt = -2;
+                                if (oEnt == -2) {
+                                    oEnt = -1;
+                                    // Descobre entries pelo nome (APIpcional).
+                                    MonoClass* cDict = nullptr;
+                                    (void)cDict;
+                                    // Fallback: varre ponteiros do dict (2
+                                    // candidatos: buckets@16, entries@24).
+                                    // Testa cada um como vetor Mono valido.
+                                    for (int cand = 16; cand <= 32; cand += 8) {
+                                        void* arr = ReadP(dict, cand);
+                                        if (!arr) continue;
+                                        long long ln = 0;
+                                        __try { memcpy(&ln, (char*)arr + Off::A_len, sizeof(ln)); }
+                                        __except (EXCEPTION_EXECUTE_HANDLER) { continue; }
+                                        if (ln > 0 && ln < 256) {
+                                            // Vetor plausivel: checa 1a entry
+                                            // como {key(int), value(ptr)}.
+                                            void* v0 = nullptr;
+                                            __try { memcpy(&v0, (char*)arr + Off::A_data + 8, 8); }
+                                            __except (EXCEPTION_EXECUTE_HANDLER) { continue; }
+                                            if (v0) {
+                                                float d0 = ReadF(v0, oDur, -1.0f);
+                                                if (d0 > 0.05f && d0 < 10.0f) {
+                                                    oEnt = cand;
+                                                    Log::Infof("[KNIFE-DICT] entries@%d len=%d atk0 dur=%.2f", cand, (int)ln, (double)d0);
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if (oEnt < 0)
+                                        Log::Warn("[KNIFE-DICT] entries nao localizado (dict vazio ou layout novo).");
+                                }
+                                if (oEnt >= 0) {
+                                    void* arr = ReadP(dict, oEnt);
+                                    long long len = 0;
+                                    __try { if (arr) memcpy(&len, (char*)arr + Off::A_len, sizeof(len)); }
+                                    __except (EXCEPTION_EXECUTE_HANDLER) { len = 0; }
+                                    // Entry .NET: { hashCode(i32), next(i32),
+                                    // key, value }. key=PlayerMeleeAttackID
+                                    // (byte->int), value=ptr attack (+16?).
+                                    // Descobre stride: entry = 24 bytes
+                                    // (4+4+4pad+8? ou 4+4+8+8=24).
+                                    int wrote = 0;
+                                    for (long long k = 0; k < len && k < 64; ++k) {
+                                        char* en = nullptr;
+                                        __try { en = (char*)arr + Off::A_data + (size_t)k * 24; }
+                                        __except (EXCEPTION_EXECUTE_HANDLER) { break; }
+                                        void* atk = nullptr;
+                                        __try { memcpy(&atk, en + 16, 8); }
+                                        __except (EXCEPTION_EXECUTE_HANDLER) { continue; }
+                                        if (!atk) continue;
+                                        float cur = ReadF(atk, oDur, -1.0f);
+                                        if (cur > 0.05f && cur < 10.0f) {
+                                            float want = cur / multK;
+                                            static void* s_atkG[64] = { nullptr };
+                                            static float s_wantG[64] = { 0 };
+                                            int si = (int)(k % 64);
+                                            if (s_atkG[si] != atk || s_wantG[si] != want) {
+                                                s_atkG[si] = atk; s_wantG[si] = want;
+                                                if (WriteF(atk, oDur, want)) wrote++;
+                                            }
+                                        }
+                                    }
+                                    static int s_knifeG = 0;
+                                    if (wrote > 0 && s_knifeG < 3) {
+                                        s_knifeG++;
+                                        Log::Infof("[KNIFE] base global: %d golpes (x%.1f).", wrote, (double)multK);
+                                    }
+                                }
+                            }
+                        }
+                    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+                }
+                // 2) MoveSet da mao: transitionTime + Duration (chain rapido
+                // na arma atual). Resolve 1x (static). Reusa multK do bloco.
                 static int oMS = -2, oNodes = -2;
                 if (oMS == -2) {
                     oMS = -1; oNodes = -1;
@@ -2740,7 +2843,7 @@ namespace Mono {
                                 } __except (EXCEPTION_EXECUTE_HANDLER) { continue; }
                                 // 1) janela de chain: tMin/tMax pelo mult.
                                 if (tmin > 0.01f && tmin < 10.0f) {
-                                    float w = tmin / mult;
+                                    float w = tmin / multK;
                                     static float s_lastT[16] = { -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1 };
                                     int si = (int)(k % 16);
                                     if (s_lastT[si] != w) {
@@ -2750,7 +2853,7 @@ namespace Mono {
                                     }
                                 }
                                 if (tmax > 0.01f && tmax < 10.0f) {
-                                    float w = tmax / mult;
+                                    float w = tmax / multK;
                                     static float s_lastTx[16] = { -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1 };
                                     int si = (int)(k % 16);
                                     if (s_lastTx[si] != w) {
@@ -2763,7 +2866,7 @@ namespace Mono {
                                 if (atk && oDur >= 0) {
                                     float cur = ReadF(atk, oDur, -1.0f);
                                     if (cur > 0.05f && cur < 10.0f) {
-                                        float want = cur / mult;
+                                        float want = cur / multK;
                                         static void* s_atk[16] = { nullptr };
                                         static float s_want[16] = { 0 };
                                         int si = (int)(k % 16);
@@ -2777,7 +2880,7 @@ namespace Mono {
                             static int s_knifeLogged = 0;
                             if (wrote > 0 && s_knifeLogged < 3) {
                                 s_knifeLogged++;
-                                Log::Infof("[KNIFE] %d campos acelerados (x%.1f).", wrote, (double)mult);
+                                Log::Infof("[KNIFE] %d campos acelerados (x%.1f).", wrote, (double)multK);
                             }
                         }
                     }
