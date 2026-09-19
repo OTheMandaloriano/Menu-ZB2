@@ -1102,7 +1102,7 @@ namespace GUI {
                 ImGui::Checkbox("Speed Hack", &Config::bSpeedHack);
                 ImGui::SliderFloat("Speed Mult", &Config::fSpeedMult, 1, 5, "%.1fx");
                 ImGui::Checkbox("Super Jump", &Config::bSuperJump);
-                ImGui::SliderFloat("Jump Mult", &Config::fJumpMult, 1, 5, "%.1fx");
+                ImGui::SliderFloat("Jump Mult", &Config::fJumpMult, 1, 10, "%.1fx");
                 ImGui::Checkbox("Roll Speed", &Config::bRollSpeed);
                 ImGui::SliderFloat("Roll Mult", &Config::fRollMult, 1, 5, "%.1fx");
                 ImGui::EndTabItem();

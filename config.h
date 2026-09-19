@@ -73,7 +73,7 @@ namespace Config {
     extern bool  bSpeedHack;
     extern float fSpeedMult;        // 1x-5x
     extern bool  bSuperJump;
-    extern float fJumpMult;
+    extern float fJumpMult;         // 1x-10x
     extern bool  bRollSpeed;
     extern float fRollMult;
 

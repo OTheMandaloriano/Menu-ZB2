@@ -214,6 +214,8 @@ namespace Mono {
     static MonoClassField* fGunSpread = nullptr;  // DatabaseGun.spread
     static MonoClassField* fGunRof = nullptr;     // DatabaseGun.rof
     static MonoClassField* fAtkDur = nullptr;     // PlayerMeleeAttack.Duration
+    static MonoClassField* fNodeTMin = nullptr;   // MeleeMoveSetNode.transitionTimeMinimum
+    static MonoClassField* fNodeTMax = nullptr;   // MeleeMoveSetNode.transitionTimeMaximum
     static MonoClassField* fMoveJump = nullptr;   // PlayerMovement.jumpSpeed
     static void ApplyWeapon(void* local); // forward (recoil/spread/sway/rapid, worker)
     static void ApplyMove(void* local);   // forward (super pulo + fast knife, worker)
@@ -672,6 +674,10 @@ namespace Mono {
         ResolveClass("PlayerMeleeAttack", cPMeleeAtk);
         ResolveField(cPMeleeAtk, "PlayerMeleeAttack", "<Duration>k__BackingField", fAtkDur);
         ResolveClass("MeleeMoveSet", cMoveSet);
+        // Node = nested ValueType (MeleeMoveSet/MeleeMoveSetNode): resolve via
+        // classe pai + get_nested_types? nao ha API simples — usa o field do
+        // array (nodes) e calcula tMin/tMax por posicao (attack=ptr@0,
+        // tMin@8, tMax@12). Sem FieldOff: offsets fixos da struct.
         ResolveClass("PlayerMovement", cMove);
         ResolveField(cMove, "PlayerMovement", "jumpSpeed", fMoveJump);
         s_unity = pImgLoaded("UnityEngine.CoreModule");
@@ -2434,10 +2440,13 @@ namespace Mono {
         }
     }
 
-    // Arma (No Recoil/Spread/Sway + Rapid Fire): escreve nos DADOS da arma
-    // equipada + singletons, nunca no player. Roda na worker sob gate de mapa
-    // (local vivo), so quando alguma flag ligada. Falha de resolve = desliga
-    // sozinho (log 1x), sem travar. Padrao ApplyDefense (SEH + faixa).
+    // Arma (No Recoil/Spread/Sway + Rapid Fire): escreve nos DADOS de TODAS
+    // as armas do inventario + singletons, nunca no player. Por que todas:
+    // cada DatabaseGun eh um ASSET compartilhado (o db da arma na mao pode
+    // ser o mesmo de outra no inventario; e trocar de arma troca o db).
+    // Travar so a equipada = metade das armas sem efeito.
+    // Roda na worker sob gate de mapa (local vivo), so com flag ligada.
+    // Falha de resolve = desliga sozinho (log 1x), sem travar.
     static bool s_weapOk = true;   // false = cadeia incompleta (desliga)
     static bool s_weapLogged = false;
     static void ApplyWeapon(void* local) {
@@ -2450,6 +2459,8 @@ namespace Mono {
         static int oRecoil = -2, oRecoilRnd = -2;
         static int oPrec = -2, oSway = -2, oBoolVal = -2;
         static int oGen = -2, oDisSway = -2;
+        static int oWep = -2;                       // PlayerEquippedItems.weapons
+        static MonoClassField* fWep = nullptr;
         static void* s_wbase = nullptr;    // WeaponBase.instance (cache)
         static void* s_dbgGen = nullptr;   // DebugGeneralModifiers (cache)
         if (oSpread == -2) {
@@ -2459,6 +2470,7 @@ namespace Mono {
             oPrec = FieldOff(fPrecMult); oSway = FieldOff(fGunSway);
             oBoolVal = FieldOff(fBoolVal);
             oGen = FieldOff(fDbgGen); oDisSway = FieldOff(fDisSway);
+            if (cPEq) { fWep = pFieldFrom(cPEq, "weapons"); oWep = FieldOff(fWep); }
             if (cWBase && s_dom) {
                 __try {
                     MonoVTable* vt = pVTable(s_dom, cWBase);
@@ -2481,8 +2493,8 @@ namespace Mono {
             }
             if (!s_weapLogged) {
                 s_weapLogged = true;
-                Log::Infof("[WEAPON] offs spread=%d rof=%d recoil=%d recoilRnd=%d prec=%d sway=%d boolVal=%d wbase=%d dbg=%d",
-                    oSpread, oRof, oRecoil, oRecoilRnd, oPrec, oSway, oBoolVal,
+                Log::Infof("[WEAPON] offs spread=%d rof=%d recoil=%d recoilRnd=%d prec=%d sway=%d boolVal=%d wep=%d wbase=%d dbg=%d",
+                    oSpread, oRof, oRecoil, oRecoilRnd, oPrec, oSway, oBoolVal, oWep,
                     s_wbase ? 1 : 0, s_dbgGen ? 1 : 0);
             }
             if (oSpread < 0 && oRof < 0 && oRecoil < 0 && oBoolVal < 0) {
@@ -2492,64 +2504,98 @@ namespace Mono {
             }
         }
         __try {
-            // Db da arma equipada: EquippedReal ja existe? Nao — aqui resolve
-            // barato: local.inventory -> equippedItems -> weapons[Value] com
-            // SetType==1 (mesma logica do ApplyAmmo, sem invoke).
-            void* dbEq = nullptr;
-            {
-                void* pinv = ReadP(local, FieldOff(fInv));
-                void* peq = pinv ? ReadP(pinv, FieldOff(fEq)) : nullptr;
-                void* arms = (cPlayer && local) ? ReadP(local, FieldOff(pFieldFrom(cPlayer, "arms"))) : nullptr;
-                (void)arms;
-                // Caminho curto: db via item da lista weapons (1o com ammo>0).
-                if (peq && mGetDb) {
-                    MonoClassField* fw = pFieldFrom(cPEq, "weapons");
-                    int oW = FieldOff(fw);
-                    void* list = (oW >= 0) ? ReadP(peq, oW) : nullptr;
-                    if (list && mGetDb) WalkList(list, 32, [&](void* it, int) {
-                        if (dbEq) return;
-                        void* db = DbCached(it);
-                        if (db) dbEq = db;
-                    });
-                }
-            }
-            // No Recoil: zera recoil (Vector2 = 2 floats) + recoilRandomness.
-            if (Config::bNoRecoil && dbEq) {
-                if (oRecoil >= 0) {
-                    float z = 0.0f;
-                    __try {
-                        memcpy((char*)dbEq + oRecoil, &z, sizeof(z));
-                        memcpy((char*)dbEq + oRecoil + 4, &z, sizeof(z));
-                    } __except (EXCEPTION_EXECUTE_HANDLER) {}
-                }
-                if (oRecoilRnd >= 0) WriteF(dbEq, oRecoilRnd, 0.0f);
-            }
-            // No Spread: spread=0 na arma (GetGunSpread = 0 x prec = 0).
-            if (Config::bNoSpread && dbEq && oSpread >= 0) {
-                if (ReadF(dbEq, oSpread, -1.0f) != 0.0f) WriteF(dbEq, oSpread, 0.0f);
-            }
-            // Rapid Fire: rof x mult (BaseCooldownTime=1/rof cai).
-            if (Config::bRapidFire && dbEq && oRof >= 0) {
-                float mult = Config::fRapidMult;
-                if (!(mult >= 1.0f && mult <= 5.0f)) mult = 2.0f;
-                float cur = ReadF(dbEq, oRof, -1.0f);
-                // Guarda o rof original 1x (por db) e aplica mult em cima.
-                static void* s_rofDb[16] = { nullptr };
-                static float s_rofBase[16] = { 0 };
-                int slot = -1, freeSlot = -1;
+            // Dbs de TODAS as armas: inventory -> equippedItems -> weapons[]
+            // -> item -> GetDataBaseItem (cache DbCached). Rof/recoil/spread
+            // sao do ASSET: 1 db pode servir 2 armas iguais — cache por db.
+            static void* s_seenDb[16] = { nullptr };
+            void* pinv = ReadP(local, FieldOff(fInv));
+            void* peq = pinv ? ReadP(pinv, FieldOff(fEq)) : nullptr;
+            void* list = (peq && oWep >= 0) ? ReadP(peq, oWep) : nullptr;
+            float mult = Config::fRapidMult;
+            if (!(mult >= 1.0f && mult <= 5.0f)) mult = 2.0f;
+            if (list && mGetDb) WalkList(list, 32, [&](void* it, int) {
+                void* db = DbCached(it);
+                if (!db) return;
+                // Deduplica por db (asset compartilhado).
                 for (int k = 0; k < 16; ++k) {
-                    if (s_rofDb[k] == dbEq) { slot = k; break; }
-                    if (freeSlot < 0 && !s_rofDb[k]) freeSlot = k;
+                    if (s_seenDb[k] == db) return;
+                    if (!s_seenDb[k]) { s_seenDb[k] = db; break; }
                 }
-                if (slot < 0 && cur > 0.0f && cur < 1000.0f && freeSlot >= 0) {
-                    slot = freeSlot;
-                    s_rofDb[slot] = dbEq;
-                    s_rofBase[slot] = cur;
+                // No Recoil: zera recoil (Vector2 = 2 floats) + randomness.
+                if (Config::bNoRecoil) {
+                    if (oRecoil >= 0) {
+                        float z = 0.0f;
+                        __try {
+                            memcpy((char*)db + oRecoil, &z, sizeof(z));
+                            memcpy((char*)db + oRecoil + 4, &z, sizeof(z));
+                        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+                    }
+                    if (oRecoilRnd >= 0) {
+                        if (ReadF(db, oRecoilRnd, -1.0f) != 0.0f)
+                            WriteF(db, oRecoilRnd, 0.0f);
+                    }
                 }
-                if (slot >= 0 && s_rofBase[slot] > 0.0f) {
-                    float want = s_rofBase[slot] * mult;
-                    if (want > 0.0f && want < 5000.0f && cur != want)
-                        WriteF(dbEq, oRof, want);
+                // No Spread: spread=0 (GetGunSpread = 0 x prec = 0).
+                if (Config::bNoSpread && oSpread >= 0) {
+                    if (ReadF(db, oSpread, -1.0f) != 0.0f) WriteF(db, oSpread, 0.0f);
+                }
+                // Rapid Fire universal: rof x mult em TODA arma (ate 1 tiro:
+                // BaseCooldownTime=1/rof cai p/ todas). Base guardada por db.
+                if (Config::bRapidFire && oRof >= 0) {
+                    float cur = ReadF(db, oRof, -1.0f);
+                    static void* s_rofDb[16] = { nullptr };
+                    static float s_rofBase[16] = { 0 };
+                    int slot = -1, freeSlot = -1;
+                    for (int k = 0; k < 16; ++k) {
+                        if (s_rofDb[k] == db) { slot = k; break; }
+                        if (freeSlot < 0 && !s_rofDb[k]) freeSlot = k;
+                    }
+                    if (slot < 0 && cur > 0.0f && cur < 1000.0f && freeSlot >= 0) {
+                        slot = freeSlot;
+                        s_rofDb[slot] = db;
+                        s_rofBase[slot] = cur;
+                    }
+                    if (slot >= 0 && s_rofBase[slot] > 0.0f) {
+                        float want = s_rofBase[slot] * mult;
+                        if (want > 0.0f && want < 5000.0f && cur != want)
+                            WriteF(db, oRof, want);
+                    }
+                }
+            });
+            // Rapid Fire universal (parte 2): Cooldown zerado na prop atual.
+            // Arma de 1 tiro (ex. Riot Shotgun) tem rof baixo e o jogo pode
+            // segurar o tiro no Cooldown/BufferedShot da PhysicalGun — zerar
+            // o Cooldown todo ciclo libera o proximo disparo imediato.
+            // Sem efeito colateral: ShouldFire continua mandando (sem bala,
+            // sem tiro; sem mira, sem disparo).
+            if (Config::bRapidFire && cArms && cPlayer) {
+                static int oCd = -2;
+                static MonoClassField* fCd = nullptr;
+                if (oCd == -2) {
+                    oCd = -1;
+                    MonoClass* cPG = nullptr;
+                    if (ResolveClass("PhysicalGun", cPG) && cPG) {
+                        fCd = pFieldFrom(cPG, "<Cooldown>k__BackingField");
+                        if (!fCd) fCd = pFieldFrom(cPG, "Cooldown");
+                        oCd = FieldOff(fCd);
+                    }
+                }
+                if (oCd >= 0) {
+                    MonoClassField* fa = pFieldFrom(cPlayer, "arms");
+                    void* arms = (fa) ? ReadP(local, FieldOff(fa)) : nullptr;
+                    if (arms) {
+                        MonoMethod* mEqG = pMethodFrom(cArms, "get_EquippedGun", 0);
+                        if (mEqG) {
+                            void* gun = InvokeObj(mEqG, arms, nullptr);
+                            if (gun) {
+                                float cd = ReadF(gun, oCd, -99.0f);
+                                // Cooldown>0 = esperando: libera (ResetCooldown
+                                // grava -0.001 no jogo; aqui direto = igual).
+                                if (cd > 0.0f && cd < 100.0f)
+                                    WriteF(gun, oCd, -0.001f);
+                            }
+                        }
+                    }
                 }
             }
             // No Sway: DisableSway.value=true (kill-switch oficial) ou
@@ -2604,28 +2650,33 @@ namespace Mono {
         }
         __try {
             // Super Pulo: jumpSpeed x fJumpMult (guarda base 1x).
+            // Teto 10x (slider); LimitVerticalVelocity do jogo pode podar
+            // no alto — se podar, o log [JUMP] mostra cur<want todo ciclo.
             if (Config::bSuperJump && oMove >= 0 && oJump >= 0) {
                 void* mv = ReadP(local, oMove);
                 if (mv) {
                     float mult = Config::fJumpMult;
-                    if (!(mult >= 1.0f && mult <= 5.0f)) mult = 1.5f;
+                    if (!(mult >= 1.0f && mult <= 10.0f)) mult = 1.5f;
                     static float s_jumpBase = -1.0f;
                     float cur = ReadF(mv, oJump, -1.0f);
-                    if (s_jumpBase < 0.0f && cur > 0.0f && cur < 100.0f)
+                    if (s_jumpBase < 0.0f && cur > 0.0f && cur < 100.0f) {
                         s_jumpBase = cur;
+                        Log::Infof("[JUMP] base=%.2f mult=%.1f want=%.2f", (double)cur, (double)mult, (double)(cur * mult));
+                    }
                     if (s_jumpBase > 0.0f) {
                         float want = s_jumpBase * mult;
-                        if (want > 0.0f && want < 500.0f && cur != want)
+                        if (want > 0.0f && want < 1000.0f && cur != want)
                             WriteF(mv, oJump, want);
                     }
                 }
             }
-            // Fast Knife: Duration / fKnifeMult em TODA arma branca (pa, pa,
-            // facao, faca, taco, etc). MoveSet eh ScriptableObject (asset):
-            // nodes[] eh vetor Mono (A_data) de MeleeMoveSetNode { attack, ... }.
-            // attack = PlayerMeleeAttack (objeto) -> Duration (float).
+            // Fast Knife: encadeamento rapido em TODA arma branca (pa, pa,
+            // facao, faca, taco). MoveSet nodes[]: cada node = struct inline de
+            // 32 bytes { attack(ptr)@0, tMin(f)@8, tMax(f)@12, nomes@16.. }.
+            // O que atrasa o proximo golpe = transitionTime (janela p/ chain):
+            // divide tMin/tMax pelo mult + Duration do attack (efeito total).
             // Resolve 1x aqui fora (classe/campos), nao por ciclo.
-            if (Config::bFastKnife && oDur >= 0 && cMoveSet) {
+            if (Config::bFastKnife && cMoveSet) {
                 float mult = Config::fKnifeMult;
                 if (!(mult >= 1.0f && mult <= 5.0f)) mult = 2.0f;
                 // Resolve 1x (static): classe PhysicalMelee + campos.
@@ -2655,41 +2706,78 @@ namespace Mono {
                     MonoClassField* fa = pFieldFrom(cPlayer, "arms");
                     void* arms = (fa) ? ReadP(local, FieldOff(fa)) : nullptr;
                     void* pm = (arms && s_mEqM) ? InvokeObj(s_mEqM, arms, nullptr) : nullptr;
+                    static int s_pmLogged = 0;
+                    if (!pm && s_pmLogged < 2) {
+                        s_pmLogged++;
+                        Log::Infof("[KNIFE] EquippedMelee=null (arma de fogo/fists?) arms=0x%p", arms);
+                    }
                     // Sem arma branca na mao (arma de fogo/fists) = pm null:
-                    // nao escreve nada, sem log (estado normal, nao erro).
+                    // nao escreve nada (estado normal, nao erro).
                     if (pm) {
                         void* ms = ReadP(pm, oMS);
                         void* arr = ms ? ReadP(ms, oNodes) : nullptr;
+                        static int s_msLogged = 0;
+                        if (!arr && s_msLogged < 2) {
+                            s_msLogged++;
+                            Log::Infof("[KNIFE] moveset=0x%p nodes=null (pm=0x%p)", ms, pm);
+                        }
                         if (arr) {
                             long long len = 0;
                             __try { memcpy(&len, (char*)arr + Off::A_len, sizeof(len)); }
                             __except (EXCEPTION_EXECUTE_HANDLER) { len = 0; }
-                            // Node = struct inline: attack(ptr,8) + floats.
-                            // attack no offset 0 do node (32 bytes/node).
                             int wrote = 0;
                             for (long long k = 0; k < len && k < 16; ++k) {
-                                void* atk = nullptr;
-                                __try { memcpy(&atk, (char*)arr + Off::A_data + (size_t)k * 32, 8); }
+                                char* node = nullptr;
+                                __try { node = (char*)arr + Off::A_data + (size_t)k * 32; }
                                 __except (EXCEPTION_EXECUTE_HANDLER) { break; }
-                                if (!atk) continue;
-                                float cur = ReadF(atk, oDur, -1.0f);
-                                if (cur > 0.05f && cur < 10.0f) {
-                                    float want = cur / mult;
-                                    // Escreve 1x por node (cache do alvo):
-                                    // evita luta com o jogo e spam de escrita.
-                                    static void* s_atk[16] = { nullptr };
-                                    static float s_want[16] = { 0 };
+                                if (!node) continue;
+                                void* atk = nullptr;
+                                float tmin = -1, tmax = -1;
+                                __try {
+                                    memcpy(&atk, node, 8);
+                                    memcpy(&tmin, node + 8, 4);
+                                    memcpy(&tmax, node + 12, 4);
+                                } __except (EXCEPTION_EXECUTE_HANDLER) { continue; }
+                                // 1) janela de chain: tMin/tMax pelo mult.
+                                if (tmin > 0.01f && tmin < 10.0f) {
+                                    float w = tmin / mult;
+                                    static float s_lastT[16] = { -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1 };
                                     int si = (int)(k % 16);
-                                    if (s_atk[si] != atk || s_want[si] != want) {
-                                        s_atk[si] = atk; s_want[si] = want;
-                                        if (WriteF(atk, oDur, want)) wrote++;
+                                    if (s_lastT[si] != w) {
+                                        s_lastT[si] = w;
+                                        __try { memcpy(node + 8, &w, 4); wrote++; }
+                                        __except (EXCEPTION_EXECUTE_HANDLER) {}
+                                    }
+                                }
+                                if (tmax > 0.01f && tmax < 10.0f) {
+                                    float w = tmax / mult;
+                                    static float s_lastTx[16] = { -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1 };
+                                    int si = (int)(k % 16);
+                                    if (s_lastTx[si] != w) {
+                                        s_lastTx[si] = w;
+                                        __try { memcpy(node + 12, &w, 4); wrote++; }
+                                        __except (EXCEPTION_EXECUTE_HANDLER) {}
+                                    }
+                                }
+                                // 2) duracao do golpe: Duration / mult.
+                                if (atk && oDur >= 0) {
+                                    float cur = ReadF(atk, oDur, -1.0f);
+                                    if (cur > 0.05f && cur < 10.0f) {
+                                        float want = cur / mult;
+                                        static void* s_atk[16] = { nullptr };
+                                        static float s_want[16] = { 0 };
+                                        int si = (int)(k % 16);
+                                        if (s_atk[si] != atk || s_want[si] != want) {
+                                            s_atk[si] = atk; s_want[si] = want;
+                                            if (WriteF(atk, oDur, want)) wrote++;
+                                        }
                                     }
                                 }
                             }
                             static int s_knifeLogged = 0;
                             if (wrote > 0 && s_knifeLogged < 3) {
                                 s_knifeLogged++;
-                                Log::Infof("[KNIFE] %d golpes acelerados (x%.1f).", wrote, (double)mult);
+                                Log::Infof("[KNIFE] %d campos acelerados (x%.1f).", wrote, (double)mult);
                             }
                         }
                     }
