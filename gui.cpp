@@ -59,6 +59,7 @@ namespace Config {
     bool  bNoRecoil = false;
     bool  bNoSpread = false;
     bool  bNoSway = false;
+    bool  bTightAim = false;
     bool  bRapidFire = false;
     float fRapidMult = 2.0f;
     bool  bFastKnife = false;
@@ -647,7 +648,7 @@ namespace GUI {
         JB(bTriggerbot); JI(iAimBone); JI(iAimPriority); JF(fSmoothing);
         JB(bLimitFov); JF(fFovAngle); JB(b360Mode); JB(bDrawFov); JF(fMaxDistance);
         JB(bPrediction); JF(fLagComp);
-        JB(bNoRecoil); JB(bNoSpread); JB(bNoSway); JB(bRapidFire); JF(fRapidMult); JB(bFastKnife); JF(fKnifeMult);
+        JB(bNoRecoil); JB(bNoSpread); JB(bNoSway); JB(bTightAim); JB(bRapidFire); JF(fRapidMult); JB(bFastKnife); JF(fKnifeMult);
         JB(bInfAmmo); JB(bInstantReload); JB(bFullAuto); JB(bSaitama); JF(fNadeTime);
         JF(fExplRadius); JF(fExplDamage); JB(bContactExpl); JB(bPowerDrop);
         JS(szItemSearch); JI(iItemAmount);
@@ -736,7 +737,7 @@ namespace GUI {
         LB(bTriggerbot); LI(iAimBone); LI(iAimPriority); LF(fSmoothing);
         LB(bLimitFov); LF(fFovAngle); LB(b360Mode); LB(bDrawFov); LF(fMaxDistance);
         LB(bPrediction); LF(fLagComp);
-        LB(bNoRecoil); LB(bNoSpread); LB(bNoSway); LB(bRapidFire); LF(fRapidMult); LB(bFastKnife); LF(fKnifeMult);
+        LB(bNoRecoil); LB(bNoSpread); LB(bNoSway); LB(bTightAim); LB(bRapidFire); LF(fRapidMult); LB(bFastKnife); LF(fKnifeMult);
         LB(bInfAmmo); LB(bInstantReload); LB(bFullAuto); LB(bSaitama); LF(fNadeTime);
         LF(fExplRadius); LF(fExplDamage); LB(bContactExpl); LB(bPowerDrop);
         LS(szItemSearch); LI(iItemAmount);
@@ -1077,6 +1078,7 @@ namespace GUI {
                 ImGui::Checkbox("No Recoil", &Config::bNoRecoil);
                 ImGui::Checkbox("No Spread", &Config::bNoSpread);
                 ImGui::Checkbox("No Sway", &Config::bNoSway);
+                ImGui::Checkbox("Mira Fechada", &Config::bTightAim); Tip("Crosshair junto: tamanho minimo (visual) + spread zero (tiro).");
                 ImGui::Checkbox("Rapid Fire", &Config::bRapidFire);
                 ImGui::SliderFloat("Rapid Mult", &Config::fRapidMult, 1, 5, "%.1fx");
                 ImGui::Checkbox("Fast Knife", &Config::bFastKnife); Tip("Arma branca rapida: pa, pa, facao, faca, taco (Duration curto).");

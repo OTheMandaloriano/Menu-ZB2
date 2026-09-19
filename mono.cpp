@@ -205,6 +205,10 @@ namespace Mono {
     static MonoClass* cAtkBase = nullptr;     // MeleeAttackBase (singleton: AllAttacks)
     static MonoClassField* fAtkInst = nullptr; // MeleeAttackBase.Instance
     static MonoClassField* fAtkAll = nullptr;  // MeleeAttackBase.AllAttacks (dict ID->attack)
+    static MonoClass* cHud = nullptr;          // PlayerHUD (singleton: crosshair visual)
+    static MonoClassField* fHudInst = nullptr; // PlayerHUD.instance
+    static MonoClassField* fHudInner = nullptr; // PlayerHUD.innerCrossHairTransform
+    static MonoClassField* fHudLines = nullptr; // PlayerHUD.crossHairLine (RawImage[])
     static MonoClass* cMove = nullptr;        // PlayerMovement (jumpSpeed)
     static MonoClassField* fWBaseInst = nullptr;  // WeaponBase.instance
     static MonoClassField* fPrecMult = nullptr;   // WeaponBase.precisionMultiplier
@@ -677,6 +681,11 @@ namespace Mono {
         ResolveClass("PlayerMeleeAttack", cPMeleeAtk);
         ResolveField(cPMeleeAtk, "PlayerMeleeAttack", "<Duration>k__BackingField", fAtkDur);
         ResolveClass("MeleeMoveSet", cMoveSet);
+        // Mira fechada: PlayerHUD.instance (crosshair visual = RectTransform).
+        ResolveClass("PlayerHUD", cHud);
+        ResolveField(cHud, "PlayerHUD", "instance", fHudInst);
+        ResolveField(cHud, "PlayerHUD", "innerCrossHairTransform", fHudInner);
+        ResolveField(cHud, "PlayerHUD", "crossHairLine", fHudLines);
         // Base global de golpes: MeleeAttackBase.Instance.AllAttacks cobre
         // TODA arma branca (pa/pa/facao/faca/taco) sem depender da mao.
         ResolveClass("MeleeAttackBase", cAtkBase);
@@ -1583,7 +1592,7 @@ namespace Mono {
             // SceneAlive pode retornar true (camera + ZombieLoader existem),
             // mas o player nao existe ainda. Sem gate = invoke em objeto nulo =
             // hang/crash reportado pelo operador.
-            bool wantDef = s.ready && (Config::bGodMode || Config::bInfStamina || Config::bInfAmmo || Config::bInfItems || Config::bInfMoney || Config::bUnlockSlots || Config::bUnlockLoadout || Config::bNoRecoil || Config::bNoSpread || Config::bNoSway || Config::bRapidFire || Config::bSuperJump || Config::bFastKnife);
+            bool wantDef = s.ready && (Config::bGodMode || Config::bInfStamina || Config::bInfAmmo || Config::bInfItems || Config::bInfMoney || Config::bUnlockSlots || Config::bUnlockLoadout || Config::bNoRecoil || Config::bNoSpread || Config::bNoSway || Config::bTightAim || Config::bRapidFire || Config::bSuperJump || Config::bFastKnife);
             if (wantDef && SceneAlive()) {
                 // Modo real via MultiplayerController (throttle 2s, SEH).
                 // coopMode: 0=LOBBY 1=SINGLE 2=CLIENTE 3=HOST.
@@ -2448,6 +2457,33 @@ namespace Mono {
         }
     }
 
+    // Restaura valor original ao desligar (bug 19/09: cheat grudava).
+    // Cada Apply permanente (jump, rof, Duration, transition) guarda
+    // (alvo, base); ao desligar escreve a base de volta 1x. Declarado AQUI
+    // (antes do ApplyWeapon) p/ valer nos dois Applies.
+    struct RestoreSlot { void* key; int off; float base; };
+    static void RestorePush(RestoreSlot* slots, int cap, void* key, int off, float base) {
+        if (!key || off < 0) return;
+        for (int k = 0; k < cap; ++k) {
+            if (slots[k].key == key && slots[k].off == off) return;
+            if (!slots[k].key) { slots[k].key = key; slots[k].off = off; slots[k].base = base; return; }
+        }
+    }
+    static void RestoreRun(RestoreSlot* slots, int cap, const char* tag) {
+        int n = 0;
+        for (int k = 0; k < cap; ++k) {
+            if (!slots[k].key) continue;
+            float cur = ReadF(slots[k].key, slots[k].off, -99999.0f);
+            if (cur != slots[k].base && cur > -99998.0f) {
+                if (WriteF(slots[k].key, slots[k].off, slots[k].base)) n++;
+            }
+            slots[k].key = nullptr;
+        }
+        if (n > 0) Log::Infof("[RESTORE] %s: %d valores originais.", tag, n);
+    }
+    static RestoreSlot s_rsJump[4], s_rsRof[16], s_rsDur[64], s_rsAim[4];
+    static bool s_swayWas = false;
+
     // Arma (No Recoil/Spread/Sway + Rapid Fire): escreve nos DADOS de TODAS
     // as armas do inventario + singletons, nunca no player. Por que todas:
     // cada DatabaseGun eh um ASSET compartilhado (o db da arma na mao pode
@@ -2460,7 +2496,7 @@ namespace Mono {
     static void ApplyWeapon(void* local) {
         if (!local) return;
         bool want = Config::bNoRecoil || Config::bNoSpread || Config::bNoSway
-            || Config::bRapidFire;
+            || Config::bTightAim || Config::bRapidFire;
         if (!want || !s_weapOk) return;
         // Resolve preguiçoso 1x (offsets via API; singleton via vtable).
         static int oAmmoId = -2, oMax = -2, oSpread = -2, oRof = -2;
@@ -2530,7 +2566,8 @@ namespace Mono {
                     if (!s_seenDb[k]) { s_seenDb[k] = db; break; }
                 }
                 // No Recoil: zera recoil (Vector2 = 2 floats) + randomness.
-                if (Config::bNoRecoil) {
+                // Mira Fechada inclui recoil zero (mira nao abre atirando).
+                if (Config::bNoRecoil || Config::bTightAim) {
                     if (oRecoil >= 0) {
                         float z = 0.0f;
                         __try {
@@ -2544,11 +2581,13 @@ namespace Mono {
                     }
                 }
                 // No Spread: spread=0 (GetGunSpread = 0 x prec = 0).
-                if (Config::bNoSpread && oSpread >= 0) {
+                // Mira Fechada inclui spread zero (tiro vai junto).
+                if ((Config::bNoSpread || Config::bTightAim) && oSpread >= 0) {
                     if (ReadF(db, oSpread, -1.0f) != 0.0f) WriteF(db, oSpread, 0.0f);
                 }
                 // Rapid Fire universal: rof x mult em TODA arma (ate 1 tiro:
-                // BaseCooldownTime=1/rof cai p/ todas). Base guardada por db.
+                // BaseCooldownTime=1/rof cai p/ todas). Base guardada por db
+                // + restore ao desligar (volta ao rof original).
                 if (Config::bRapidFire && oRof >= 0) {
                     float cur = ReadF(db, oRof, -1.0f);
                     static void* s_rofDb[16] = { nullptr };
@@ -2562,6 +2601,7 @@ namespace Mono {
                         slot = freeSlot;
                         s_rofDb[slot] = db;
                         s_rofBase[slot] = cur;
+                        RestorePush(s_rsRof, 16, db, oRof, cur);
                     }
                     if (slot >= 0 && s_rofBase[slot] > 0.0f) {
                         float want = s_rofBase[slot] * mult;
@@ -2606,9 +2646,81 @@ namespace Mono {
                     }
                 }
             }
-            // No Sway: DisableSway.value=true (kill-switch oficial) ou
-            // gunSway=0 (global). Prefere o oficial; fallback no singleton.
+            // Restore central ao desligar: Rapid Fire e Fast Knife voltam ao
+            // original assim que a flag cai (o bloco de cada um so roda
+            // ligado; aqui roda sempre p/ detectar a borda de descida).
+            if (!Config::bRapidFire) RestoreRun(s_rsRof, 16, "rof");
+            // Mira Fechada (visual): crosshair junto via PlayerHUD.
+            // UpdateCrosshairSizeBasedOnAccuracy abre o crosshair pelo spread;
+            // com o tiro ja zerado (spread/recoil acima), trava o visual no
+            // minimo: innerCrossHairTransform em escala minima 1x/ciclo.
+            // Restore: ao desligar, volta a escala guardada.
+            if (Config::bTightAim && cHud && s_dom) {
+                static int oHudInner = -2;
+                if (oHudInner == -2) {
+                    oHudInner = -1;
+                    oHudInner = FieldOff(fHudInner);
+                    Log::Infof("[AIM] offs innerCross=%d", oHudInner);
+                }
+                if (oHudInner >= 0) {
+                    __try {
+                        void* hinst = nullptr;
+                        if (StaticInstance(cHud, fHudInst, hinst) && hinst) {
+                            void* inner = ReadP(hinst, oHudInner);
+                            if (inner) {
+                                // RectTransform.localScale (Vector3 @ scale).
+                                // Resolve 1x via Transform: localScale eh
+                                // propriedade; fallback: escreve direto se o
+                                // offset ja conhecido (log acusa).
+                                static int oScale = -2;
+                                if (oScale == -2) {
+                                    oScale = -1;
+                                    if (cTrans) {
+                                        MonoClassField* fs = pFieldFrom(cTrans, "m_LocalScale");
+                                        if (!fs) fs = pFieldFrom(cTrans, "localScale");
+                                        oScale = FieldOff(fs);
+                                    }
+                                    Log::Infof("[AIM] offs localScale=%d", oScale);
+                                }
+                                if (oScale >= 0) {
+                                    float sx = ReadF(inner, oScale, -1.0f);
+                                    static float s_sxBase = -1.0f;
+                                    if (s_sxBase < 0.0f && sx > 0.0f && sx < 100.0f) {
+                                        s_sxBase = sx;
+                                        RestorePush(s_rsAim, 4, inner, oScale, sx);
+                                        float sy = ReadF(inner, oScale + 4, -1.0f);
+                                        RestorePush(s_rsAim, 4, inner, oScale + 4, sy);
+                                    }
+                                    // Trava no minimo da base (metade): junto.
+                                    if (s_sxBase > 0.0f) {
+                                        float want = s_sxBase * 0.5f;
+                                        if (sx != want && want > 0.0f)
+                                            WriteF(inner, oScale, want);
+                                    }
+                                }
+                            }
+                        }
+                    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+                }
+            } else if (!Config::bTightAim) {
+                RestoreRun(s_rsAim, 4, "aim");
+            }
+            // Restore: value volta a false; gunSway volta a base guardada.
+            if (!Config::bNoSway) {
+                if (s_swayWas) {
+                    s_swayWas = false;
+                    if (s_dbgGen && oDisSway >= 0 && oBoolVal >= 0) {
+                        __try {
+                            void* ds = ReadP(s_dbgGen, oDisSway);
+                            if (ds && ReadI(ds, oBoolVal, -1) == 1)
+                                WriteI(ds, oBoolVal, 0);
+                        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+                    }
+                    Log::Info("[RESTORE] sway: DisableSway=false.");
+                }
+            }
             if (Config::bNoSway) {
+                s_swayWas = true;
                 bool done = false;
                 if (s_dbgGen && oDisSway >= 0 && oBoolVal >= 0) {
                     __try {
@@ -2628,9 +2740,6 @@ namespace Mono {
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 
-    // Movimento (Super Pulo + Fast Knife): jumpSpeed no PlayerMovement do
-    // local; Duration nos PlayerMeleeAttack do MoveSet da arma branca.
-    // So escreve quando a flag ligada E o valor saiu do esperado.
     static bool s_moveOk = true;
     static bool s_moveLogged = false;
     static void ApplyMove(void* local) {
@@ -2657,19 +2766,30 @@ namespace Mono {
             }
         }
         __try {
-            // Super Pulo: jumpSpeed x fJumpMult (guarda base 1x).
+            // Super Pulo: jumpSpeed x fJumpMult (guarda base 1x + restore).
             // Teto 10x (slider). Altura fisica = v²/2g: jumpSpeed 6→60 =
-            // ~10x a altura (nao linear). Se ainda fraco, o culpado eh o
-            // LimitVerticalVelocity podando no alto (log [JUMP] acusa).
+            // ~10x a altura (nao linear). Anti-podador: LimitVerticalVelocity
+            // corta em -fallDamageThreshold — sobe o threshold junto (guarda
+            // base + restore). Sem isso 10x nunca voa (bug 19/09).
             if (Config::bSuperJump && oMove >= 0 && oJump >= 0) {
                 void* mv = ReadP(local, oMove);
                 if (mv) {
                     float mult = Config::fJumpMult;
                     if (!(mult >= 1.0f && mult <= 10.0f)) mult = 1.5f;
                     static float s_jumpBase = -1.0f;
+                    static float s_fallBase = -1.0f;
+                    static int oFall = -2;
+                    if (oFall == -2) {
+                        oFall = -1;
+                        if (cMove) {
+                            MonoClassField* ff = pFieldFrom(cMove, "fallDamageThreshold");
+                            oFall = FieldOff(ff);
+                        }
+                    }
                     float cur = ReadF(mv, oJump, -1.0f);
                     if (s_jumpBase < 0.0f && cur > 0.0f && cur < 100.0f) {
                         s_jumpBase = cur;
+                        RestorePush(s_rsJump, 4, mv, oJump, cur);
                         Log::Infof("[JUMP] base=%.2f mult=%.1f want=%.2f", (double)cur, (double)mult, (double)(cur * mult));
                     }
                     if (s_jumpBase > 0.0f) {
@@ -2677,7 +2797,23 @@ namespace Mono {
                         if (want > 0.0f && want < 1000.0f && cur != want)
                             WriteF(mv, oJump, want);
                     }
+                    // Anti-podador: threshold acompanha o mult (queda de 100m
+                    // continua sem dano de queda — bonus, nao custo).
+                    if (oFall >= 0) {
+                        float fc = ReadF(mv, oFall, -1.0f);
+                        if (s_fallBase < 0.0f && fc > 0.0f && fc < 1000.0f) {
+                            s_fallBase = fc;
+                            RestorePush(s_rsJump, 4, mv, oFall, fc);
+                        }
+                        if (s_fallBase > 0.0f) {
+                            float fw = s_fallBase * mult;
+                            if (fw > 0.0f && fw < 10000.0f && fc != fw)
+                                WriteF(mv, oFall, fw);
+                        }
+                    }
                 }
+            } else if (!Config::bSuperJump) {
+                RestoreRun(s_rsJump, 4, "jump");
             }
             // Fast Knife: TODA arma branca via base global (pa, pa, facao,
             // faca, taco, cano). Caminho: MeleeAttackBase.Instance.AllAttacks
@@ -2766,7 +2902,7 @@ namespace Mono {
                                             static float s_wantG[64] = { 0 };
                                             int si = (int)(k % 64);
                                             if (s_atkG[si] != atk || s_wantG[si] != want) {
-                                                s_atkG[si] = atk; s_wantG[si] = want;
+                                                s_atkG[si] = atk; s_wantG[si] = want; RestorePush(s_rsDur, 64, atk, oDur, cur);
                                                 if (WriteF(atk, oDur, want)) wrote++;
                                             }
                                         }
@@ -2848,6 +2984,9 @@ namespace Mono {
                                     int si = (int)(k % 16);
                                     if (s_lastT[si] != w) {
                                         s_lastT[si] = w;
+                                        float b0 = -1;
+                                        __try { memcpy(&b0, node + 8, 4); } __except (EXCEPTION_EXECUTE_HANDLER) {}
+                                        RestorePush(s_rsDur, 64, node + 8, 0, b0);
                                         __try { memcpy(node + 8, &w, 4); wrote++; }
                                         __except (EXCEPTION_EXECUTE_HANDLER) {}
                                     }
@@ -2858,6 +2997,9 @@ namespace Mono {
                                     int si = (int)(k % 16);
                                     if (s_lastTx[si] != w) {
                                         s_lastTx[si] = w;
+                                        float b1 = -1;
+                                        __try { memcpy(&b1, node + 12, 4); } __except (EXCEPTION_EXECUTE_HANDLER) {}
+                                        RestorePush(s_rsDur, 64, node + 12, 0, b1);
                                         __try { memcpy(node + 12, &w, 4); wrote++; }
                                         __except (EXCEPTION_EXECUTE_HANDLER) {}
                                     }
@@ -2871,7 +3013,7 @@ namespace Mono {
                                         static float s_want[16] = { 0 };
                                         int si = (int)(k % 16);
                                         if (s_atk[si] != atk || s_want[si] != want) {
-                                            s_atk[si] = atk; s_want[si] = want;
+                                            s_atk[si] = atk; s_want[si] = want; RestorePush(s_rsDur, 64, atk, oDur, cur);
                                             if (WriteF(atk, oDur, want)) wrote++;
                                         }
                                     }
@@ -2886,6 +3028,8 @@ namespace Mono {
                     }
                 }
             }
+            // Restore knife ao desligar: Duration/transition voltam ao base.
+            if (!Config::bFastKnife) RestoreRun(s_rsDur, 64, "knife");
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 

@@ -88,6 +88,9 @@
 | PlayerMovement.jumpSpeed | Super Pulo | PlayerMain.movement+40 → jumpSpeed | subir valor, pular |
 | PlayerMain.arms / PlayerMain.cam | Base das cadeias acima | FieldOff no local | ler ponteiro != null |
 | WeaponBase.instance / DebugModifiers.General | Singletons das cadeias | FieldOff static | ler != null |
+| PlayerHUD.instance → innerCrossHairTransform → localScale | Mira Fechada (visual) | FieldOff + singleton via vtable | escala trava na metade da base |
+| MeleeAttackBase.Instance → AllAttacks (dict ID→attack) | Fast Knife global (toda arma branca) | FieldOff + singleton | Duration de todos / mult |
+| PlayerMovement.fallDamageThreshold | Super Pulo (anti-podador LimitVerticalVelocity) | FieldOff, acompanha mult | threshold × mult |
 | PlayerArms.selectedItem (EquipmentIndex struct) | arma equipada real | arms+sel: SetType@+0, Value@+4 (rel. campo; +16/+20 absolutos no CE) | SetType==1 → weapons[Value] |
 | PlayerEquippedItems.weapons / misc | listas de equipados | FieldOff | WalkList |
 | PlayerArms.TryStartReload | recarga legitima (coop) | metodo, invoke 1x | pente 0 → recarrega |

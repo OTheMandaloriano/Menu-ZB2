@@ -51,6 +51,7 @@ namespace Config {
     extern bool  bNoRecoil;
     extern bool  bNoSpread;
     extern bool  bNoSway;
+    extern bool  bTightAim;      // mira fechada (crosshair junto: spread visual minimo)
     extern bool  bRapidFire;
     extern float fRapidMult;        // 1x-5x
     extern bool  bFastKnife;        // arma branca rapida (Duration curto em pa/pa/facao/faca/taco)
