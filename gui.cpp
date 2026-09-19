@@ -1079,7 +1079,7 @@ namespace GUI {
                 ImGui::Checkbox("No Sway", &Config::bNoSway);
                 ImGui::Checkbox("Rapid Fire", &Config::bRapidFire);
                 ImGui::SliderFloat("Rapid Mult", &Config::fRapidMult, 1, 5, "%.1fx");
-                ImGui::Checkbox("Fast Knife", &Config::bFastKnife); Tip("Golpes de faca mais rapidos (Duration curto).");
+                ImGui::Checkbox("Fast Knife", &Config::bFastKnife); Tip("Arma branca rapida: pa, pa, facao, faca, taco (Duration curto).");
                 ImGui::SliderFloat("Knife Mult", &Config::fKnifeMult, 1, 5, "%.1fx");
                 ImGui::Checkbox("Instant Reload", &Config::bInstantReload); Tip("Ver Defesa: Infinite Ammo ja recarrega sozinho (pente nunca esvazia).");
                 ImGui::Checkbox("Full Auto for All", &Config::bFullAuto);

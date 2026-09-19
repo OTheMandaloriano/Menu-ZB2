@@ -53,7 +53,7 @@ namespace Config {
     extern bool  bNoSway;
     extern bool  bRapidFire;
     extern float fRapidMult;        // 1x-5x
-    extern bool  bFastKnife;        // faca rapida (Duration curto nos golpes Knife*)
+    extern bool  bFastKnife;        // arma branca rapida (Duration curto em pa/pa/facao/faca/taco)
     extern float fKnifeMult;        // 1x-5x (divisor do Duration)
     extern bool  bInfAmmo;
     extern bool  bInstantReload;

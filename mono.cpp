@@ -2620,83 +2620,76 @@ namespace Mono {
                     }
                 }
             }
-            // Fast Knife: Duration / fKnifeMult nos ataques do MoveSet da arma
-            // branca equipada. MoveSet eh ScriptableObject (asset): nodes[] eh
-            // vetor Mono (A_data) de MeleeMoveSetNode { attack, tMin, tMax }.
+            // Fast Knife: Duration / fKnifeMult em TODA arma branca (pa, pa,
+            // facao, faca, taco, etc). MoveSet eh ScriptableObject (asset):
+            // nodes[] eh vetor Mono (A_data) de MeleeMoveSetNode { attack, ... }.
             // attack = PlayerMeleeAttack (objeto) -> Duration (float).
-            // So escreve se cur > want (nunca aumenta).
+            // Resolve 1x aqui fora (classe/campos), nao por ciclo.
             if (Config::bFastKnife && oDur >= 0 && cMoveSet) {
                 float mult = Config::fKnifeMult;
                 if (!(mult >= 1.0f && mult <= 5.0f)) mult = 2.0f;
+                // Resolve 1x (static): classe PhysicalMelee + campos.
                 static int oMS = -2, oNodes = -2;
-                static MonoClassField* fMS = nullptr;
                 if (oMS == -2) {
                     oMS = -1; oNodes = -1;
-                    // PhysicalMelee.MoveSet: resolve classe + campo 1x.
                     MonoClass* cPM = nullptr;
                     if (ResolveClass("PhysicalMelee", cPM) && cPM) {
-                        fMS = pFieldFrom(cPM, "<MoveSet>k__BackingField");
-                        if (!fMS) fMS = pFieldFrom(cPM, "MoveSet");
-                        oMS = FieldOff(fMS);
+                        MonoClassField* f = pFieldFrom(cPM, "<MoveSet>k__BackingField");
+                        if (!f) f = pFieldFrom(cPM, "MoveSet");
+                        oMS = FieldOff(f);
                     }
                     MonoClassField* fn = pFieldFrom(cMoveSet, "nodes");
                     oNodes = FieldOff(fn);
+                    Log::Infof("[KNIFE] offs moveset=%d nodes=%d dur=%d", oMS, oNodes, oDur);
+                    if (oMS < 0 || oNodes < 0)
+                        Log::Warn("[KNIFE] cadeia incompleta — fast knife parcial (pulo segue).");
                 }
-                if (oMS >= 0 && oNodes >= 0) {
-                    void* pinv = ReadP(local, FieldOff(fInv));
-                    void* peq = pinv ? ReadP(pinv, FieldOff(fEq)) : nullptr;
-                    if (peq && mGetDb) {
-                        MonoClassField* fw = pFieldFrom(cPEq, "weapons");
-                        int oW = FieldOff(fw);
-                        void* list = (oW >= 0) ? ReadP(peq, oW) : nullptr;
-                        if (list) WalkList(list, 32, [&](void* it, int) {
-                            // Prop fisica da arma: PhysicalMelee mora no
-                            // EquippedProp da cena, nao no item. Caminho via
-                            // PlayerArms.EquippedMelee (prop atual na mao).
-                            (void)it;
-                        });
-                        // Via arms: EquippedMelee = PhysicalMelee atual.
-                        if (cArms && cPlayer) {
-                            MonoClassField* fa = pFieldFrom(cPlayer, "arms");
-                            void* arms = (fa) ? ReadP(local, FieldOff(fa)) : nullptr;
-                            if (arms) {
-                                MonoClass* cA = cArms;
-                                MonoClassField* fem = pFieldFrom(cA, "hands");
-                                (void)fem;
-                                // get_EquippedMelee (invoke 1x/ciclo, barato).
-                                MonoMethod* mEqM = pMethodFrom(cA, "get_EquippedMelee", 0);
-                                if (mEqM) {
-                                    void* pm = InvokeObj(mEqM, arms, nullptr);
-                                    void* ms = pm ? ReadP(pm, oMS) : nullptr;
-                                    void* arr = ms ? ReadP(ms, oNodes) : nullptr;
-                                    if (arr) {
-                                        long long len = 0;
-                                        __try { memcpy(&len, (char*)arr + Off::A_len, sizeof(len)); }
-                                        __except (EXCEPTION_EXECUTE_HANDLER) { len = 0; }
-                                        // Node = struct inline: attack(ptr,8) +
-                                        // floats. attack no offset 0 do node.
-                                        for (long long k = 0; k < len && k < 16; ++k) {
-                                            // Tamanho do node: attack(8) + 2
-                                            // floats(8) + 2 strings(16) = 32.
-                                            void* atk = nullptr;
-                                            __try { memcpy(&atk, (char*)arr + Off::A_data + (size_t)k * 32, 8); }
-                                            __except (EXCEPTION_EXECUTE_HANDLER) { break; }
-                                            if (!atk) continue;
-                                            float cur = ReadF(atk, oDur, -1.0f);
-                                            if (cur > 0.05f && cur < 10.0f) {
-                                                float want = cur / mult;
-                                                // So na borda: escreve 1x por
-                                                // valor (evita luta com reload).
-                                                static float s_lastDur[16] = { -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1 };
-                                                int si = (int)(k % 16);
-                                                if (s_lastDur[si] != want) {
-                                                    s_lastDur[si] = want;
-                                                    WriteF(atk, oDur, want);
-                                                }
-                                            }
-                                        }
+                if (oMS >= 0 && oNodes >= 0 && cArms && cPlayer) {
+                    // EquippedMelee via arms (resolve metodo 1x, static).
+                    static MonoMethod* s_mEqM = nullptr;
+                    static bool s_mEqMInit = false;
+                    if (!s_mEqMInit) {
+                        s_mEqMInit = true;
+                        s_mEqM = pMethodFrom(cArms, "get_EquippedMelee", 0);
+                    }
+                    MonoClassField* fa = pFieldFrom(cPlayer, "arms");
+                    void* arms = (fa) ? ReadP(local, FieldOff(fa)) : nullptr;
+                    void* pm = (arms && s_mEqM) ? InvokeObj(s_mEqM, arms, nullptr) : nullptr;
+                    // Sem arma branca na mao (arma de fogo/fists) = pm null:
+                    // nao escreve nada, sem log (estado normal, nao erro).
+                    if (pm) {
+                        void* ms = ReadP(pm, oMS);
+                        void* arr = ms ? ReadP(ms, oNodes) : nullptr;
+                        if (arr) {
+                            long long len = 0;
+                            __try { memcpy(&len, (char*)arr + Off::A_len, sizeof(len)); }
+                            __except (EXCEPTION_EXECUTE_HANDLER) { len = 0; }
+                            // Node = struct inline: attack(ptr,8) + floats.
+                            // attack no offset 0 do node (32 bytes/node).
+                            int wrote = 0;
+                            for (long long k = 0; k < len && k < 16; ++k) {
+                                void* atk = nullptr;
+                                __try { memcpy(&atk, (char*)arr + Off::A_data + (size_t)k * 32, 8); }
+                                __except (EXCEPTION_EXECUTE_HANDLER) { break; }
+                                if (!atk) continue;
+                                float cur = ReadF(atk, oDur, -1.0f);
+                                if (cur > 0.05f && cur < 10.0f) {
+                                    float want = cur / mult;
+                                    // Escreve 1x por node (cache do alvo):
+                                    // evita luta com o jogo e spam de escrita.
+                                    static void* s_atk[16] = { nullptr };
+                                    static float s_want[16] = { 0 };
+                                    int si = (int)(k % 16);
+                                    if (s_atk[si] != atk || s_want[si] != want) {
+                                        s_atk[si] = atk; s_want[si] = want;
+                                        if (WriteF(atk, oDur, want)) wrote++;
                                     }
                                 }
+                            }
+                            static int s_knifeLogged = 0;
+                            if (wrote > 0 && s_knifeLogged < 3) {
+                                s_knifeLogged++;
+                                Log::Infof("[KNIFE] %d golpes acelerados (x%.1f).", wrote, (double)mult);
                             }
                         }
                     }
