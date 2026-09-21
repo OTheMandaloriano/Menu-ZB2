@@ -1795,11 +1795,11 @@ namespace Mono {
     static bool s_slotsWasOn = false; // detecta borda de subida de UnlockSlots
     static void AmmoEnsurePile(void* pinv, int id, int smax) {
         if (!pinv || id <= 0) return;
-        // Reset tentativas quando UnlockSlots muda (mais espaco disponivel).
+        // Borda de UnlockSlots: registrado, mas o reset REAL agora eh via
+        // PileTriesReset (grid 16x20). Aqui so atualiza o estado da borda.
         if (Config::bUnlockSlots && !s_slotsWasOn) {
             s_slotsWasOn = true;
-            for (int k = 0; k < 8; ++k) { s_pileTries[k] = 0; s_pileMade[k] = false; }
-            Log::Info("[AMMO] slots desbloqueados — resetando tentativas de pilha.");
+            PileTriesReset("slots ligados");
         } else if (!Config::bUnlockSlots) {
             s_slotsWasOn = false;
         }
