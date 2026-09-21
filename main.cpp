@@ -61,6 +61,12 @@ static long __stdcall hkResizeBuffers(IDXGISwapChain* pSwapChain, UINT BufferCou
 
 static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Flags) {
     if (Flags & DXGI_PRESENT_TEST) return oPresent(pSwapChain, SyncInterval, Flags); // teste oculto: nao desenha
+    // FIX crash-no-loading 21/09: durante o loading o Unity apresenta com
+    // swapchain incompleta (backbuffer em transicao). Qualquer toque em D3D
+    // aqui (GetDevice/CreateRenderTarget) = AV dentro do Present (stack:
+    // 2 frames kiero + UnityMain, sem 1 frame de jogo). Gate: so inicializa
+    // quando a janela tem area real E o device responde. Antes disso, so
+    // repassa o Present (jogo carrega sozinho, sem hook).
     if (!g_bInit) {
         // Padrao mercado (ImGuiRedux/rdbo/kiero-imgui): HWND vem da swapchain
         // (Desc.OutputWindow), nao de EnumWindows. Funciona em loading, menu,
@@ -72,6 +78,12 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
             hwnd = desc.OutputWindow;
         if (!hwnd) hwnd = GetProcessWindow();
         if (!hwnd) return oPresent(pSwapChain, SyncInterval, Flags);
+        // Janela sem area = loading (splash Unity 6000.3.21f1): nao toca.
+        {
+            RECT cr = { 0 };
+            if (!GetClientRect(hwnd, &cr) || (cr.right - cr.left) < 200 || (cr.bottom - cr.top) < 200)
+                return oPresent(pSwapChain, SyncInterval, Flags);
+        }
         // Troca de janela (loading -> partida recria swapchain): re-hook WndProc.
         if (hwnd != g_hWindow) {
             if (oWndProc && g_hWindow)
