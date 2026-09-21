@@ -31,6 +31,8 @@ static ID3D11Device*           g_pDevice = nullptr;
 static ID3D11DeviceContext*    g_pContext = nullptr;
 static ID3D11RenderTargetView* g_pRTV = nullptr;
 static void ApplyGameClip(); // forward (definida antes do hkWndProc)
+static LRESULT CALLBACK hkWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam); // forward
+static HWND GetProcessWindow(); // forward (fallback se GetDesc falhar)
 
 static void CreateRenderTarget(IDXGISwapChain* pSwapChain) {
     ID3D11Texture2D* pBack = nullptr;
@@ -60,17 +62,31 @@ static long __stdcall hkResizeBuffers(IDXGISwapChain* pSwapChain, UINT BufferCou
 static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Flags) {
     if (Flags & DXGI_PRESENT_TEST) return oPresent(pSwapChain, SyncInterval, Flags); // teste oculto: nao desenha
     if (!g_bInit) {
-        // Guarda: sem janela nao ha como inicializar o backend Win32 do ImGui
-        // (HWND nulo => DisplaySize 0,0 => menu invisivel). Pula o frame.
-        if (!g_hWindow) {
-            return oPresent(pSwapChain, SyncInterval, Flags);
+        // Padrao mercado (ImGuiRedux/rdbo/kiero-imgui): HWND vem da swapchain
+        // (Desc.OutputWindow), nao de EnumWindows. Funciona em loading, menu,
+        // partida — independe da janela do cliente. Se a desc falhar, tenta a
+        // janela real 1x (fallback barato, sem loop, sem abortar a thread).
+        DXGI_SWAP_CHAIN_DESC desc = { 0 };
+        HWND hwnd = nullptr;
+        if (SUCCEEDED(pSwapChain->GetDesc(&desc)) && desc.OutputWindow)
+            hwnd = desc.OutputWindow;
+        if (!hwnd) hwnd = GetProcessWindow();
+        if (!hwnd) return oPresent(pSwapChain, SyncInterval, Flags);
+        // Troca de janela (loading -> partida recria swapchain): re-hook WndProc.
+        if (hwnd != g_hWindow) {
+            if (oWndProc && g_hWindow)
+                SetWindowLongPtr(g_hWindow, GWL_WNDPROC_INDEX, (LONG_PTR)oWndProc);
+            oWndProc = nullptr;
+            g_hWindow = hwnd;
         }
         if (SUCCEEDED(pSwapChain->GetDevice(__uuidof(ID3D11Device), (void**)&g_pDevice)) && g_pDevice) {
             g_pDevice->GetImmediateContext(&g_pContext);
             CreateRenderTarget(pSwapChain);
             GUI::Initialize(g_hWindow, g_pDevice, g_pContext);
             g_bInit = true;
-            Log::Info("GUI inicializada (ImGui D3D11/Win32).");
+            Log::Infof("GUI inicializada (HWND=0x%p, swapchain).", g_hWindow);
+            oWndProc = (WNDPROC)SetWindowLongPtr(g_hWindow, GWL_WNDPROC_INDEX, (LONG_PTR)hkWndProc);
+            Log::Info("WndProc hookado, menu operacional (INSERT/DELETE).");
         } else {
             return oPresent(pSwapChain, SyncInterval, Flags);
         }
@@ -163,7 +179,17 @@ static BOOL CALLBACK EnumWindowsCallback(HWND handle, LPARAM lParam) {
     DWORD pid = 0;
     GetWindowThreadProcessId(handle, &pid);
     if (GetCurrentProcessId() != pid) return TRUE;
+    // Janela do jogo = top-level visivel com area de cliente real.
+    // Sem o filtro de area, pega tooltip/overlay invisivel (bug 20/09:
+    // MainThread abortava com jogo aberto — janela fantasma estavel).
     if (!IsWindowVisible(handle)) return TRUE;
+    RECT r = { 0 };
+    if (!GetClientRect(handle, &r)) return TRUE;
+    if (r.right - r.left < 200 || r.bottom - r.top < 200) return TRUE;
+    // Sem dono e sem estilo TOOLWINDOW (tooltip/sombra).
+    LONG ex = GetWindowLong(handle, GWL_EXSTYLE);
+    if (ex & WS_EX_TOOLWINDOW) return TRUE;
+    if (GetWindow(handle, GW_OWNER) != nullptr) return TRUE;
     g_hWindow = handle;
     return FALSE;
 }
@@ -180,32 +206,10 @@ static DWORD WINAPI MainThread(LPVOID lpReserved) {
     Log::Infof("Log ativo em: %s", Log::GetPath());
     Log::Info("MainThread iniciada.");
 
-    // ETAPA 1: descobrir a janela ANTES de qualquer hook do Present.
-    // Motivo (fix v0.2.1): o bind do Present ativa o hkPresent a cada frame;
-    // se a janela ainda e nullptr, o ImGui inicializa com HWND nulo e o
-    // DisplaySize fica (0,0) -> menu invisivel (so o cursor aparece).
-    // FIX crash-no-inject (16/09): injetar no LOADING (MapHash gerando celulas)
-    // = kiero::init + hooks no meio da remontagem do LOD = AV 0xc0000005.
-    // Espera a janela existir E estabilizar (2 leituras iguais = mensagem
-    // loop rodando, nao splash estatico) antes de tocar em D3D.
-    {
-        HWND prev = nullptr;
-        int stable = 0;
-        for (int i = 0; i < 200 && stable < 4; ++i) { // ~10s max
-            g_hWindow = GetProcessWindow();
-            if (g_hWindow && g_hWindow == prev) stable++;
-            else stable = 0;
-            prev = g_hWindow;
-            if (stable < 4) Sleep(50);
-        }
-        if (!g_hWindow) {
-            Log::Error("Sem janela apos 10s � MainThread aborta (tente injetar em partida).");
-            return 0;
-        }
-    }
-    Log::Infof("Janela encontrada: 0x%p.", g_hWindow);
-
-    // ETAPA 2: com a janela resolvida, instala os hooks.
+    // Padrao mercado: hooks instalados imediatamente (HWND vem da swapchain no
+    // 1o Present). Nenhuma espera de janela aqui — EnumWindowsCallback +
+    // GetProcessWindow ficam so como fallback do hkPresent.
+    // ETAPA UNICA: instala Present/Resize. WndProc hooka no 1o Present.
     bool bAttached = false;
     do {
         if (kiero::init(kiero::RenderType::D3D11) == kiero::Status::Success) {
@@ -219,8 +223,7 @@ static DWORD WINAPI MainThread(LPVOID lpReserved) {
             else
                 Log::Error("Bind FALHOU: ResizeBuffers (slot 13).");
 
-            oWndProc = (WNDPROC)SetWindowLongPtr(g_hWindow, GWL_WNDPROC_INDEX, (LONG_PTR)hkWndProc);
-            Log::Info("WndProc hookado, menu operacional (INSERT/DELETE).");
+            Log::Info("Hooks instalados; WndProc hooka no 1o Present (HWND da swapchain).");
             bAttached = true;
         } else {
             Log::Warn("kiero::init falhou, nova tentativa em 100ms...");

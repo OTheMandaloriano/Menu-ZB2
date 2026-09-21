@@ -1778,11 +1778,12 @@ namespace Mono {
     // faz o proprio jogo dropar no chao — retry infinito = tapete de loot).
     // Falhou 3x = para e avisa (libere slot ou Desbloquear Slots).
     static bool s_pileMade[8] = { false,false,false,false,false,false,false,false };
+    static int s_pileCount[8] = { 0,0,0,0,0,0,0,0 };
+    static int s_pileSmax[8] = { 0,0,0,0,0,0,0,0 };
     static int s_pileTries[8] = { 0,0,0,0,0,0,0,0 };
     static int s_pileTryN = 0;
     static bool s_slotsWasOn = false; // detecta borda de subida de UnlockSlots
     static void AmmoEnsurePile(void* pinv, int id, int smax) {
-        (void)smax;
         if (!pinv || id <= 0) return;
         // Reset tentativas quando UnlockSlots muda (mais espaco disponivel).
         if (Config::bUnlockSlots && !s_slotsWasOn) {
@@ -1815,24 +1816,42 @@ namespace Mono {
         if (++s_pileTryN % 60 != 1) return;
         __try {
             s_pileTries[slot]++;
-            int dose = 30; // cabe em qualquer pilha de bala; WillStack junta
+            // Dose = stackMax real (auditoria 20/09: HUD le StoredItemCount,
+            // que soma stackCount do storage; pilha cheia = reserva cheia).
+            int dose = (smax > 0 && smax <= 100000) ? smax : 30;
             void* cargs[2] = { &id, &dose };
             MonoObject* exc = nullptr;
             MonoObject* ret = pInvoke(mCreateItem, nullptr, cargs, &exc);
             if (exc || !ret) { Log::Warn("[AMMO] CreateInventoryItem falhou."); return; }
             void* item = ret;
-            int filter = 2; // Both: inventario + equipamento
+            // Inventory(0) — auditoria 20/09: Both(2) deixava a sobra cair em
+            // equipment/misc (fora do storage = HUD nao conta, PullStoredItems
+            // nao puxa). Inventory poe via PutLootIntoContainerPosition.
+            int filter = 0;
             void* aargs[2] = { &item, &filter };
             MonoObject* exc2 = nullptr;
             MonoObject* ret2 = pInvoke(mAddItem, pinv, aargs, &exc2);
             bool ok = (!exc2 && ret2 && *(unsigned char*)pUnbox(ret2) != 0);
             if (ok) {
-                // VERIFICA (auditoria 19/09): AddItem retorna true mas a pilha
-                // pode nao estar no storage (foi p/ equipment? dropou?).
-                // Reconta no proximo ciclo pesado; se sumiu, tenta de novo.
-                // Por enquanto marca + loga; TopStacks confirma via s_pileCount.
-                s_pileMade[slot] = true; // so marca depois do sucesso
-                Log::Infof("[AMMO] pilha criada: id=%d qtd=%d ok=1 (verifique no Inventory)", id, dose);
+                // VERIFICA no storage (auditoria 20/09): conta pilhas do tipo
+                // AGORA (nao no proximo ciclo). Sumiu = foi p/ lugar errado:
+                // tenta de novo (nao marca). Apareceu = marca + TopStacks topa.
+                int found = 0;
+                {
+                    void* cont = ReadP(pinv, FieldOff(fStorage));
+                    void* ls = cont ? ReadP(cont, FieldOff(fItems)) : nullptr;
+                    int oS = FieldOff(fStack), oI = FieldOff(fId);
+                    if (ls && oS >= 0 && oI >= 0) WalkList(ls, 64, [&](void* it, int) {
+                        int iid = ReadI(it, oI, -1);
+                        if (iid == id) found++;
+                    });
+                }
+                if (found > 0) {
+                    s_pileMade[slot] = true; // so marca com pilha no storage
+                    Log::Infof("[AMMO] pilha criada: id=%d qtd=%d no storage (HUD conta).", id, dose);
+                } else {
+                    Log::Infof("[AMMO] pilha id=%d aceita mas fora do storage (tentativa %d/3).", id, s_pileTries[slot]);
+                }
             } else {
                 Log::Infof("[AMMO] pilha id=%d recusada (tentativa %d/3).", id, s_pileTries[slot]);
                 if (s_pileTries[slot] >= 3)
@@ -2033,8 +2052,31 @@ namespace Mono {
                 oStack = FieldOff(fStack); oDbStack = FieldOff(fDbStack);
                 oId = FieldOff(fId);
             }
-            if (Config::bInfAmmo)
+            if (Config::bInfAmmo) {
                 TopStacks(local, oInv, oStorage, oItems, oStack, oDbStack, oId, false);
+                // Cria pilha quando zerada (auditoria 20/09: TopStacks so topa
+                // o que existe; storage vazio = reserva 0 p/ sempre). Roda no
+                // ciclo pesado (heavy) p/ nao invocar a 30Hz.
+                if (heavy && s_ammoIdCur >= 10 && s_ammoIdCur <= 116) {
+                    // smax do tipo: usa o maior visto (s_pileSmax) ou maxAmmo.
+                    int smax = 0;
+                    for (int k = 0; k < 8; ++k)
+                        if (s_ammoIds[k] == s_ammoIdCur && s_pileSmax[k] > smax)
+                            smax = s_pileSmax[k];
+                    if (smax <= 0) smax = 200; // teto padrao de bala
+                    // So cria se NAO ha pilha do tipo no storage.
+                    bool has = false;
+                    {
+                        void* cont = ReadP(pinv, oStorage);
+                        void* ls = cont ? ReadP(cont, oItems) : nullptr;
+                        if (ls && oId >= 0) WalkList(ls, 64, [&](void* it, int) {
+                            if (has) return;
+                            if (ReadI(it, oId, -1) == s_ammoIdCur) has = true;
+                        });
+                    }
+                    if (!has) AmmoEnsurePile(pinv, s_ammoIdCur, smax);
+                }
+            }
             if (Config::bInfItems)
                 TopStacks(local, oInv, oStorage, oItems, oStack, oDbStack, oId, true);
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
@@ -2172,8 +2214,7 @@ namespace Mono {
                 }
             }
             // Reserva: conta pilhas por tipo (p/ criar 1 se zerada).
-            static int s_pileCount[8] = { 0,0,0,0,0,0,0,0 };
-            static int s_pileSmax[8] = { 0,0,0,0,0,0,0,0 };
+            // (s_pileCount/s_pileSmax = static global, declarado no topo.)
             if (!items) for (int k = 0; k < 8; ++k) { s_pileCount[k] = 0; s_pileSmax[k] = 0; }
             for (int li = 0; li < nLists; ++li) {
             // Cache de db por item (anti-hang): smax/id conhecidos sem invoke.
@@ -2204,11 +2245,14 @@ namespace Mono {
                 if (id < 2 || id > 116) return;
                 if (cur < 0 || cur > smax) return;
                 if (!items) {
-                    // Reserva: trava stackCount=stackMax em TODA pilha de bala
-                    // (id 10-13/108), em qualquer modo. Sem depender de ammoID
-                    // conhecido: lootou 1 bala 1x, vira pilha infinita.
-                    bool isBullet = (id >= 10 && id <= 13) || id == 108;
-                    if (!isBullet) return;
+                    // Reserva: trava stackCount=stackMax na pilha do ammoID da
+                    // arma (auditoria 20/09: HUD = StoredItemCount(ammoID)).
+                    // Compara com s_ammoIdCur (tipo real da equipada), nao com
+                    // faixa fixa — cobre RiotShell e qualquer calibre especial.
+                    // Fallback: balas basicas 10-13/108 (antes do 1o resolve).
+                    bool isWanted = (s_ammoIdCur >= 10 && id == s_ammoIdCur) ||
+                        ((id >= 10 && id <= 13) || id == 108);
+                    if (!isWanted) return;
                     AmmoIdAdd(id); // registra p/ pente extra + telemetria
                     for (int k = 0; k < 8; ++k) {
                         if (s_ammoIds[k] == id) {
@@ -2216,12 +2260,6 @@ namespace Mono {
                             if (smax > s_pileSmax[k]) s_pileSmax[k] = smax;
                             break;
                         }
-                    }
-                    // slot 0 = tipo da equipada atual (espelha s_ammoIdCur,
-                    // que pode mudar ao trocar de arma: reconta todo ciclo).
-                    if (s_ammoIdCur == id) {
-                        s_pileCount[0]++;
-                        if (smax > s_pileSmax[0]) s_pileSmax[0] = smax;
                     }
                 } else {
                     // Items = TUDO (materiais 999x, granada, bandagem, bala).
@@ -2231,11 +2269,8 @@ namespace Mono {
                 WriteI(it, oStack, smax);
             });
             } // fim for li (storage; items inclui misc/weapons)
-            // SEM Create/AddItem (19/09): invoke de criacao trava na troca de
-            // arma (crash 1/3/4/5) e a pilha ia p/ lugar fora do storage
-            // (HUD nao contava). Reserva agora = trava da pilha EXISTENTE no
-            // storage (acima). Sem pilha no storage = o loot natural cria e a
-            // trava assume no ciclo seguinte. Zero invoke = zero crash.
+            // Cria pilha via AmmoEnsurePile (acima, no ApplyAmmo): aqui so
+            // trava o que existe. Sem pilha = proximo ciclo pesado cria.
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 
