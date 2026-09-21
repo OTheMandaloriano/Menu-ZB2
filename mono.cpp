@@ -674,6 +674,10 @@ namespace Mono {
         ResolveClass("DebugModifiers", cDbgMod);
         ResolveClass("DebugGeneralModifiers", cDbgGen);
         ResolveClass("DebugBoolean", cDbgBool);
+        // Defeito 2 (auditoria 21/09): faltava General — dbg sempre 0.
+        // Nome exato via dnlib: field "general" em DebugModifiers.
+        ResolveField(cDbgMod, "DebugModifiers", "General", fDbgGen);
+        if (!fDbgGen) ResolveField(cDbgMod, "DebugModifiers", "<General>k__BackingField", fDbgGen);
         ResolveField(cDbgGen, "DebugGeneralModifiers", "DisableSway", fDisSway);
         ResolveField(cDbgBool, "DebugBoolean", "value", fBoolVal);
         ResolveField(cDbGun, "DatabaseGun", "recoil", fGunRecoil);
@@ -2502,7 +2506,33 @@ namespace Mono {
     // (antes do ApplyWeapon) p/ valer nos dois Applies.
     struct RestoreSlot { void* key; int off; float base; };
     static RestoreSlot s_rsJump[4], s_rsRof[16], s_rsDur[64], s_rsAim[4];
+    static RestoreSlot s_rsSway[4]; // gunSway fallback (defeito 8)
     static bool s_swayWas = false;
+    // Guarda base bool (1 byte) p/ restore nao-destrutivo (defeito 7).
+    struct RestoreSlotB { void* key; int off; unsigned char base; };
+    static RestoreSlotB s_rsFull[16];
+    static void RestorePushB(RestoreSlotB* slots, int cap, void* key, int off, unsigned char base) {
+        if (!key || off < 0) return;
+        for (int k = 0; k < cap; ++k) {
+            if (slots[k].key == key && slots[k].off == off) return;
+            if (!slots[k].key) { slots[k].key = key; slots[k].off = off; slots[k].base = base; return; }
+        }
+    }
+    static void RestoreRunB(RestoreSlotB* slots, int cap, const char* tag) {
+        int n = 0;
+        for (int k = 0; k < cap; ++k) {
+            if (!slots[k].key) continue;
+            unsigned char cur = 0;
+            __try { memcpy(&cur, (char*)slots[k].key + slots[k].off, 1); }
+            __except (EXCEPTION_EXECUTE_HANDLER) { slots[k].key = nullptr; continue; }
+            if (cur != slots[k].base) {
+                __try { memcpy((char*)slots[k].key + slots[k].off, &slots[k].base, 1); n++; }
+                __except (EXCEPTION_EXECUTE_HANDLER) {}
+            }
+            slots[k].key = nullptr;
+        }
+        if (n > 0) Log::Infof("[RESTORE] %s: %d originais.", tag, n);
+    }
     static void RestorePush(RestoreSlot* slots, int cap, void* key, int off, float base) {
         if (!key || off < 0) return;
         for (int k = 0; k < cap; ++k) {
@@ -2530,13 +2560,16 @@ namespace Mono {
     // Travar so a equipada = metade das armas sem efeito.
     // Roda na worker sob gate de mapa (local vivo), so com flag ligada.
     // Falha de resolve = desliga sozinho (log 1x), sem travar.
-    static bool s_weapOk = true;   // false = cadeia incompleta (desliga)
+    static bool s_weapOk = true;   // legado (defeito 6: retry substitui)
     static bool s_weapLogged = false;
     static void ApplyWeapon(void* local) {
         if (!local) return;
         bool want = Config::bNoRecoil || Config::bNoSpread || Config::bNoSway
             || Config::bTightAim || Config::bRapidFire;
-        if (!want || !s_weapOk) return;
+        // Defeito 6: sem desligamento permanente — throttle com retry.
+        // Falha transitória (loading) nao mata; so desliga apos 500 ciclos.
+        if (!want) return;
+        static int s_weapFailN = 0;
         // Resolve preguiçoso 1x (offsets via API; singleton via vtable).
         static int oAmmoId = -2, oMax = -2, oSpread = -2, oRof = -2;
         static int oRecoil = -2, oRecoilRnd = -2;
@@ -2556,13 +2589,15 @@ namespace Mono {
             oBoolVal = FieldOff(fBoolVal);
             oGen = FieldOff(fDbgGen); oDisSway = FieldOff(fDisSway);
             if (cPEq) { fWep = pFieldFrom(cPEq, "weapons"); oWep = FieldOff(fWep); }
-            if (cWBase && s_dom) {
+            // Defeito 5 (auditoria 21/09): singletons com retry — se a 1a
+            // resolucao pegou cena incompleta, tenta de novo (nao congela).
+            if (!s_wbase && cWBase && s_dom) {
                 __try {
                     MonoVTable* vt = pVTable(s_dom, cWBase);
                     if (vt && fWBaseInst) pStaticGet(vt, fWBaseInst, &s_wbase);
                 } __except (EXCEPTION_EXECUTE_HANDLER) { s_wbase = nullptr; }
             }
-            if (cDbgMod && s_dom && oGen >= 0) {
+            if (!s_dbgGen && cDbgMod && s_dom && oGen >= 0) {
                 __try {
                     MonoVTable* vt = pVTable(s_dom, cDbgMod);
                     void* genHolder = nullptr;
@@ -2571,10 +2606,12 @@ namespace Mono {
                     // campo: tenta os dois (SEH cobre).
                     if (genHolder && cDbgGen && oDisSway >= 0) {
                         void* ds = ReadP(genHolder, oDisSway);
-                        if (ds) s_dbgGen = genHolder;
-                        else s_dbgGen = nullptr;
+                        if (ds) {
+                            s_dbgGen = genHolder;
+                            Log::Info("[WEAPON] DebugGeneralModifiers resolvido (retry).");
+                        }
                     }
-                } __except (EXCEPTION_EXECUTE_HANDLER) { s_dbgGen = nullptr; }
+                } __except (EXCEPTION_EXECUTE_HANDLER) {}
             }
             if (!s_weapLogged) {
                 s_weapLogged = true;
@@ -2583,16 +2620,22 @@ namespace Mono {
                     s_wbase ? 1 : 0, s_dbgGen ? 1 : 0);
             }
             if (oSpread < 0 && oRof < 0 && oRecoil < 0 && oBoolVal < 0) {
-                Log::Warn("[WEAPON] cadeia incompleta — arma desativada (sem crash).");
-                s_weapOk = false;
+                // Defeito 6: retry em vez de morte permanente.
+                if (++s_weapFailN > 500) {
+                    Log::Warn("[WEAPON] cadeia incompleta apos 500 ciclos — arma em espera (troque de cena).");
+                    s_weapFailN = 0;
+                }
                 return;
             }
+            s_weapFailN = 0;
         }
         __try {
             // Dbs de TODAS as armas: inventory -> equippedItems -> weapons[]
             // -> item -> GetDataBaseItem (cache DbCached). Rof/recoil/spread
-            // sao do ASSET: 1 db pode servir 2 armas iguais — cache por db.
-            static void* s_seenDb[16] = { nullptr };
+            // sao do ASSET: 1 db pode servir 2 armas iguais.
+            // Defeito 1 (auditoria 21/09): SEM dedup permanente — escreve
+            // idempotente todo ciclo (reaplica apos troca de cena/loja).
+            // Custo: poucas armas x 3 floats, irrelevante.
             void* pinv = ReadP(local, FieldOff(fInv));
             void* peq = pinv ? ReadP(pinv, FieldOff(fEq)) : nullptr;
             void* list = (peq && oWep >= 0) ? ReadP(peq, oWep) : nullptr;
@@ -2617,11 +2660,7 @@ namespace Mono {
                 WalkList(list, 32, [&](void* it, int) {
                     void* db = DbCached(it);
                     if (!db) return;
-                // Deduplica por db (asset compartilhado).
-                for (int k = 0; k < 16; ++k) {
-                    if (s_seenDb[k] == db) return;
-                    if (!s_seenDb[k]) { s_seenDb[k] = db; break; }
-                }
+                // Sem dedup (defeito 1): reaplica todo ciclo (idempotente).
                 // No Recoil: zera recoil (Vector2 = 2 floats) + randomness.
                 // Mira Fechada inclui recoil zero (mira nao abre atirando).
                 if (Config::bNoRecoil || Config::bTightAim) {
@@ -2645,12 +2684,13 @@ namespace Mono {
                 // Full Auto universal: 1-tiro/rajada vira automatica.
                 // fullAuto=true + burstCount=0 em TODA arma (asset): pistola
                 // 12/12, Riot 1/1, sniper — todas seguram o gatilho.
-                // Restore ao desligar (bool/int via WriteI direto).
+                // Defeito 7: restore NAO-destrutivo (guarda base 1 byte).
                 if (Config::bRapidFire) {
                     if (oFull >= 0) {
                         __try {
                             unsigned char fa = 0;
                             memcpy(&fa, (char*)db + oFull, 1);
+                            RestorePushB(s_rsFull, 16, db, oFull, fa);
                             if (!fa) {
                                 unsigned char t = 1;
                                 memcpy((char*)db + oFull, &t, 1);
@@ -2662,17 +2702,7 @@ namespace Mono {
                         if (bc != 0 && bc >= 0 && bc < 100) WriteI(db, oBurst, 0);
                     }
                 } else {
-                    // Restore fullAuto/burst ao desligar (1x por db).
-                    if (oFull >= 0) {
-                        __try {
-                            unsigned char fa = 0;
-                            memcpy(&fa, (char*)db + oFull, 1);
-                            if (fa) {
-                                unsigned char f = 0;
-                                memcpy((char*)db + oFull, &f, 1);
-                            }
-                        } __except (EXCEPTION_EXECUTE_HANDLER) {}
-                    }
+                    RestoreRunB(s_rsFull, 16, "fullauto");
                 }
                 // Rapid Fire: rof x mult em TODA arma (ate 1 tiro:
                 // BaseCooldownTime=1/rof cai p/ todas). Base guardada por db
@@ -2700,37 +2730,35 @@ namespace Mono {
                 }
             });
             // Rapid Fire universal (parte 2): Cooldown zerado na prop atual.
-            // Arma de 1 tiro (ex. Riot Shotgun) tem rof baixo e o jogo pode
-            // segurar o tiro no Cooldown/BufferedShot da PhysicalGun — zerar
-            // o Cooldown todo ciclo libera o proximo disparo imediato.
-            // Sem efeito colateral: ShouldFire continua mandando (sem bala,
-            // sem tiro; sem mira, sem disparo).
+            // Defeito 10: resolve 1x (static) — antes pFieldFrom+pMethodFrom
+            // todo ciclo a 30Hz (custo + risco de hang).
             if (Config::bRapidFire && cArms && cPlayer) {
-                static int oCd = -2;
+                static int oCd = -2, oArmsEq = -2;
                 static MonoClassField* fCd = nullptr;
+                static MonoClassField* fArmsEq = nullptr;
+                static MonoMethod* s_mEqG = nullptr;
                 if (oCd == -2) {
-                    oCd = -1;
+                    oCd = -1; oArmsEq = -1;
                     MonoClass* cPG = nullptr;
                     if (ResolveClass("PhysicalGun", cPG) && cPG) {
                         fCd = pFieldFrom(cPG, "<Cooldown>k__BackingField");
                         if (!fCd) fCd = pFieldFrom(cPG, "Cooldown");
                         oCd = FieldOff(fCd);
                     }
+                    fArmsEq = pFieldFrom(cPlayer, "arms");
+                    oArmsEq = FieldOff(fArmsEq);
+                    s_mEqG = pMethodFrom(cArms, "get_EquippedGun", 0);
                 }
-                if (oCd >= 0) {
-                    MonoClassField* fa = pFieldFrom(cPlayer, "arms");
-                    void* arms = (fa) ? ReadP(local, FieldOff(fa)) : nullptr;
+                if (oCd >= 0 && oArmsEq >= 0 && s_mEqG) {
+                    void* arms = ReadP(local, oArmsEq);
                     if (arms) {
-                        MonoMethod* mEqG = pMethodFrom(cArms, "get_EquippedGun", 0);
-                        if (mEqG) {
-                            void* gun = InvokeObj(mEqG, arms, nullptr);
-                            if (gun) {
-                                float cd = ReadF(gun, oCd, -99.0f);
-                                // Cooldown>0 = esperando: libera (ResetCooldown
-                                // grava -0.001 no jogo; aqui direto = igual).
-                                if (cd > 0.0f && cd < 100.0f)
-                                    WriteF(gun, oCd, -0.001f);
-                            }
+                        void* gun = InvokeObj(s_mEqG, arms, nullptr);
+                        if (gun) {
+                            float cd = ReadF(gun, oCd, -99.0f);
+                            // Cooldown>0 = esperando: libera (ResetCooldown
+                            // grava -0.001 no jogo; aqui direto = igual).
+                            if (cd > 0.0f && cd < 100.0f)
+                                WriteF(gun, oCd, -0.001f);
                         }
                     }
                 }
@@ -2812,17 +2840,32 @@ namespace Mono {
                     __try {
                         void* ds = ReadP(s_dbgGen, oDisSway);
                         if (ds) {
-                            int cur = ReadI(ds, oBoolVal, -1);
-                            if (cur == 0) WriteI(ds, oBoolVal, 1);
-                            done = (cur >= 0);
+                            // Defeito 9: bool tem 1 byte — memcpy, nao WriteI
+                            // (4 bytes corrompia vizinhos).
+                            unsigned char cur = 0;
+                            memcpy(&cur, (char*)ds + oBoolVal, 1);
+                            if (cur == 0) {
+                                unsigned char t = 1;
+                                memcpy((char*)ds + oBoolVal, &t, 1);
+                            }
+                            done = true;
                         }
                     } __except (EXCEPTION_EXECUTE_HANDLER) {}
                 }
+                // Defeito 8: fallback gunSway com restore (antes grudava 0).
                 if (!done && s_wbase && oSway >= 0) {
-                    if (ReadF(s_wbase, oSway, -1.0f) != 0.0f)
+                    float cur = ReadF(s_wbase, oSway, -1.0f);
+                    if (cur != 0.0f && cur > -99998.0f) {
+                        static bool s_swayBaseOk = false;
+                        if (!s_swayBaseOk) {
+                            s_swayBaseOk = true;
+                            RestorePush(s_rsSway, 4, s_wbase, oSway, cur);
+                        }
                         WriteF(s_wbase, oSway, 0.0f);
+                    }
                 }
             }
+            if (!Config::bNoSway) RestoreRun(s_rsSway, 4, "sway");
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 

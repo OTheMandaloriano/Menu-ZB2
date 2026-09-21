@@ -5,6 +5,29 @@
 > Jogo: ZumbiBlocks2.exe SHA-256 66c3ed6829349aac8b5cb5fdb2a85ef62d17c1bded4334352af7349ca608ea0a
 > Assembly-CSharp.dll SHA-256 c41a298975d35f0dad0a05531bce6e0b6e274d0ddf265217d65ce3ac5cbc84e1
 > Data: 2026-09-12 ~00:05 BRT. Partida ao vivo (2x PlayerMain, 25x Zombie).
+>
+> ## Tabela de limites por arma (validada viva 21/09 via CE MCP, ItemsBase 116 slots)
+>
+> Todas as 61 armas: `stackMax da arma = 1` (pente em `ammo`), consumo 1/tiro
+> (excecao: DoubleSgx1911 = 2). Balas: 9/10/11/12/64 = pilha 200; 107 He40mm = 20.
+> Reserva = soma `stackCount` no storage (sem teto por tipo; teto = grid 16x20).
+> Recarga puxa `Min(need, reserva)` via `PullStoredItems` (só storage).
+>
+> | ID | Arma | maxAmmo | ammoID | pellet | fullAuto | rof | spread | recoil |
+> |---|---|---|---|---|---|---|---|---|
+> | 1 | HiPoint | 9 | 12 | 1 | 0 | 8.0 | 4.0 | 1.50,0.80 |
+> | 50 | RiotShotgun | 20 | 64 | 10 | 0 | 2.0 | 30.0 | 1.00,3.00 |
+> | 46 | Barrett | 10 | 10 | 1 | 0 | 4.0 | 1.0 | 1.20,2.00 |
+> | 68 | Spas | 9 | 9 | 10 | 0 | 5.0 | 20.0 | 1.00,1.50 |
+> | 105 | Negev | 150 | 11 | 1 | 1 | 11.0 | 15.0 | 0.40,0.30 |
+> | 47 | Ultimax100 | 100 | 11 | 1 | — | — | — | — |
+> | 103 | Am640Launcher | 1 | 107 | 1 | 0 | — | — | — (explode: ShootThrowable) |
+> | 94 | DoubleSgx1911 | 36 | 12 | 2 | — | — | — | consumo 2/tiro |
+>
+> Tabela completa das 61 armas no dump da sessao 21/09.
+> Armas brancas: Shovel, Pickaxe, Pipe, WoodenClub, KnifeAk47, Cleaver, PipeWrench, Katana, Kukri, Nodachi, QueensHammer, ReaperScythe, Shuriken, ThrowingAxe.
+> Regra: nome do campo (FieldOff em runtime) > numero fixo. Numero acima e
+> cache desta build (SHA c41a2989…) — revalidar se o SHA mudar.
 
 ## Validados em runtime [OK]
 
