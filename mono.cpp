@@ -1786,6 +1786,12 @@ namespace Mono {
     static int s_pileSmax[8] = { 0,0,0,0,0,0,0,0 };
     static int s_pileTries[8] = { 0,0,0,0,0,0,0,0 };
     static int s_pileTryN = 0;
+    // Retry com espaco: grid 16x20 abre lugar novo — zera as tentativas
+    // (o reset por borda de UnlockSlots nao bastava: grid vem depois).
+    static void PileTriesReset(const char* why) {
+        for (int k = 0; k < 8; ++k) { s_pileTries[k] = 0; s_pileMade[k] = false; }
+        Log::Infof("[AMMO] retry liberado (%s).", why);
+    }
     static bool s_slotsWasOn = false; // detecta borda de subida de UnlockSlots
     static void AmmoEnsurePile(void* pinv, int id, int smax) {
         if (!pinv || id <= 0) return;
@@ -2396,10 +2402,10 @@ namespace Mono {
     // C2: slots desbloqueados (storage+misc+weapons cheios). O print mostra
     // cadeados em 3 lugares: TotalStorage/Misc (bools do PlayerInventory) +
     // armas 2/3 bloqueadas por WeaponSlotTypes (lista de slots validos) +
-    // misc travado por UnlockedMiscSlotsCount. Resolve os 3:
-    // 1) bools 1x (barato, todo ciclo); 2) WeaponsCount = tamanho da lista
-    // weapons (so leitura aqui; crescer a lista exige invoke — loga p/ fase);
-    // 3) UnlockedMiscSlotsCount = MiscCount (todo ciclo, barato).
+    // misc travado por UnlockedMiscSlotsCount. Resolve os 3 + GRID:
+    // 4) ItemContainer.TotalSize/UsableSize (IntVec2): sem grid util nao ha
+    // onde por a pilha (AddItem recusa = x/0 eterno, bug 21/09). Metodos
+    // SetTotalSize/SetUsableSize existem — invoke 1x por container.
     static void ApplySlots(void* local) {
         // Roda a cada ativacao (borda de subida) + reforco todo ciclo (o jogo
         // pode re-travar ao trocar de cena). Sem 'done' permanente: barato
@@ -2469,6 +2475,42 @@ namespace Mono {
                         Log::Infof("[SLOTS] WeaponSlotTypes n=%d (static, slots de arma validos).", n);
                     } __except (EXCEPTION_EXECUTE_HANDLER) {
                         Log::Warn("[SLOTS] WeaponSlotTypes: leitura statica falhou.");
+                    }
+                }
+            }
+            // 4) GRID util do storage (bug 21/09: pilha recusada 3x = sem
+            // espaco fisico; bools desbloqueados mas grid pequeno = AddItem
+            // retorna false). SetUsableSize(16,20) via invoke 1x por sessao.
+            // IntVec2 = struct {x@+0, y@+4}; metodo (int,int)->void.
+            {
+                static bool s_gridDone = false;
+                if (!s_gridDone) {
+                    void* cont = ReadP(pinv, FieldOff(fStorage));
+                    if (cont && cPInv) {
+                        // Resolve SetUsableSize na classe ItemContainer 1x.
+                        static MonoClass* cCont = nullptr;
+                        static MonoMethod* mSetU = nullptr;
+                        static bool s_mInit = false;
+                        if (!s_mInit) {
+                            s_mInit = true;
+                            ResolveClass("ItemContainer", cCont);
+                            if (cCont) mSetU = pMethodFrom(cCont, "SetUsableSize", 2);
+                        }
+                        if (mSetU) {
+                            int w = 16, h = 20; // teto do jogo (dump 21/09)
+                            void* args[2] = { &w, &h };
+                            __try {
+                                MonoObject* exc = nullptr;
+                                pInvoke(mSetU, cont, args, &exc);
+                                if (!exc) {
+                                    s_gridDone = true;
+                                    Log::Info("[SLOTS] grid storage 16x20 (pilha cabe).");
+                                    // Reabre tentativas: com espaco, o criador
+                                    // merece 3 novas chances.
+                                    PileTriesReset("grid 16x20");
+                                }
+                            } __except (EXCEPTION_EXECUTE_HANDLER) {}
+                        }
                     }
                 }
             }
