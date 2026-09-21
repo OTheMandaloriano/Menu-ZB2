@@ -176,6 +176,7 @@ namespace Mono {
     static MonoMethod* mTryReload = nullptr; // PlayerArms.TryStartReload (coop: recarga legitima)
     static MonoMethod* mCreateItem = nullptr; // InventoryItem.CreateInventoryItem(ID,int)
     static MonoMethod* mAddItem = nullptr;    // PlayerInventory.AddItem(item,filter)
+    static MonoMethod* mGotLoot = nullptr;    // PlayerInteraction.GotLootFromServer(ID,int) — seed nativo
     static MonoMethod* mDropLoot = nullptr;   // PlayerInventory.DropLoot(item)
     // Dinheiro (Currency singleton: Dollar/Silver/Gold -> CurrencyData.amount).
     static MonoClass* cCur = nullptr;        // Currency
@@ -633,6 +634,13 @@ namespace Mono {
             else Log::Warn("Metodo nao resolvido: PlayerEquippedItems.GetEquipment/1 (tentado 1 e 0)");
         }
         if (cItem) ResolveMethod(cItem, "InventoryItem", "GetDataBaseItem", 0, mGetDb);
+        // Seed nativo (auditoria 21/09): PlayerInteraction.GotLootFromServer
+        // = caminho do Descarregar (cria pilha cheia no storage). Resolve 1x.
+        {
+            MonoClass* cInter = nullptr;
+            if (ResolveClass("PlayerInteraction", cInter) && cInter)
+                ResolveMethod(cInter, "PlayerInteraction", "GotLootFromServer", 2, mGotLoot);
+        }
         {
             MonoClass* cArms = nullptr;
             if (ResolveClass("PlayerArms", cArms)) {
@@ -1786,6 +1794,7 @@ namespace Mono {
     static int s_pileSmax[8] = { 0,0,0,0,0,0,0,0 };
     static int s_pileTries[8] = { 0,0,0,0,0,0,0,0 };
     static int s_pileTryN = 0;
+    static int s_pileBackN[8] = { 0,0,0,0,0,0,0,0 }; // backoff por slot
     // Retry com espaco: grid 16x20 abre lugar novo — zera as tentativas
     // (o reset por borda de UnlockSlots nao bastava: grid vem depois).
     static void PileTriesReset(const char* why) {
@@ -1807,6 +1816,20 @@ namespace Mono {
         for (int k = 0; k < 8; ++k) if (s_ammoIds[k] == id) slot = k;
         if (slot < 0 || s_pileMade[slot]) return;
         if (s_pileTries[slot] >= 3) return; // sem espaco: para (1 aviso abaixo)
+        // Seed NATIVO (auditoria 21/09, validado CE MCP em partida):
+        // PlayerInteraction.GotLootFromServer(ID, stackMax) = caminho do botao
+        // Descarregar (new + SetGenericNumericValue + FindPlaceFor + PutLoot).
+        // Resolve 1x aqui (fora do backoff).
+        if (!mGotLoot) {
+            static bool s_gotInit = false;
+            if (!s_gotInit) {
+                s_gotInit = true;
+                MonoClass* cInter = nullptr;
+                if (ResolveClass("PlayerInteraction", cInter) && cInter)
+                    ResolveMethod(cInter, "PlayerInteraction", "GotLootFromServer", 2, mGotLoot);
+                if (!mGotLoot) Log::Warn("[AMMO] sem GotLootFromServer (seed nativo off).");
+            }
+        }
         // Resolve metodos 1x (fora do backoff: resolve = sem espera).
         if (!mCreateItem && cItem) {
             MonoMethod* t = pMethodFrom(cItem, "CreateInventoryItem", 2);
@@ -1816,34 +1839,57 @@ namespace Mono {
             MonoMethod* t = pMethodFrom(cPInv, "AddItem", 2);
             if (t) { mAddItem = t; s.resolvedMethods++; }
         }
-        if (!mCreateItem || !mAddItem) {
-            static bool s_noMethWarned = false;
-            if (!s_noMethWarned) { s_noMethWarned = true; Log::Warn("[AMMO] sem metodos p/ criar pilha."); }
-            return;
-        }
-        // Backoff POR SLOT (bug 21/09: contador global travava todos os tipos;
-        // troca de arma 1->3 mudava o id e o global nunca alinhava).
+        // Backoff POR SLOT: 1 tentativa a cada ~2s (60 ciclos de ~33ms).
         // Fora da vez = volta sem tocar no Mono (zero invoke = zero hang).
-        static int s_pileBackN[8] = { 0,0,0,0,0,0,0,0 };
         if (++s_pileBackN[slot] % 60 != 1) return;
         __try {
             s_pileTries[slot]++;
-            // Dose = stackMax real (auditoria 20/09: HUD le StoredItemCount,
-            // que soma stackCount do storage; pilha cheia = reserva cheia).
+            // Dose = stackMax real (HUD = StoredItemCount soma stackCount).
             int dose = (smax > 0 && smax <= 100000) ? smax : 30;
-            void* cargs[2] = { &id, &dose };
-            MonoObject* exc = nullptr;
-            MonoObject* ret = pInvoke(mCreateItem, nullptr, cargs, &exc);
-            if (exc || !ret) { Log::Warn("[AMMO] CreateInventoryItem falhou."); return; }
-            void* item = ret;
-            // Inventory(0) — auditoria 20/09: Both(2) deixava a sobra cair em
-            // equipment/misc (fora do storage = HUD nao conta, PullStoredItems
-            // nao puxa). Inventory poe via PutLootIntoContainerPosition.
-            int filter = 0;
-            void* aargs[2] = { &item, &filter };
-            MonoObject* exc2 = nullptr;
-            MonoObject* ret2 = pInvoke(mAddItem, pinv, aargs, &exc2);
-            bool ok = (!exc2 && ret2 && *(unsigned char*)pUnbox(ret2) != 0);
+            bool ok = false;
+            // Via 1 (preferida): GotLootFromServer — precisa do PlayerInteraction
+            // do local (PlayerMain.interaction). Resolve o field 1x.
+            static MonoClassField* fInter = nullptr;
+            static bool s_interInit = false;
+            if (!s_interInit) {
+                s_interInit = true;
+                if (cPlayer) fInter = pFieldFrom(cPlayer, "interaction");
+            }
+            // interaction mora no PlayerMain (local), nao no pinv: sobe via
+            // pinv->playerMain? PlayerInventory.playerMain existe (off via API).
+            if (mGotLoot) {
+                static MonoClassField* fPMain = nullptr;
+                static bool s_pmInit = false;
+                if (!s_pmInit) {
+                    s_pmInit = true;
+                    if (cPInv) fPMain = pFieldFrom(cPInv, "playerMain");
+                }
+                void* pm = fPMain ? ReadP(pinv, FieldOff(fPMain)) : nullptr;
+                void* inter = (pm && fInter) ? ReadP(pm, FieldOff(fInter)) : nullptr;
+                if (inter) {
+                    void* gargs[2] = { &id, &dose };
+                    MonoObject* gexc = nullptr;
+                    __try { pInvoke(mGotLoot, inter, gargs, &gexc); }
+                    __except (EXCEPTION_EXECUTE_HANDLER) { gexc = (MonoObject*)1; }
+                    ok = (gexc == nullptr);
+                    if (ok) Log::Infof("[AMMO] seed nativo id=%d qtd=%d (GotLoot).", id, dose);
+                }
+            }
+            // Via 2 (fallback): Create + AddItem(Inventory=1).
+            // filter=1 VALIDADO CE MCP em partida (storage n=2→3, stored 0→200).
+            // filter=0 TRAVA O JOGO (hang 21/09) — nunca usar.
+            if (!ok && mCreateItem && mAddItem) {
+                void* cargs[2] = { &id, &dose };
+                MonoObject* exc = nullptr;
+                MonoObject* ret = pInvoke(mCreateItem, nullptr, cargs, &exc);
+                if (exc || !ret) { Log::Warn("[AMMO] CreateInventoryItem falhou."); return; }
+                void* item = ret;
+                int filter = 1; // Inventory (enum vivo; 0 = hang, 2 = equipment)
+                void* aargs[2] = { &item, &filter };
+                MonoObject* exc2 = nullptr;
+                MonoObject* ret2 = pInvoke(mAddItem, pinv, aargs, &exc2);
+                ok = (!exc2 && ret2 && *(unsigned char*)pUnbox(ret2) != 0);
+            }
             if (ok) {
                 // VERIFICA no storage (auditoria 20/09): conta pilhas do tipo
                 // AGORA (nao no proximo ciclo). Sumiu = foi p/ lugar errado:
@@ -2569,7 +2615,10 @@ namespace Mono {
     struct RestoreSlot { void* key; int off; float base; };
     static RestoreSlot s_rsJump[4], s_rsRof[16], s_rsDur[64], s_rsAim[4];
     static RestoreSlot s_rsSway[4]; // gunSway fallback (defeito 8)
+    static RestoreSlot s_rsRecoil[16], s_rsSpread[16]; // recoil/spread (GRUDA fix)
     static bool s_swayWas = false;
+    static bool s_swayBaseOk = false;
+    static void SwayBaseOkReset() { s_swayBaseOk = false; }
     // Guarda base bool (1 byte) p/ restore nao-destrutivo (defeito 7).
     struct RestoreSlotB { void* key; int off; unsigned char base; };
     static RestoreSlotB s_rsFull[16];
@@ -2628,10 +2677,16 @@ namespace Mono {
         if (!local) return;
         bool want = Config::bNoRecoil || Config::bNoSpread || Config::bNoSway
             || Config::bTightAim || Config::bRapidFire;
-        // Defeito 6: sem desligamento permanente — throttle com retry.
-        // Falha transitória (loading) nao mata; so desliga apos 500 ciclos.
+        // Restore ANTES do early-return (auditoria 21/09: desligar tudo era
+        // inalcançavel). Cada restore roda com sua flag desligada.
+        if (!Config::bRapidFire) { RestoreRun(s_rsRof, 16, "rof"); RestoreRunB(s_rsFull, 16, "fullauto"); }
+        if (!Config::bTightAim) RestoreRun(s_rsAim, 4, "aim");
+        if (!Config::bNoSway) { RestoreRun(s_rsSway, 4, "sway"); SwayBaseOkReset(); }
+        if (!Config::bNoRecoil && !Config::bTightAim) RestoreRun(s_rsRecoil, 16, "recoil");
+        if (!Config::bNoSpread && !Config::bTightAim) RestoreRun(s_rsSpread, 16, "spread");
+        if (!Config::bFastKnife) RestoreRun(s_rsDur, 64, "knife");
+        if (!Config::bSuperJump) RestoreRun(s_rsJump, 4, "jump");
         if (!want) return;
-        static int s_weapFailN = 0;
         // Resolve preguiçoso 1x (offsets via API; singleton via vtable).
         static int oAmmoId = -2, oMax = -2, oSpread = -2, oRof = -2;
         static int oRecoil = -2, oRecoilRnd = -2;
@@ -2682,14 +2737,14 @@ namespace Mono {
                     s_wbase ? 1 : 0, s_dbgGen ? 1 : 0);
             }
             if (oSpread < 0 && oRof < 0 && oRecoil < 0 && oBoolVal < 0) {
-                // Defeito 6: retry em vez de morte permanente.
+                // Retry com throttle (sem morte permanente).
+                static int s_weapFailN = 0;
                 if (++s_weapFailN > 500) {
                     Log::Warn("[WEAPON] cadeia incompleta apos 500 ciclos — arma em espera (troque de cena).");
                     s_weapFailN = 0;
                 }
                 return;
             }
-            s_weapFailN = 0;
         }
         __try {
             // Dbs de TODAS as armas: inventory -> equippedItems -> weapons[]
@@ -2725,8 +2780,13 @@ namespace Mono {
                 // Sem dedup (defeito 1): reaplica todo ciclo (idempotente).
                 // No Recoil: zera recoil (Vector2 = 2 floats) + randomness.
                 // Mira Fechada inclui recoil zero (mira nao abre atirando).
+                // Restore: guarda base (GRUDA fix 21/09).
                 if (Config::bNoRecoil || Config::bTightAim) {
                     if (oRecoil >= 0) {
+                        float rx = ReadF(db, oRecoil, -99999.0f);
+                        float ry = ReadF(db, oRecoil + 4, -99999.0f);
+                        if (rx > -99998.0f) RestorePush(s_rsRecoil, 16, db, oRecoil, rx);
+                        if (ry > -99998.0f) RestorePush(s_rsRecoil, 16, db, oRecoil + 4, ry);
                         float z = 0.0f;
                         __try {
                             memcpy((char*)db + oRecoil, &z, sizeof(z));
@@ -2734,14 +2794,22 @@ namespace Mono {
                         } __except (EXCEPTION_EXECUTE_HANDLER) {}
                     }
                     if (oRecoilRnd >= 0) {
-                        if (ReadF(db, oRecoilRnd, -1.0f) != 0.0f)
+                        float rr = ReadF(db, oRecoilRnd, -99999.0f);
+                        if (rr != 0.0f && rr > -99998.0f) {
+                            RestorePush(s_rsRecoil, 16, db, oRecoilRnd, rr);
                             WriteF(db, oRecoilRnd, 0.0f);
+                        }
                     }
                 }
                 // No Spread: spread=0 (GetGunSpread = 0 x prec = 0).
                 // Mira Fechada inclui spread zero (tiro vai junto).
+                // Restore: guarda base (GRUDA fix 21/09).
                 if ((Config::bNoSpread || Config::bTightAim) && oSpread >= 0) {
-                    if (ReadF(db, oSpread, -1.0f) != 0.0f) WriteF(db, oSpread, 0.0f);
+                    float sp = ReadF(db, oSpread, -99999.0f);
+                    if (sp != 0.0f && sp > -99998.0f) {
+                        RestorePush(s_rsSpread, 16, db, oSpread, sp);
+                        WriteF(db, oSpread, 0.0f);
+                    }
                 }
                 // Full Auto universal: 1-tiro/rajada vira automatica.
                 // fullAuto=true + burstCount=0 em TODA arma (asset): pistola
