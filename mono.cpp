@@ -1821,9 +1821,11 @@ namespace Mono {
             if (!s_noMethWarned) { s_noMethWarned = true; Log::Warn("[AMMO] sem metodos p/ criar pilha."); }
             return;
         }
-        // Backoff: 1 tentativa a cada ~2s (60 ciclos de ~33ms).
+        // Backoff POR SLOT (bug 21/09: contador global travava todos os tipos;
+        // troca de arma 1->3 mudava o id e o global nunca alinhava).
         // Fora da vez = volta sem tocar no Mono (zero invoke = zero hang).
-        if (++s_pileTryN % 60 != 1) return;
+        static int s_pileBackN[8] = { 0,0,0,0,0,0,0,0 };
+        if (++s_pileBackN[slot] % 60 != 1) return;
         __try {
             s_pileTries[slot]++;
             // Dose = stackMax real (auditoria 20/09: HUD le StoredItemCount,
@@ -2043,8 +2045,26 @@ namespace Mono {
                             }
                             if (aid >= 10 && aid <= 116) AmmoIdAdd(aid);
                         }
-                        // Pente: trava ammo=maxAmmo na equipada (so se ARMA).
-                        if (lockMag) TopAmmo(eqItem, oAmmo, oMax);
+            // Pente: trava ammo=maxAmmo na equipada (so se ARMA).
+            // + fallback troca de arma (bug 21/09: crash 1->3): se a equipada
+            // mudou (SetType/Value novo) e o item eh arma com ammo<max, trava
+            // direto sem esperar o TopAmmo resolver o db (db pode estar em
+            // transicao no frame da troca = DbCached null = pente esvazia e o
+            // jogo tenta recarregar do nada = AV na animacao de swap).
+            if (lockMag) {
+                TopAmmo(eqItem, oAmmo, oMax);
+                // Fallback imediato: maxAmmo ja conhecido do db anterior do
+                // mesmo slot? Sem db, usa o ammo atual +1 como piso (nunca
+                // deixa zerar no frame da troca).
+                if (eqItem) {
+                    int ac = ReadI(eqItem, oAmmo, -1);
+                    if (ac == 0) {
+                        // Pente zerou no frame da troca: repoe 1 p/ nao travar
+                        // a animacao de swap (o TopAmmo completa no proximo).
+                        WriteI(eqItem, oAmmo, 1);
+                    }
+                }
+            }
                     }
                 }
             } else {
