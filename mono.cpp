@@ -2091,18 +2091,22 @@ namespace Mono {
                             }
                             if (aid >= 10 && aid <= 116) AmmoIdAdd(aid);
                         }
+                    }
+                }
+            }
             // Pente: trava ammo=maxAmmo na equipada (so se ARMA).
             // + fallback troca de arma (bug 21/09: crash 1->3): se a equipada
             // mudou (SetType/Value novo) e o item eh arma com ammo<max, trava
             // direto sem esperar o TopAmmo resolver o db (db pode estar em
             // transicao no frame da troca = DbCached null = pente esvazia e o
             // jogo tenta recarregar do nada = AV na animacao de swap).
-            if (lockMag) {
-                TopAmmo(eqItem, oAmmo, oMax);
-                // Fallback imediato: maxAmmo ja conhecido do db anterior do
-                // mesmo slot? Sem db, usa o ammo atual +1 como piso (nunca
-                // deixa zerar no frame da troca).
-                if (eqItem) {
+            {
+                void* eqItem = EquippedReal(armsC, peq);
+                if (lockMag && eqItem) {
+                    TopAmmo(eqItem, oAmmo, oMax);
+                    // Fallback imediato: maxAmmo ja conhecido do db anterior do
+                    // mesmo slot? Sem db, usa o ammo atual +1 como piso (nunca
+                    // deixa zerar no frame da troca).
                     int ac = ReadI(eqItem, oAmmo, -1);
                     if (ac == 0) {
                         // Pente zerou no frame da troca: repoe 1 p/ nao travar
@@ -2111,15 +2115,11 @@ namespace Mono {
                     }
                 }
             }
-                    }
-                }
-            } else {
-                // Ciclo leve: so o pente (sem invoke; maxAmmo ja cacheado).
-                // Equipada pode ter trocado no meio: re-resolve barato.
-                if (armsC && lockMag) {
-                    void* eqItem = EquippedReal(armsC, peq);
-                    if (eqItem) TopAmmo(eqItem, oAmmo, oMax);
-                }
+            // Ciclo leve: so o pente (sem invoke; maxAmmo ja cacheado).
+            // Equipada pode ter trocado no meio: re-resolve barato.
+            if (armsC && lockMag) {
+                void* eqItem = EquippedReal(armsC, peq);
+                if (eqItem) TopAmmo(eqItem, oAmmo, oMax);
             }
             // Reserva (bInfAmmo) + pilhas gerais (bInfItems): offsets resolvidos 1x.
             static int oStorage = -2, oItems = -2, oStack = -2, oDbStack = -2, oId = -2;
