@@ -1849,11 +1849,14 @@ namespace Mono {
             bool ok = false;
             // Via 1 (preferida): GotLootFromServer — precisa do PlayerInteraction
             // do local (PlayerMain.interaction). Resolve o field 1x.
+            // DIAGNOSTICO 21/09 16h: loga cada etapa (resolve? inter null?
+            // invoke com excecao?) — seed silencioso nao da pra debugar.
             static MonoClassField* fInter = nullptr;
             static bool s_interInit = false;
             if (!s_interInit) {
                 s_interInit = true;
                 if (cPlayer) fInter = pFieldFrom(cPlayer, "interaction");
+                Log::Infof("[AMMO] fInter=%d (PlayerMain.interaction).", FieldOff(fInter));
             }
             // interaction mora no PlayerMain (local), nao no pinv: sobe via
             // pinv->playerMain? PlayerInventory.playerMain existe (off via API).
@@ -1866,18 +1869,38 @@ namespace Mono {
                 }
                 void* pm = fPMain ? ReadP(pinv, FieldOff(fPMain)) : nullptr;
                 void* inter = (pm && fInter) ? ReadP(pm, FieldOff(fInter)) : nullptr;
+                static int s_seedDiag = 0;
+                if (s_seedDiag < 3) {
+                    s_seedDiag++;
+                    Log::Infof("[AMMO] seed via1: mGotLoot=%d pm=0x%p inter=0x%p.", mGotLoot ? 1 : 0, pm, inter);
+                }
                 if (inter) {
                     void* gargs[2] = { &id, &dose };
                     MonoObject* gexc = nullptr;
                     __try { pInvoke(mGotLoot, inter, gargs, &gexc); }
                     __except (EXCEPTION_EXECUTE_HANDLER) { gexc = (MonoObject*)1; }
                     ok = (gexc == nullptr);
-                    if (ok) Log::Infof("[AMMO] seed nativo id=%d qtd=%d (GotLoot).", id, dose);
+                    if (ok) {
+                        Log::Infof("[AMMO] seed nativo id=%d qtd=%d (GotLoot).", id, dose);
+                    } else if (s_seedDiag <= 3) {
+                        s_seedDiag++;
+                        Log::Warnf("[AMMO] GotLoot excecao id=%d (via2 fallback).", id);
+                    }
+                } else if (s_seedDiag <= 6) {
+                    s_seedDiag++;
+                    Log::Warn("[AMMO] seed via1 sem inter (via2 fallback).");
                 }
             }
             // Via 2 (fallback): Create + AddItem(Inventory=1).
             // filter=1 VALIDADO CE MCP em partida (storage n=2→3, stored 0→200).
             // filter=0 TRAVA O JOGO (hang 21/09) — nunca usar.
+            if (!ok) {
+                static int s_via2diag = 0;
+                if (s_via2diag < 2) {
+                    s_via2diag++;
+                    Log::Infof("[AMMO] seed via2: mCreate=%d mAdd=%d.", mCreateItem ? 1 : 0, mAddItem ? 1 : 0);
+                }
+            }
             if (!ok && mCreateItem && mAddItem) {
                 void* cargs[2] = { &id, &dose };
                 MonoObject* exc = nullptr;
@@ -2122,6 +2145,9 @@ namespace Mono {
                 if (eqItem) TopAmmo(eqItem, oAmmo, oMax);
             }
             // Reserva (bInfAmmo) + pilhas gerais (bInfItems): offsets resolvidos 1x.
+            // NOTA 21/09 16h (IL EquipmentHUDAmmo.Show): o HUD da arma na MAO
+            // usa StoredItemCount do pinv passado no Show — que eh o inventario
+            // do LOCAL. Seed/trava no local = HUD conta. Sem excecao.
             static int oStorage = -2, oItems = -2, oStack = -2, oDbStack = -2, oId = -2;
             if (oStorage == -2) {
                 oStorage = FieldOff(fStorage); oItems = FieldOff(fItems);
