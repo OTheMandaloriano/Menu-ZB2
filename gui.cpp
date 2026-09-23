@@ -1057,15 +1057,45 @@ namespace GUI {
         if (ImGui::BeginTabBar("ZB2Tabs")) {
             // ---- 1 PLAYER ----
             if (ImGui::BeginTabItem("PLAYER")) {
-                ImGui::Checkbox("Active Aimbot", &Config::bAimbot); Tip("Liga o aimbot (PvE: zumbis/chefes).");
+                ImGui::Checkbox("Active Aimbot", &Config::bAimbot); Tip("Liga o aimbot (PvE: zumbis/chefes). Segure a Aim Key.");
+                // Aim Key + Hold/Toggle + LED vivo (padrao BF/Warface).
+                {
+                    ImGui::Text("Aim Key"); ImGui::SameLine();
+                    char nm[64] = { 0 };
+                    KeyName(Config::iAimKey, nm, sizeof(nm));
+                    if (ImGui::Button(nm, ImVec2(130, 0))) {
+                        s_capKey = &Config::iAimKey;
+                        ImGui::OpenPopup("hotkey_modal");
+                    }
+                    Tip("Tecla que ativa a mira (segure). Troque em SETTINGS > Aim Key.");
+                    ImGui::SameLine();
+                    static const char* kAimModes[2] = { "Hold", "Toggle" };
+                    ImGui::SetNextItemWidth(90.0f);
+                    ImGui::Combo("##AimMode", &Config::iAimMode, kAimModes, 2);
+                    Tip("Hold = mira enquanto segura. Toggle = trava no 1o aperto.");
+                    ImGui::SameLine();
+                    bool down = (Config::iAimKey != 0) && ((GetAsyncKeyState(Config::iAimKey) & 0x8000) != 0);
+                    ImGui::TextColored(down ? ImVec4(0.2f, 1.0f, 0.3f, 1.0f) : ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+                        down ? "(●)" : "(○)");
+                    Tip("LED vivo: acende segurando a tecla.");
+                }
                 ImGui::Combo("Aim Bone", &Config::iAimBone, kAimBones, 4); Tip("Head/Neck/Chest/Pelvis.");
                 ImGui::Combo("Aim Priority", &Config::iAimPriority, kAimPrio, 3);
                 ImGui::SliderFloat("Smoothing", &Config::fSmoothing, 1, 30, "%.0f");
                 ImGui::SliderFloat("Max Distance", &Config::fMaxDistance, 10, 500, "%.0fm");
-                ImGui::Checkbox("Auto Aim", &Config::bAutoAim);
-                ImGui::Checkbox("Silent Aim", &Config::bSilentAim);
-                ImGui::Checkbox("Auto Fire", &Config::bAutoFire);
-                ImGui::Checkbox("Triggerbot", &Config::bTriggerbot);
+                ImGui::Checkbox("Auto Aim", &Config::bAutoAim); Tip("Mira sozinho, sem tecla.");
+                if (!Config::bAutoAim) {
+                    ImGui::BeginDisabled();
+                    ImGui::Checkbox("Silent Aim", &Config::bSilentAim);
+                    ImGui::Checkbox("Auto Fire", &Config::bAutoFire);
+                    ImGui::Checkbox("Triggerbot", &Config::bTriggerbot);
+                    ImGui::EndDisabled();
+                    Tip("Ciclos 2-4: forja de tiro, gatilho e disparo (em breve).");
+                } else {
+                    ImGui::Checkbox("Silent Aim", &Config::bSilentAim);
+                    ImGui::Checkbox("Auto Fire", &Config::bAutoFire);
+                    ImGui::Checkbox("Triggerbot", &Config::bTriggerbot);
+                }
                 ImGui::Separator();
                 ImGui::Checkbox("Limit FOV", &Config::bLimitFov);
                 ImGui::SliderFloat("FOV Angle", &Config::fFovAngle, 1, 360, "%.0f deg");
@@ -1083,7 +1113,7 @@ namespace GUI {
                 ImGui::SliderFloat("Rapid Mult", &Config::fRapidMult, 1, 8, "%.1fx"); Tip("8x = minigun (pistola 1-tiro vira rajada).");
                 ImGui::Checkbox("Fast Knife", &Config::bFastKnife); Tip("Arma branca rapida: pa, pa, facao, faca, taco (Duration curto).");
                 ImGui::SliderFloat("Knife Mult", &Config::fKnifeMult, 1, 5, "%.1fx");
-                ImGui::Checkbox("Instant Reload", &Config::bInstantReload); Tip("Ver Defesa: Infinite Ammo ja recarrega sozinho (pente nunca esvazia).");
+                ImGui::Checkbox("Instant Reload", &Config::bInstantReload); Tip("Recarga instantanea: completa o pente na hora (sem animacao). Single/host. Como cliente use a recarga normal (R).");
                 ImGui::Checkbox("Full Auto for All", &Config::bFullAuto);
                 ImGui::Checkbox("Saitama Mode (4M dano)", &Config::bSaitama);
                 ImGui::SliderFloat("Nade Time", &Config::fNadeTime, 0, 10, "%.1fs");

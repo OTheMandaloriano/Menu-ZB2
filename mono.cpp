@@ -217,6 +217,7 @@ namespace Mono {
     static MonoMethod* mGetAngle = nullptr;   // PlayerCamera.get_Angle()
     static MonoMethod* mGetCamTr = nullptr;   // PlayerCamera.get_CameraTransform()
     static MonoClassField* fMainCam = nullptr; // PlayerMain.cam (PlayerCamera do local)
+    static float AimReadFov(void); // FOV real (definido antes do ApplyAim)
     static void ApplyAim(void* local); // forward (aimbot: selecao+FOV+escrita, worker)
     static MonoClassField* fWBaseInst = nullptr;  // WeaponBase.instance
     static MonoClassField* fPrecMult = nullptr;   // WeaponBase.precisionMultiplier
@@ -3640,13 +3641,31 @@ namespace Mono {
                 } else { tx = (t.headX + t.footX) * 0.5f; ty = s_vpH - t.headY; }
                 dx = tx - cx; dy = ty - cy;
             }
-            // Graus por pixel: FOV vertical padrao ~60° em 1080p altura.
-            // Ajusta pelo fFovAngle do menu (circulo desenhado = fov*4 px).
-            float degPerPx = 60.0f / s_vpH;
-            if (Config::fFovAngle > 1.0f && Config::fFovAngle < 360.0f)
-                degPerPx = (Config::fFovAngle * 0.5f) / (Config::fFovAngle * 4.0f);
-            float dYaw = dx * degPerPx;
-            float dPitch = -dy * degPerPx; // tela Y desce, pitch sobe
+            // Graus por pixel: deriva do FOV VERTICAL REAL da camera, nunca do
+            // raio do circulo (auditoria 23/09: fFovAngle cancela e vira 0.125
+            // fixo = overshoot 2.3x). dAng = atan2(dx_px * tan(fovV/2) / (H/2)).
+            // fovV: FOVController.CurrentFOV se resolver, senao fCamFov do menu.
+            float fovV = Config::fCamFov;
+            if (!(fovV > 20.0f && fovV < 120.0f)) fovV = 60.0f;
+            {
+                static float s_fovCache = -1.0f;
+                static long long s_fovT = 0;
+                long long now = PiNow();
+                if (s_fovCache < 0.0f || now - s_fovT > 5000000LL) {
+                    s_fovT = now;
+                    // Tenta ler CurrentFOV real 1x/5s (barato, fora do tiro).
+                    // Falhou = mantem cache/menu. Nunca trava por isso.
+                    float got = AimReadFov();
+                    if (got > 20.0f && got < 120.0f) s_fovCache = got;
+                    else if (s_fovCache < 0.0f) s_fovCache = fovV;
+                }
+                fovV = s_fovCache;
+            }
+            float halfH = s_vpH * 0.5f;
+            if (!(halfH > 100.0f)) halfH = 540.0f;
+            float tanHalf = tanf(fovV * 0.5f * 0.01745329252f);
+            float dYaw = atan2f(dx * tanHalf / halfH, 1.0f) * 57.29577951f;
+            float dPitch = -atan2f(dy * tanHalf / halfH, 1.0f) * 57.29577951f;
             // Smoothing em espaco angular (padrao mercado): divide o delta.
             // fSmoothing 1 = snap; 6-8 = legit; >20 = lento.
             float sm = Config::fSmoothing;
@@ -3677,28 +3696,40 @@ namespace Mono {
                 } else if (oAngle >= 0) {
                     WriteF(pcam, oAngle, want);
                 }
-                // Yaw via Transform.Rotate(up * dYaw): precisa do transform
-                // do PlayerCamera (Component.get_transform) + eixo up.
+                // Yaw via Transform.Rotate(euler 0,dYaw,0) — 1 arg, igual ao
+                // jogo (auditoria 23/09: Rotate/2 resolve overload (Vector3,
+                // Space) e ignorava o angulo = deriva fixa p/ direita).
                 // Custo: 2 invokes. So quando |dYaw| > 0.05 grau.
                 if (dYaw > 0.05f || dYaw < -0.05f) {
                     if (mGetTrans && cTrans) {
                         MonoObject* exc3 = nullptr;
                         MonoObject* tr = pInvoke(mGetTrans, pcam, nullptr, &exc3);
                         if (!exc3 && tr) {
-                            // Rotate(Vector3 up, angle): metodo do Transform.
-                            // Resolve 1x (static): Transform.Rotate(Vector3,Single).
+                            // Rotate(Vector3 euler): 1 arg, resolve 1x.
                             static MonoMethod* s_mRot = nullptr;
                             static bool s_rotInit = false;
                             if (!s_rotInit) {
                                 s_rotInit = true;
-                                s_mRot = pMethodFrom(cTrans, "Rotate", 2);
+                                s_mRot = pMethodFrom(cTrans, "Rotate", 1);
                             }
                             if (s_mRot) {
-                                // up = (0,1,0) como Vector3 boxeado: 12 bytes.
-                                float up[3] = { 0.0f, 1.0f, 0.0f };
-                                void* rargs[2] = { &up, &dYaw };
+                                float eul[3] = { 0.0f, dYaw, 0.0f };
+                                void* rargs[1] = { &eul };
                                 MonoObject* exc4 = nullptr;
                                 pInvoke(s_mRot, tr, rargs, &exc4);
+                                if (exc4) {
+                                    static bool s_rotWarn = false;
+                                    if (!s_rotWarn) {
+                                        s_rotWarn = true;
+                                        Log::Warn("[AIMBOT] Rotate/1 falhou (exc).");
+                                    }
+                                }
+                            } else {
+                                static bool s_rotMiss = false;
+                                if (!s_rotMiss) {
+                                    s_rotMiss = true;
+                                    Log::Warn("[AIMBOT] Rotate/1 nao resolvido.");
+                                }
                             }
                         }
                     }
@@ -3711,6 +3742,34 @@ namespace Mono {
                 }
             } __except (EXCEPTION_EXECUTE_HANDLER) {}
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
+
+    // Le o FOV vertical real (FOVController.CurrentFOV). Chamado pelo aimbot
+    // 1x/5s; fora disso nunca invoca. Falhou = -1 (usa menu).
+    // Corpo ANTES do ApplyAim (forward acima); sem duplicata abaixo.
+    static float AimReadFov(void) {
+        __try {
+            if (!cPCam || !s_dom) return -1.0f;
+            // PlayerCamera.fovController -> FOVController.CurrentFOV.
+            // Resolve 1x: classe + 2 campos (static, cacheado).
+            static MonoClass* s_cFov = nullptr;
+            static MonoClassField* s_fCtl = nullptr;
+            static MonoClassField* s_fCur = nullptr;
+            static bool s_init = false;
+            if (!s_init) {
+                s_init = true;
+                s_cFov = pClassFrom(s_img, "", "FOVController");
+                if (s_cFov) {
+                    s_fCtl = pFieldFrom(cPCam, "fovController");
+                    s_fCur = pFieldFrom(s_cFov, "CurrentFOV");
+                }
+            }
+            if (!s_fCtl || !s_fCur) return -1.0f;
+            // Precisa do PlayerCamera do local — ainda sem chain barato aqui.
+            // Ciclo aimbot-2 resolve via local (PlayerMain.cam + offsets).
+            // Por enquanto: -1 honesto (menu fCamFov manda, sem chute).
+            return -1.0f;
+        } __except (EXCEPTION_EXECUTE_HANDLER) { return -1.0f; }
     }
 
     static void AuditAmmoTick(void* pcs); // forward (diagnostico 1x/2s, so leitura)
