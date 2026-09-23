@@ -211,14 +211,6 @@ namespace Mono {
     static MonoClassField* fHudInner = nullptr; // PlayerHUD.innerCrossHairTransform
     static MonoClassField* fHudLines = nullptr; // PlayerHUD.crossHairLine (RawImage[])
     static MonoClass* cMove = nullptr;        // PlayerMovement (jumpSpeed)
-    static MonoClass* cPCam = nullptr;        // PlayerCamera (aim: Angle + transform)
-    static MonoClassField* fCamAngle = nullptr;  // PlayerCamera.<Angle>k__BackingField (pitch ±80)
-    static MonoMethod* mSetAngle = nullptr;   // PlayerCamera.set_Angle(float)
-    static MonoMethod* mGetAngle = nullptr;   // PlayerCamera.get_Angle()
-    static MonoMethod* mGetCamTr = nullptr;   // PlayerCamera.get_CameraTransform()
-    static MonoClassField* fMainCam = nullptr; // PlayerMain.cam (PlayerCamera do local)
-    static float AimReadFov(void); // FOV real (definido antes do ApplyAim)
-    static void ApplyAim(void* local); // forward (aimbot: selecao+FOV+escrita, worker)
     static MonoClassField* fWBaseInst = nullptr;  // WeaponBase.instance
     static MonoClassField* fPrecMult = nullptr;   // WeaponBase.precisionMultiplier
     static MonoClassField* fGunSway = nullptr;    // WeaponBase.gunSway
@@ -319,6 +311,7 @@ namespace Mono {
     static void AmmoCachesClear(); // forward (limpa caches na troca de cena)
     static void ReadAll(); // forward (chamada na worker, fora do Present)
     static void AuditBones(); // forward (chamada na worker, fora do Present)
+    static void WohaxAim(void* local); // forward (maquina wohax)
     static MonoImage*  s_unity = nullptr;
     static MonoClass*  cCamU = nullptr;
     static MonoClass*  cTrans = nullptr;
@@ -721,20 +714,7 @@ namespace Mono {
         // tMin@8, tMax@12). Sem FieldOff: offsets fixos da struct.
         ResolveClass("PlayerMovement", cMove);
         ResolveField(cMove, "PlayerMovement", "jumpSpeed", fMoveJump);
-        // Aimbot ciclo 1 (23/09): PlayerCamera = pitch (Angle ±80) + yaw
-        // (Rotate no transform). Falha = nao-fatal; ApplyAim desliga sozinho.
-        ResolveClass("PlayerCamera", cPCam);
-        ResolveField(cPCam, "PlayerCamera", "<Angle>k__BackingField", fCamAngle);
-        if (cPCam) {
-            MonoMethod* t = pMethodFrom(cPCam, "set_Angle", 1);
-            if (t) { mSetAngle = t; s.resolvedMethods++; }
-            t = pMethodFrom(cPCam, "get_Angle", 0);
-            if (t) { mGetAngle = t; s.resolvedMethods++; }
-            t = pMethodFrom(cPCam, "get_CameraTransform", 0);
-            if (t) { mGetCamTr = t; s.resolvedMethods++; }
-        }
-        if (cPlayer) ResolveField(cPlayer, "PlayerMain", "cam", fMainCam);
-        s_unity = pImgLoaded("UnityEngine.CoreModule");
+                s_unity = pImgLoaded("UnityEngine.CoreModule");
         if (s_unity) {
             s.resolvedClasses++;
             cCamU = pClassFrom(s_unity, "UnityEngine", "Camera");
@@ -1708,7 +1688,7 @@ namespace Mono {
                     if (Config::bUnlockSlots) ApplySlots(localEnt);
                     if (Config::bUnlockLoadout) ApplyLoadout();
                     if (Config::bInfAmmo || Config::bInfItems || Config::bInstantReload) ApplyAmmo(localEnt, coop);
-                    if (Config::bAimbot || Config::bAutoAim) ApplyAim(localEnt);
+                    if (Config::bAimbot || Config::bAutoAim) WohaxAim(localEnt);
                 }
                 if (++s_defN >= 60) {
                     s_defN = 0;
@@ -3517,260 +3497,237 @@ namespace Mono {
     }
 
     // ========================================================================
-    // AIMBOT ciclo 1 (23/09): selecao + FOV + escrita de camera.
-    // PlayerCamera = pitch (set_Angle, clamp ±80 no jogo) + yaw (Rotate no
-    // transform do PlayerCamera). Nunca no CameraTransform (sobrescrito).
-    // Alvo = snapshot do ESP (BuildEsp ja validou: vivo, on-screen, dist).
-    // Ordem mercado: valido → FOV px → prioridade → smoothing → escreve.
-    // Ciclo 1 = visivel, sem silent/trigger/prediction (ciclos 2-4).
+    // AIMBOT estilo wohax (reescrita 23/09, mesma logica de funcionamento).
+    // wohax (Warface, CryBot/Lua): elege por distancia do crosshair em px,
+    // mira vetor 3D (bone - camPos normalizado) via direcao do ator, atira
+    // so com firing=1 (gatilho segurado), sticky com intervalo entre trocas.
+    // Aqui: mesma maquina de estados, adaptada p/ Unity Mono (PlayerCamera
+    // Angle+pitch + Rotate yaw; gatilho = Aim Key Hold/Toggle ou AutoAim).
     // ========================================================================
-    static bool s_aimOk = true;   // false = cadeia incompleta (retry, sem morte)
-    static bool s_aimLogged = false;
-    static void ApplyAim(void* local) {
-        if (!local) return;
-        bool want = Config::bAimbot || Config::bAutoAim;
-        if (!want) return;
-        // Tecla: Hold (segurando) ou Toggle (travado). Sem tecla = AutoAim
-        // mira sozinho; com tecla = exige pressionada (padrao mercado).
-        bool keyDown = false;
-        if (Config::bAutoAim && !Config::bAimbot) {
-            keyDown = true; // auto: sem tecla
-        } else {
-            int vk = Config::iAimKey;
-            if (vk == 0) keyDown = true;
-            else keyDown = (GetAsyncKeyState(vk) & 0x8000) != 0;
-            if (Config::iAimMode == 1) { // Toggle: trava no 1o aperto
-                static bool s_toggle = false;
-                static bool s_prevDown = false;
-                if (keyDown && !s_prevDown) s_toggle = !s_toggle;
-                s_prevDown = keyDown;
-                keyDown = s_toggle;
+    // Estado persistente (espelho das locals do wohax).
+    static int   s_wxTarget = -1;      // indice no snapshot (aim_target_entityid)
+    static long long s_wxTargetT = 0;  // quando travou (aim_last_target_time)
+    static bool  s_wxToggle = false;   // toggle da tecla (Hold/Toggle)
+    static bool  s_wxPrevDown = false;
+    static int   s_wxKey = 0, s_wxMode = -1;
+    static bool  s_wxLogged = false;
+    // Resolve da mira (1x; falha = espera, sem morte).
+    static MonoClass* s_wxCam = nullptr;      // PlayerCamera
+    static MonoClassField* s_wxCamF = nullptr; // PlayerMain.cam
+    static MonoClassField* s_wxAngleF = nullptr; // PlayerCamera.<Angle>
+    static MonoMethod* s_wxSetAngle = nullptr;
+    static MonoMethod* s_wxGetAngle = nullptr;
+    static bool WohaxResolve(void) {
+        if (s_wxCam && s_wxSetAngle) return true;
+        s_wxCam = pClassFrom(s_img, "", "PlayerCamera");
+        if (!s_wxCam) return false;
+        s_wxCamF = nullptr;
+        if (cPlayer) s_wxCamF = pFieldFrom(cPlayer, "cam");
+        s_wxAngleF = pFieldFrom(s_wxCam, "<Angle>k__BackingField");
+        s_wxSetAngle = pMethodFrom(s_wxCam, "set_Angle", 1);
+        s_wxGetAngle = pMethodFrom(s_wxCam, "get_Angle", 0);
+        if (!s_wxCamF || !s_wxSetAngle) {
+            if (!s_wxLogged) {
+                s_wxLogged = true;
+                Log::Warn("[AIM] PlayerCamera sem cadeia — aimbot em espera.");
             }
+            return false;
         }
-        if (!keyDown) return;
-        // Resolve 1x (offsets via API; metodos set_Angle/get_Angle).
-        static int oCam = -2, oAngle = -2;
-        if (oCam == -2) {
-            oCam = -1; oAngle = -1;
-            if (cPlayer) oCam = FieldOff(fMainCam);
-            oAngle = FieldOff(fCamAngle);
-            if (!s_aimLogged) {
-                s_aimLogged = true;
-                Log::Infof("[AIMBOT] offs cam=%d angle=%d setAngle=%d getAngle=%d",
-                    oCam, oAngle, mSetAngle ? 1 : 0, mGetAngle ? 1 : 0);
-            }
-            if (oCam < 0 || !mSetAngle) {
-                Log::Warn("[AIMBOT] cadeia incompleta — aimbot em espera.");
-                s_aimOk = false;
-                return;
-            }
+        if (!s_wxLogged) {
+            s_wxLogged = true;
+            Log::Info("[AIM] PlayerCamera resolvido (Angle + transform).");
         }
-        if (oCam < 0 || !mSetAngle) return;
+        return true;
+    }
+    // Distancia do crosshair em px (wohax GetDistanceFromCrosshair):
+    // projeta o bone, mede hypot(dx,dy) do centro. Fora da tela = -1.
+    static float WohaxDistPx(const EspEntry& e, float cx, float cy, float radius) {
+        (void)radius;
+        float tx = 0, ty = 0;
+        if (e.skN == SK_COUNT) {
+            int b = SK_HEAD;
+            if (Config::iAimBone == 1) b = SK_NECK;
+            else if (Config::iAimBone == 2) b = SK_SP2;
+            else if (Config::iAimBone == 3) b = SK_HL;
+            if (b >= 0 && b < 20 && e.skV[b]) {
+                tx = e.skX[b]; ty = s_vpH - e.skY[b];
+            } else { tx = (e.headX + e.footX) * 0.5f; ty = s_vpH - e.headY; }
+        } else { tx = (e.headX + e.footX) * 0.5f; ty = s_vpH - e.headY; }
+        if (!(tx > -10000 && tx < 10000 && ty > -10000 && ty < 10000))
+            return -1.0f;
+        float dx = tx - cx, dy = ty - cy;
+        return sqrtf(dx * dx + dy * dy);
+    }
+    // ActorLookAt wohax: vector = normalize(bone3d - camPos); aplica na
+    // direcao do ator. Aqui = pitch absoluto (Angle) + yaw relativo (Rotate/1
+    // euler, igual ao jogo). Sem pixel→grau: o vetor ja e' o angulo.
+    static void WohaxLookAt(void* pcam, const EspEntry& t) {
+        if (!pcam || !t.hasBone3d || !s_camWok) return;
+        float vx = t.bx - s_camW.x;
+        float vy = t.by - s_camW.y;
+        float vz = t.bz - s_camW.z;
+        float len = sqrtf(vx * vx + vy * vy + vz * vz);
+        if (!(len > 0.5f) || !(len < 100000.0f)) return;
+        vx /= len; vy /= len; vz /= len;
+        float wantYaw = atan2f(vx, vz) * 57.29577951f;
+        float cl = vy > 1.0f ? 1.0f : (vy < -1.0f ? -1.0f : vy);
+        float wantPitch = asinf(cl) * 57.29577951f;
+        // Smoothing: wohax mira direto; mercado pede divider. sm=1 = snap.
+        float sm = Config::fSmoothing;
+        if (!(sm >= 1.0f && sm <= 30.0f)) sm = 8.0f;
         __try {
-            // PlayerCamera do LOCAL (PlayerMain.cam), nao singleton.
-            void* pcam = ReadP(local, oCam);
-            if (!pcam) return;
-            // Snapshot: melhor alvo por prioridade (le o front, sem lock —
-            // mesmo padrao do Present; 1 frame velho no pior caso).
-            EspEntry* f = s_espFront;
-            int n = s_espNFront;
-            if (n < 0) n = 0;
-            if (n > 128) n = 128;
-            if (n <= 0) return;
-            float cx = s_vpW * 0.5f, cy = s_vpH * 0.5f;
-            float fovPx = Config::bLimitFov && !Config::b360Mode
-                ? Config::fFovAngle * 4.0f : 1e9f;
-            if (fovPx < 30.0f) fovPx = 30.0f;
-            int best = -1;
-            float bestScore = 1e30f;
-            for (int i = 0; i < n; ++i) {
-                const EspEntry& e = f[i];
-                if (!e.onScreen || e.hp <= 0) continue;
-                // Posicao do bone por iAimBone: head (padrao) / neck / chest /
-                // pelvis. Skeleton tem as 4 regioes: HEAD=0, NECK=1, peito =
-                // media SP2/SP1, quadril = HL. Sem skeleton = head/foot.
-                float tx = 0, ty = 0;
-                bool hasBone = false;
-                if (e.skN == SK_COUNT) {
-                    int b = SK_HEAD;
-                    if (Config::iAimBone == 1) b = SK_NECK;
-                    else if (Config::iAimBone == 2) b = SK_SP2;   // chest
-                    else if (Config::iAimBone == 3) b = SK_HL;    // pelvis
-                    if (b >= 0 && b < 20 && e.skV[b]) {
-                        tx = e.skX[b]; ty = s_vpH - e.skY[b];
-                        hasBone = true;
-                    }
-                }
-                if (!hasBone) {
-                    // Fallback sem skeleton: topo da box (head aprox).
-                    tx = (e.headX + e.footX) * 0.5f;
-                    ty = s_vpH - e.headY;
-                    if (!(tx > -10000 && tx < 10000 && ty > -10000 && ty < 10000))
-                        continue;
-                }
-                float dx = tx - cx, dy = ty - cy;
-                float dPx = sqrtf(dx * dx + dy * dy);
-                if (dPx > fovPx) continue; // fora do FOV
-                if (Config::fMaxDistance > 0 && e.dist > Config::fMaxDistance)
-                    continue;
-                float score = 1e30f;
-                if (Config::iAimPriority == 2) score = e.dist;        // Nearest
-                else if (Config::iAimPriority == 1) score = e.hp;     // LowestHP
-                else score = dPx;                                     // Crosshair
-                if (score < bestScore) { bestScore = score; best = i; }
-            }
-            if (best < 0) return;
-            // Converte pixel -> yaw/pitch via matriz VP inversa implicita:
-            // usa a posicao 3D do bone (mundo) + posicao da camera.
-            // Caminho barato e exato: W2S reverso via razao angular —
-            // pitch = Angle atual + atan2(dy_px, H/2 / tan(fov/2)).
-            // Sem FOV vertical real: aproxima com sensibilidade angular
-            // medida (graus por pixel a 1080p). Erro < 1 grau no centro.
-            const EspEntry& t = f[best];
-            float dx = 0, dy = 0;
-            {
-                float tx = 0, ty = 0;
-                if (t.skN == SK_COUNT) {
-                    int b = SK_HEAD;
-                    if (Config::iAimBone == 1) b = SK_NECK;
-                    else if (Config::iAimBone == 2) b = SK_SP2;
-                    else if (Config::iAimBone == 3) b = SK_HL;
-                    if (b >= 0 && b < 20 && t.skV[b]) {
-                        tx = t.skX[b]; ty = s_vpH - t.skY[b];
-                    } else { tx = (t.headX + t.footX) * 0.5f; ty = s_vpH - t.headY; }
-                } else { tx = (t.headX + t.footX) * 0.5f; ty = s_vpH - t.headY; }
-                dx = tx - cx; dy = ty - cy;
-            }
-            // Graus por pixel: deriva do FOV VERTICAL REAL da camera, nunca do
-            // raio do circulo (auditoria 23/09: fFovAngle cancela e vira 0.125
-            // fixo = overshoot 2.3x). dAng = atan2(dx_px * tan(fovV/2) / (H/2)).
-            // fovV: FOVController.CurrentFOV se resolver, senao fCamFov do menu.
-            float fovV = Config::fCamFov;
-            if (!(fovV > 20.0f && fovV < 120.0f)) fovV = 60.0f;
-            {
-                static float s_fovCache = -1.0f;
-                static long long s_fovT = 0;
-                long long now = PiNow();
-                if (s_fovCache < 0.0f || now - s_fovT > 5000000LL) {
-                    s_fovT = now;
-                    // Tenta ler CurrentFOV real 1x/5s (barato, fora do tiro).
-                    // Falhou = mantem cache/menu. Nunca trava por isso.
-                    float got = AimReadFov();
-                    if (got > 20.0f && got < 120.0f) s_fovCache = got;
-                    else if (s_fovCache < 0.0f) s_fovCache = fovV;
-                }
-                fovV = s_fovCache;
-            }
-            float halfH = s_vpH * 0.5f;
-            if (!(halfH > 100.0f)) halfH = 540.0f;
-            float tanHalf = tanf(fovV * 0.5f * 0.01745329252f);
-            float dYaw = atan2f(dx * tanHalf / halfH, 1.0f) * 57.29577951f;
-            float dPitch = -atan2f(dy * tanHalf / halfH, 1.0f) * 57.29577951f;
-            // Smoothing em espaco angular (padrao mercado): divide o delta.
-            // fSmoothing 1 = snap; 6-8 = legit; >20 = lento.
-            float sm = Config::fSmoothing;
-            if (!(sm >= 1.0f && sm <= 30.0f)) sm = 8.0f;
-            // Snap de perto: <0.15 grau = vai direto (evita jitter parado).
-            float angDist = sqrtf(dYaw * dYaw + dPitch * dPitch);
-            if (angDist < 0.15f) { dYaw = 0; dPitch = 0; }
-            else { dYaw /= sm; dPitch /= sm; }
-            // Le pitch atual, soma, clamp ±80 (igual ao jogo), escreve.
-            // Yaw: Rotate(up * dYaw) no transform do PlayerCamera.
-            __try {
+            // Pitch: le atual, interpola, clamp ±80, escreve.
+            float cur = 0;
+            if (s_wxGetAngle) {
                 MonoObject* exc = nullptr;
-                // get_Angle (1 invoke, barato; fora do orcamento do ESP).
-                float curPitch = 0;
-                if (mGetAngle) {
-                    MonoObject* ret = pInvoke(mGetAngle, pcam, nullptr, &exc);
-                    if (!exc && ret) memcpy(&curPitch, pUnbox(ret), 4);
-                } else if (oAngle >= 0) {
-                    curPitch = ReadF(pcam, oAngle, 0.0f);
-                }
-                float want = curPitch + dPitch;
-                if (want < -80.0f) want = -80.0f;
-                if (want > 80.0f) want = 80.0f;
-                if (mSetAngle) {
-                    void* args[1] = { &want };
-                    MonoObject* exc2 = nullptr;
-                    pInvoke(mSetAngle, pcam, args, &exc2);
-                } else if (oAngle >= 0) {
-                    WriteF(pcam, oAngle, want);
-                }
-                // Yaw via Transform.Rotate(euler 0,dYaw,0) — 1 arg, igual ao
-                // jogo (auditoria 23/09: Rotate/2 resolve overload (Vector3,
-                // Space) e ignorava o angulo = deriva fixa p/ direita).
-                // Custo: 2 invokes. So quando |dYaw| > 0.05 grau.
-                if (dYaw > 0.05f || dYaw < -0.05f) {
-                    if (mGetTrans && cTrans) {
-                        MonoObject* exc3 = nullptr;
-                        MonoObject* tr = pInvoke(mGetTrans, pcam, nullptr, &exc3);
-                        if (!exc3 && tr) {
-                            // Rotate(Vector3 euler): 1 arg, resolve 1x.
-                            static MonoMethod* s_mRot = nullptr;
-                            static bool s_rotInit = false;
-                            if (!s_rotInit) {
-                                s_rotInit = true;
-                                s_mRot = pMethodFrom(cTrans, "Rotate", 1);
-                            }
-                            if (s_mRot) {
-                                float eul[3] = { 0.0f, dYaw, 0.0f };
-                                void* rargs[1] = { &eul };
-                                MonoObject* exc4 = nullptr;
-                                pInvoke(s_mRot, tr, rargs, &exc4);
-                                if (exc4) {
-                                    static bool s_rotWarn = false;
-                                    if (!s_rotWarn) {
-                                        s_rotWarn = true;
-                                        Log::Warn("[AIMBOT] Rotate/1 falhou (exc).");
-                                    }
-                                }
-                            } else {
-                                static bool s_rotMiss = false;
-                                if (!s_rotMiss) {
-                                    s_rotMiss = true;
-                                    Log::Warn("[AIMBOT] Rotate/1 nao resolvido.");
-                                }
+                MonoObject* ret = pInvoke(s_wxGetAngle, pcam, nullptr, &exc);
+                if (!exc && ret) memcpy(&cur, pUnbox(ret), 4);
+            } else {
+                cur = ReadF(pcam, FieldOff(s_wxAngleF), 0.0f);
+            }
+            float dP = wantPitch - cur;
+            dP /= sm;
+            float want = cur + dP;
+            if (want < -80.0f) want = -80.0f;
+            if (want > 80.0f) want = 80.0f;
+            if (s_wxSetAngle) {
+                void* args[1] = { &want };
+                MonoObject* exc2 = nullptr;
+                pInvoke(s_wxSetAngle, pcam, args, &exc2);
+            }
+            // Yaw: relativo via Rotate(euler 0,dYaw,0). Referencia = ultimo
+            // yaw aplicado (sticky): primeiro lock so pitch (sem snap 180).
+            static float s_yawRef = 0.0f;
+            static bool s_yawHave = false;
+            float dY = 0;
+            if (s_yawHave) {
+                dY = wantYaw - s_yawRef;
+                while (dY > 180.0f) dY -= 360.0f;
+                while (dY < -180.0f) dY += 360.0f;
+                dY /= sm;
+            }
+            if (dY > 0.05f || dY < -0.05f) {
+                if (mGetTrans && cTrans) {
+                    MonoObject* exc3 = nullptr;
+                    MonoObject* tr = pInvoke(mGetTrans, pcam, nullptr, &exc3);
+                    if (!exc3 && tr) {
+                        static MonoMethod* s_rot = nullptr;
+                        static bool s_ri = false;
+                        if (!s_ri) {
+                            s_ri = true;
+                            s_rot = pMethodFrom(cTrans, "Rotate", 1);
+                        }
+                        if (s_rot) {
+                            float eul[3] = { 0.0f, dY, 0.0f };
+                            void* ra[1] = { &eul };
+                            MonoObject* exc4 = nullptr;
+                            pInvoke(s_rot, tr, ra, &exc4);
+                            if (!exc4) {
+                                s_yawRef += dY;
+                                while (s_yawRef > 180.0f) s_yawRef -= 360.0f;
+                                while (s_yawRef < -180.0f) s_yawRef += 360.0f;
+                                s_yawHave = true;
                             }
                         }
                     }
                 }
-                static int s_aimLogged = 0;
-                if (s_aimLogged < 2) {
-                    s_aimLogged++;
-                    Log::Infof("[AIMBOT] alvo=%d dYaw=%.2f dPitch=%.2f sm=%.0f.",
-                        best, (double)dYaw, (double)dPitch, (double)sm);
-                }
-            } __except (EXCEPTION_EXECUTE_HANDLER) {}
+            } else if (!s_yawHave) {
+                // Sem movimento yaw: ancora a referencia no alvo atual.
+                s_yawRef = wantYaw;
+                s_yawHave = true;
+            }
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
-
-    // Le o FOV vertical real (FOVController.CurrentFOV). Chamado pelo aimbot
-    // 1x/5s; fora disso nunca invoca. Falhou = -1 (usa menu).
-    // Corpo ANTES do ApplyAim (forward acima); sem duplicata abaixo.
-    static float AimReadFov(void) {
-        __try {
-            if (!cPCam || !s_dom) return -1.0f;
-            // PlayerCamera.fovController -> FOVController.CurrentFOV.
-            // Resolve 1x: classe + 2 campos (static, cacheado).
-            static MonoClass* s_cFov = nullptr;
-            static MonoClassField* s_fCtl = nullptr;
-            static MonoClassField* s_fCur = nullptr;
-            static bool s_init = false;
-            if (!s_init) {
-                s_init = true;
-                s_cFov = pClassFrom(s_img, "", "FOVController");
-                if (s_cFov) {
-                    s_fCtl = pFieldFrom(cPCam, "fovController");
-                    s_fCur = pFieldFrom(s_cFov, "CurrentFOV");
-                }
-            }
-            if (!s_fCtl || !s_fCur) return -1.0f;
-            // Precisa do PlayerCamera do local — ainda sem chain barato aqui.
-            // Ciclo aimbot-2 resolve via local (PlayerMain.cam + offsets).
-            // Por enquanto: -1 honesto (menu fCamFov manda, sem chute).
-            return -1.0f;
-        } __except (EXCEPTION_EXECUTE_HANDLER) { return -1.0f; }
+    // canTargetNext wohax: nao troca de alvo antes de aim_interval ms.
+    static bool WohaxCanNext(int idx) {
+        if (idx == s_wxTarget) return true;
+        long long dtMs = (PiNow() - s_wxTargetT) / 1000LL;
+        int interval = 500; // aim_interval wohax (ms entre trocas)
+        return dtMs >= interval;
     }
+    // WohaxAim(local): maquina de estados 1:1 com o aim() do wohax.
+    // firing = tecla (Hold) / toggle travado / AutoAim. So mira com firing=1
+    // (igual ao `if firing and aim_mode == 1` deles).
+    static void WohaxAim(void* local) {
+        if (!local) return;
+        // --- tecla (Aim Key + Hold/Toggle + reset, padrao BF) ---
+        bool firing = false;
+        if (Config::bAutoAim && !Config::bAimbot) {
+            firing = true;
+        } else {
+            int vk = Config::iAimKey;
+            bool down = (vk == 0) || ((GetAsyncKeyState(vk) & 0x8000) != 0);
+            if (vk != s_wxKey || Config::iAimMode != s_wxMode) {
+                s_wxKey = vk; s_wxMode = Config::iAimMode;
+                s_wxToggle = false; s_wxPrevDown = false;
+            }
+            if (Config::iAimMode == 1) {
+                if (down && !s_wxPrevDown) s_wxToggle = !s_wxToggle;
+                s_wxPrevDown = down;
+                firing = s_wxToggle;
+            } else {
+                firing = down;
+            }
+        }
+        // Radius wohax (aim_radius px; 0 = off = infinito).
+        float cx = s_vpW * 0.5f, cy = s_vpH * 0.5f;
+        float radius = Config::bLimitFov && !Config::b360Mode
+            ? Config::fFovAngle * 4.0f : 1e9f;
+        if (radius < 0.0f) radius = 0.0f;
+        // --- eleicao (EnumCallback wohax): menor distancia do crosshair ---
+        EspEntry* f = s_espFront;
+        int n = s_espNFront;
+        if (n < 0) n = 0;
+        if (n > 128) n = 128;
+        int best = -1;
+        float bestD = 1e30f;
+        for (int i = 0; i < n; ++i) {
+            const EspEntry& e = f[i];
+            if (!e.onScreen || e.hp <= 0) continue;      // vivo (IsPlayerAlive)
+            if (e.isAlly) continue;                      // PvE: zumbi e' inimigo
+            if (Config::fMaxDistance > 0 && e.dist > Config::fMaxDistance)
+                continue;
+            float d = WohaxDistPx(e, cx, cy, radius);
+            if (d < 0.0f) continue;                      // fora da tela
+            if (radius > 0.0f && d > radius) continue;   // fora do raio
+            // Prioridade do menu (extensao nossa; default = crosshair wohax).
+            float score = d;
+            if (Config::iAimPriority == 2) score = e.dist;
+            else if (Config::iAimPriority == 1) score = e.hp;
+            if (score < bestD) { bestD = score; best = i; }
+        }
+        if (best < 0) { s_wxTarget = -1; return; }
+        // --- sticky (canTargetNext): nao troca antes do intervalo ---
+        if (s_wxTarget != best && !WohaxCanNext(best)) {
+            best = s_wxTarget; // mantem o antigo (ainda valido? revalida)
+            if (best < 0 || best >= n) return;
+            const EspEntry& ke = f[best];
+            if (!ke.onScreen || ke.hp <= 0) return;
+        } else if (s_wxTarget != best) {
+            s_wxTarget = best;
+            s_wxTargetT = PiNow();
+        }
+        const EspEntry& t = f[best];
+        if (!t.hasBone3d) return;
+        // --- mira so com firing=1 (wohax: `if firing and aim_mode == 1`) ---
+        if (!firing) return;
+        if (!WohaxResolve()) return;
+        int oCam = FieldOff(s_wxCamF);
+        if (oCam < 0) return;
+        void* pcam = ReadP(local, oCam);
+        if (!pcam) return;
+        WohaxLookAt(pcam, t);
+        // Log 1x (alvo + distancia px, sem spam).
+        {
+            static int s_wlog = 0;
+            if (s_wlog < 3) {
+                s_wlog++;
+                Log::Infof("[AIM] alvo=%d dPx=%.0f firing=%d.", best, (double)bestD, firing ? 1 : 0);
+            }
+        }
+    }
+
+    // (FOV real via menu fCamFov; sem leitura extra.)
 
     static void AuditAmmoTick(void* pcs); // forward (diagnostico 1x/2s, so leitura)
     static void ReadAll() {

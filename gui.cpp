@@ -1037,7 +1037,8 @@ namespace GUI {
                 EspLayout::Draw(dl, geometry, content, style);
             }
         }
-        if (Config::bDrawFov && Config::bAimbot && Config::bLimitFov && !Config::b360Mode) {
+        // Circulo do raio (wohax show_aim_radius): so com raio > 0.
+        if (Config::bDrawFov && Config::bAimbot && Config::bLimitFov && !Config::b360Mode && Config::fFovAngle > 0.0f) {
             ImVec2 sc = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
             float r = Config::fFovAngle * 4.0f;
             dl->AddCircle(sc, r, IM_COL32(120, 220, 255, 200), 64, 1.2f);
@@ -1056,9 +1057,11 @@ namespace GUI {
 
         if (ImGui::BeginTabBar("ZB2Tabs")) {
             // ---- 1 PLAYER ----
+            // Categoria aimbot espelho wohax (mesma logica de funcionamento):
+            // enable + radius + bone + mode; mira so com firing (tecla/modo).
             if (ImGui::BeginTabItem("PLAYER")) {
-                ImGui::Checkbox("Active Aimbot", &Config::bAimbot); Tip("Liga o aimbot (PvE: zumbis/chefes). Segure a Aim Key.");
-                // Aim Key + Hold/Toggle + LED vivo (padrao BF/Warface).
+                ImGui::Checkbox("Aimbot", &Config::bAimbot); Tip("Igual ao wohax: elege por px, mira vetor 3D. Segure a Aim Key.");
+                // Aim Key + Hold/Toggle + LED vivo (padrao BF/Warface/wohax firing).
                 {
                     ImGui::Text("Aim Key"); ImGui::SameLine();
                     char nm[64] = { 0 };
@@ -1067,7 +1070,7 @@ namespace GUI {
                         s_capKey = &Config::iAimKey;
                         ImGui::OpenPopup("hotkey_modal");
                     }
-                    Tip("Tecla que ativa a mira (segure). Troque em SETTINGS > Aim Key.");
+                    Tip("Tecla que ativa a mira (firing do wohax). Troque em SETTINGS > Aim Key.");
                     ImGui::SameLine();
                     static const char* kAimModes[2] = { "Hold", "Toggle" };
                     ImGui::SetNextItemWidth(90.0f);
@@ -1079,11 +1082,12 @@ namespace GUI {
                         down ? "(●)" : "(○)");
                     Tip("LED vivo: acende segurando a tecla.");
                 }
-                ImGui::Combo("Aim Bone", &Config::iAimBone, kAimBones, 4); Tip("Head/Neck/Chest/Pelvis.");
-                ImGui::Combo("Aim Priority", &Config::iAimPriority, kAimPrio, 3);
-                ImGui::SliderFloat("Smoothing", &Config::fSmoothing, 1, 30, "%.0f");
+                ImGui::Combo("Aim Bone", &Config::iAimBone, kAimBones, 4); Tip("Head/Neck/Chest/Pelvis (bone 3D, igual ao wohax).");
+                ImGui::Combo("Aim Priority", &Config::iAimPriority, kAimPrio, 3); Tip("Crosshair = menor px (wohax); Nearest/HP = extensao.");
+                ImGui::SliderFloat("Smoothing", &Config::fSmoothing, 1, 30, "%.0f"); Tip("1 = snap wohax; 6-8 = suave.");
+                ImGui::SliderFloat("Aim Radius", &Config::fFovAngle, 0, 360, "%.0f px"); Tip("Raio em px (aim_radius wohax, 0 = off = infinito).");
                 ImGui::SliderFloat("Max Distance", &Config::fMaxDistance, 10, 500, "%.0fm");
-                ImGui::Checkbox("Auto Aim", &Config::bAutoAim); Tip("Mira sozinho, sem tecla.");
+                ImGui::Checkbox("Auto Aim", &Config::bAutoAim); Tip("Mira sozinho, sem tecla (firing sempre 1).");
                 if (!Config::bAutoAim) {
                     ImGui::BeginDisabled();
                     ImGui::Checkbox("Silent Aim", &Config::bSilentAim);
@@ -1097,12 +1101,12 @@ namespace GUI {
                     ImGui::Checkbox("Triggerbot", &Config::bTriggerbot);
                 }
                 ImGui::Separator();
-                ImGui::Checkbox("Limit FOV", &Config::bLimitFov);
-                ImGui::SliderFloat("FOV Angle", &Config::fFovAngle, 1, 360, "%.0f deg");
-                ImGui::Checkbox("360 Mode", &Config::b360Mode); Tip("Ignora FOV, mira em 360 graus.");
-                ImGui::Checkbox("Draw FOV Circle", &Config::bDrawFov);
-                ImGui::Checkbox("Enable Prediction", &Config::bPrediction);
-                ImGui::SliderFloat("Lag Comp", &Config::fLagComp, 0, 200, "%.0fms");
+                // wohax nao tem 360/prediction/lag — mantidos, apagados do mira:
+                // LimitFOV vira "raio on/off", Draw desenha o raio, 360 = raio
+                // infinito. Prediction/Lag seguem vitrine (ciclo futuro).
+                ImGui::Checkbox("Limit Radius", &Config::bLimitFov); Tip("On = mira so dentro do raio (wohax aim_radius). Off = infinito.");
+                ImGui::Checkbox("360 Mode", &Config::b360Mode); Tip("Ignora o raio (raio infinito).");
+                ImGui::Checkbox("Draw Radius", &Config::bDrawFov); Tip("Desenha o circulo do raio (aim_can_show_radius wohax).");
                 ImGui::Separator();
                 ImGui::Text("Weapon Mods");
                 ImGui::Checkbox("No Recoil", &Config::bNoRecoil);
