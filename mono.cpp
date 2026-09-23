@@ -211,6 +211,13 @@ namespace Mono {
     static MonoClassField* fHudInner = nullptr; // PlayerHUD.innerCrossHairTransform
     static MonoClassField* fHudLines = nullptr; // PlayerHUD.crossHairLine (RawImage[])
     static MonoClass* cMove = nullptr;        // PlayerMovement (jumpSpeed)
+    static MonoClass* cPCam = nullptr;        // PlayerCamera (aim: Angle + transform)
+    static MonoClassField* fCamAngle = nullptr;  // PlayerCamera.<Angle>k__BackingField (pitch ±80)
+    static MonoMethod* mSetAngle = nullptr;   // PlayerCamera.set_Angle(float)
+    static MonoMethod* mGetAngle = nullptr;   // PlayerCamera.get_Angle()
+    static MonoMethod* mGetCamTr = nullptr;   // PlayerCamera.get_CameraTransform()
+    static MonoClassField* fMainCam = nullptr; // PlayerMain.cam (PlayerCamera do local)
+    static void ApplyAim(void* local); // forward (aimbot: selecao+FOV+escrita, worker)
     static MonoClassField* fWBaseInst = nullptr;  // WeaponBase.instance
     static MonoClassField* fPrecMult = nullptr;   // WeaponBase.precisionMultiplier
     static MonoClassField* fGunSway = nullptr;    // WeaponBase.gunSway
@@ -713,6 +720,19 @@ namespace Mono {
         // tMin@8, tMax@12). Sem FieldOff: offsets fixos da struct.
         ResolveClass("PlayerMovement", cMove);
         ResolveField(cMove, "PlayerMovement", "jumpSpeed", fMoveJump);
+        // Aimbot ciclo 1 (23/09): PlayerCamera = pitch (Angle ±80) + yaw
+        // (Rotate no transform). Falha = nao-fatal; ApplyAim desliga sozinho.
+        ResolveClass("PlayerCamera", cPCam);
+        ResolveField(cPCam, "PlayerCamera", "<Angle>k__BackingField", fCamAngle);
+        if (cPCam) {
+            MonoMethod* t = pMethodFrom(cPCam, "set_Angle", 1);
+            if (t) { mSetAngle = t; s.resolvedMethods++; }
+            t = pMethodFrom(cPCam, "get_Angle", 0);
+            if (t) { mGetAngle = t; s.resolvedMethods++; }
+            t = pMethodFrom(cPCam, "get_CameraTransform", 0);
+            if (t) { mGetCamTr = t; s.resolvedMethods++; }
+        }
+        if (cPlayer) ResolveField(cPlayer, "PlayerMain", "cam", fMainCam);
         s_unity = pImgLoaded("UnityEngine.CoreModule");
         if (s_unity) {
             s.resolvedClasses++;
@@ -1608,7 +1628,7 @@ namespace Mono {
             // SceneAlive pode retornar true (camera + ZombieLoader existem),
             // mas o player nao existe ainda. Sem gate = invoke em objeto nulo =
             // hang/crash reportado pelo operador.
-            bool wantDef = s.ready && (Config::bGodMode || Config::bInfStamina || Config::bInfAmmo || Config::bInfItems || Config::bInfMoney || Config::bUnlockSlots || Config::bUnlockLoadout || Config::bNoRecoil || Config::bNoSpread || Config::bNoSway || Config::bTightAim || Config::bRapidFire || Config::bSuperJump || Config::bFastKnife);
+            bool wantDef = s.ready && (Config::bGodMode || Config::bInfStamina || Config::bInfAmmo || Config::bInfItems || Config::bInfMoney || Config::bUnlockSlots || Config::bUnlockLoadout || Config::bNoRecoil || Config::bNoSpread || Config::bNoSway || Config::bTightAim || Config::bRapidFire || Config::bSuperJump || Config::bFastKnife || Config::bInstantReload || Config::bAimbot || Config::bAutoAim);
             if (wantDef && SceneAlive()) {
                 // Modo real via MultiplayerController (throttle 2s, SEH).
                 // coopMode: 0=LOBBY 1=SINGLE 2=CLIENTE 3=HOST.
@@ -1686,7 +1706,8 @@ namespace Mono {
                     ApplyMove(localEnt);
                     if (Config::bUnlockSlots) ApplySlots(localEnt);
                     if (Config::bUnlockLoadout) ApplyLoadout();
-                    if (Config::bInfAmmo || Config::bInfItems) ApplyAmmo(localEnt, coop);
+                    if (Config::bInfAmmo || Config::bInfItems || Config::bInstantReload) ApplyAmmo(localEnt, coop);
+                    if (Config::bAimbot || Config::bAutoAim) ApplyAim(localEnt);
                 }
                 if (++s_defN >= 60) {
                     s_defN = 0;
@@ -1742,20 +1763,48 @@ namespace Mono {
         return 0;
     }
 
-    // Municao infinita (cadeia confirmada no IL do ShootGun via dnlib):
-    // local.inventory -> equippedItems -> GetEquipment(selectedItem do arms)
-    // -> InventoryItem.ammo. Reescreve ammo=maxAmmo quando cai.
-    // Regras: so no local, so se bInfAmmo, offsets via API, falha 1x loga e
-    // desliga sozinho (s_ammoOk=false) sem travar a worker.
-    // Fallback sem invoke: se GetEquipment nao resolver, caminha a
-    // List<InventoryItem>.weapons de PlayerEquippedItems e trava o ammo de
-    // TODOS os itens da lista (custo: 2-4 escritas/ciclo, sem invoke).
+    // ========================================================================
+    // AMMO — subsistema de municao infinita (reescrito 22/09, revisao senior).
+    //
+    // MODELO DO JOGO (IL auditado via dnlib — nao mexer sem re-auditar):
+    // - InventoryItem eh CLASSE (MonoObject + 16B header). Campos via FieldOff:
+    //   id / stackCount / ammo. Regra: stackMax==1 -> usa .ammo (arma);
+    //   senao usa .stackCount (pilha). Get/SetGenericNumericValue confirmam.
+    // - HUD: EquipmentHUDAmmo.Show le item.ammo (pente) +
+    //   PlayerInventory.StoredItemCount(ammoID) (reserva = soma stackCount
+    //   das pilhas no STORAGE com id == ammoID).
+    // - ReloadGun: need=maxAmmo-ammo; pulled=PullStoredItems(ammoID,need).
+    // - Unload (botao): GotLootFromServer(ammoID, ammo) + item.ammo=0.
+    //   Cria pilha no storage via caminho de loot do servidor.
+    // - AddItem(item, filter): LootPlacingFilter enum INT (0=Inventory,
+    //   1=Equipment). filter=0 TRAVA (hang 21/09); filter=1 validado via CE.
+    // - CreateInventoryItem(ID,int) eh STATIC (obj=null).
+    // - mono_runtime_invoke: args = array de PONTEIROS PARA O VALOR
+    //   (void* cargs[] = { &id, &dose }); retorno bool = unbox int8.
+    // - selectedItem: EquipmentIndex STRUCT { SetType:int@+0, Value:int@+4 }
+    //   em arms+sel. SetType: 0=maos 1=arma 2=misc.
+    //
+    // ARQUITETURA (regras duras):
+    // - Ciclo LEVE (todo tick, ~30Hz): so memcpy/ReadI/WriteI + SEH.
+    //   ZERO invoke. Pente (ammo=maxAmmo) + reserva (stackCount=stackMax).
+    // - Ciclo PESADO (1x/4 ticks): resolve db novo (DbCached) + ammoID da
+    //   equipada + seed de pilha (1 invoke max por tipo, com backoff).
+    // - Seed de pilha: GotLootFromServer(ammoID, stackMax) — o MESMO caminho
+    //   do botao Descarregar. Sem pilha no storage = reserva 0 (correto pelo
+    //   modelo do jogo); o seed cria 1x por tipo.
+    // - Troca de arma: s_ammoIdCur segue o tipo novo; tipo antigo para de
+    //   travar (gasta normal = "descarta" sozinho).
+    // - Troca de cena: AmmoCachesClear (ponteiros morrem no GC).
+    // ========================================================================
     static bool s_ammoOk = true;
     static long s_ammoWrites = 0; // telemetria: escritas no pente (debug overlay)
     long s_ammoWritesExt() { return s_ammoWrites; }
-    static int s_ammoMode = 0; // 0=desconhecido 1=invoke 2=lista
-    static int s_ammoIdCur = -1; // ammoID da arma equipada (reserva filtra por ele)
-    static int s_ammoIds[8] = { -1,-1,-1,-1,-1,-1,-1,-1 }; // multi-tipo (troca de arma)
+    static int s_ammoMode = 0; // 0=desconhecido 1=invoke 2=lista (legado; hoje=lista)
+    static int s_ammoIdCur = -1; // ammoID da arma equipada (reserva segue ele)
+    static int s_ammoIds[8] = { -1,-1,-1,-1,-1,-1,-1,-1 }; // tipos vistos (seed 1x)
+    // Estado do seed: 1 pilha por tipo (definicao unica; Clear usa abaixo).
+    static bool s_pileMade[8] = { false,false,false,false,false,false,false,false };
+    static int s_pileTries[8] = { 0,0,0,0,0,0,0,0 };
     // Limpa caches de item/db/ammoID (troca de cena: ponteiros morrem no GC).
     static void AmmoCachesClear() {
         for (int k = 0; k < 64; ++k) {
@@ -1764,7 +1813,7 @@ namespace Mono {
             s_dbCache[k].tick = 0;
         }
         s_ammoIdCur = -1;
-        for (int k = 0; k < 8; ++k) s_ammoIds[k] = -1;
+        for (int k = 0; k < 8; ++k) { s_ammoIds[k] = -1; s_pileMade[k] = false; s_pileTries[k] = 0; }
     }
     static bool AmmoIdKnown(int id) {
         if (id < 0) return false;
@@ -1772,9 +1821,10 @@ namespace Mono {
         return false;
     }
     static void AmmoIdAdd(int id) {
-        // Faixa real do enum InventoryItem/ID: 2..116 (0=value__, 1=None).
-        // Fora disso = lixo (ex. +1 None) e nao entra na lista multi-tipo.
-        if (id < 10 || id > 116 || AmmoIdKnown(id)) return;
+        // Faixa do enum InventoryItem/ID: 2..116 (auditoria 22/09: o miss-log
+        // provou que balas reais usam aid 9 (fuzil), 0 e 1 — a faixa 10-116
+        // as descartava em silencio, por isso so a pistola ganhava reserva).
+        if (id < 2 || id > 116 || AmmoIdKnown(id)) return;
         for (int k = 0; k < 8; ++k) {
             if (s_ammoIds[k] < 0) {
                 s_ammoIds[k] = id;
@@ -1789,23 +1839,21 @@ namespace Mono {
     // Retry LIMITADO: 3 tentativas por tipo por sessao (cada AddItem sem lugar
     // faz o proprio jogo dropar no chao — retry infinito = tapete de loot).
     // Falhou 3x = para e avisa (libere slot ou Desbloquear Slots).
-    static bool s_pileMade[8] = { false,false,false,false,false,false,false,false };
-    static int s_pileCount[8] = { 0,0,0,0,0,0,0,0 };
-    static int s_pileSmax[8] = { 0,0,0,0,0,0,0,0 };
-    static int s_pileTries[8] = { 0,0,0,0,0,0,0,0 };
-    static int s_pileTryN = 0;
-    static int s_pileBackN[8] = { 0,0,0,0,0,0,0,0 }; // backoff por slot
-    // Retry com espaco: grid 16x20 abre lugar novo — zera as tentativas
-    // (o reset por borda de UnlockSlots nao bastava: grid vem depois).
+    // Estado do seed: 1 pilha por tipo (slot indexado pelo s_ammoIds).
+    // (s_pileMade/s_pileTries declarados acima, antes do AmmoCachesClear.)
+    static int s_pileCount[8] = { 0,0,0,0,0,0,0,0 }; // pilhas no storage (TopStacks)
+    static int s_pileSmax[8] = { 0,0,0,0,0,0,0,0 }; // stackMax por tipo
+    static int s_pileBackN[8] = { 0,0,0,0,0,0,0,0 }; // backoff por slot (~2s)
     static void PileTriesReset(const char* why) {
         for (int k = 0; k < 8; ++k) { s_pileTries[k] = 0; s_pileMade[k] = false; }
         Log::Infof("[AMMO] retry liberado (%s).", why);
     }
-    static bool s_slotsWasOn = false; // detecta borda de subida de UnlockSlots
+    static bool s_slotsWasOn = false; // borda de subida de UnlockSlots
+    // Garante 1 pilha cheia do tipo no storage (seed = caminho Descarregar).
+    // Chamada SO no ciclo pesado, SO se !hasPilha. 1 invoke por chamada max,
+    // com backoff de ~2s por slot e limite de 3 tentativas.
     static void AmmoEnsurePile(void* pinv, int id, int smax) {
         if (!pinv || id <= 0) return;
-        // Borda de UnlockSlots: registrado, mas o reset REAL agora eh via
-        // PileTriesReset (grid 16x20). Aqui so atualiza o estado da borda.
         if (Config::bUnlockSlots && !s_slotsWasOn) {
             s_slotsWasOn = true;
             PileTriesReset("slots ligados");
@@ -1815,11 +1863,8 @@ namespace Mono {
         int slot = -1;
         for (int k = 0; k < 8; ++k) if (s_ammoIds[k] == id) slot = k;
         if (slot < 0 || s_pileMade[slot]) return;
-        if (s_pileTries[slot] >= 3) return; // sem espaco: para (1 aviso abaixo)
-        // Seed NATIVO (auditoria 21/09, validado CE MCP em partida):
-        // PlayerInteraction.GotLootFromServer(ID, stackMax) = caminho do botao
-        // Descarregar (new + SetGenericNumericValue + FindPlaceFor + PutLoot).
-        // Resolve 1x aqui (fora do backoff).
+        if (s_pileTries[slot] >= 3) return;
+        // Resolve 1x (fora do backoff — resolve nao invoca, nao trava).
         if (!mGotLoot) {
             static bool s_gotInit = false;
             if (!s_gotInit) {
@@ -1830,7 +1875,6 @@ namespace Mono {
                 if (!mGotLoot) Log::Warn("[AMMO] sem GotLootFromServer (seed nativo off).");
             }
         }
-        // Resolve metodos 1x (fora do backoff: resolve = sem espera).
         if (!mCreateItem && cItem) {
             MonoMethod* t = pMethodFrom(cItem, "CreateInventoryItem", 2);
             if (t) { mCreateItem = t; s.resolvedMethods++; }
@@ -1839,27 +1883,22 @@ namespace Mono {
             MonoMethod* t = pMethodFrom(cPInv, "AddItem", 2);
             if (t) { mAddItem = t; s.resolvedMethods++; }
         }
-        // Backoff POR SLOT: 1 tentativa a cada ~2s (60 ciclos de ~33ms).
-        // Fora da vez = volta sem tocar no Mono (zero invoke = zero hang).
+        // Backoff POR SLOT: 1 tentativa a cada ~2s. Fora da vez = zero invoke.
         if (++s_pileBackN[slot] % 60 != 1) return;
         __try {
             s_pileTries[slot]++;
-            // Dose = stackMax real (HUD = StoredItemCount soma stackCount).
+            // Dose = stackMax real (reserva do HUD soma stackCount).
             int dose = (smax > 0 && smax <= 100000) ? smax : 30;
             bool ok = false;
-            // Via 1 (preferida): GotLootFromServer — precisa do PlayerInteraction
-            // do local (PlayerMain.interaction). Resolve o field 1x.
-            // DIAGNOSTICO 21/09 16h: loga cada etapa (resolve? inter null?
-            // invoke com excecao?) — seed silencioso nao da pra debugar.
+            // Via 1: GotLootFromServer (caminho do botao Descarregar).
             static MonoClassField* fInter = nullptr;
             static bool s_interInit = false;
             if (!s_interInit) {
                 s_interInit = true;
                 if (cPlayer) fInter = pFieldFrom(cPlayer, "interaction");
-                Log::Infof("[AMMO] fInter=%d (PlayerMain.interaction).", FieldOff(fInter));
             }
-            // interaction mora no PlayerMain (local), nao no pinv: sobe via
-            // pinv->playerMain? PlayerInventory.playerMain existe (off via API).
+            // Via 1: GotLootFromServer no PlayerInteraction do local.
+            // interaction mora no PlayerMain: sobe pinv->playerMain->interaction.
             if (mGotLoot) {
                 static MonoClassField* fPMain = nullptr;
                 static bool s_pmInit = false;
@@ -1869,66 +1908,45 @@ namespace Mono {
                 }
                 void* pm = fPMain ? ReadP(pinv, FieldOff(fPMain)) : nullptr;
                 void* inter = (pm && fInter) ? ReadP(pm, FieldOff(fInter)) : nullptr;
-                static int s_seedDiag = 0;
-                if (s_seedDiag < 3) {
-                    s_seedDiag++;
-                    Log::Infof("[AMMO] seed via1: mGotLoot=%d pm=0x%p inter=0x%p.", mGotLoot ? 1 : 0, pm, inter);
-                }
                 if (inter) {
-                    void* gargs[2] = { &id, &dose };
+                    int idArg = id, doseArg = dose;
+                    void* gargs[2] = { &idArg, &doseArg };
                     MonoObject* gexc = nullptr;
                     __try { pInvoke(mGotLoot, inter, gargs, &gexc); }
                     __except (EXCEPTION_EXECUTE_HANDLER) { gexc = (MonoObject*)1; }
                     ok = (gexc == nullptr);
-                    if (ok) {
-                        Log::Infof("[AMMO] seed nativo id=%d qtd=%d (GotLoot).", id, dose);
-                    } else if (s_seedDiag <= 3) {
-                        s_seedDiag++;
-                        Log::Warnf("[AMMO] GotLoot excecao id=%d (via2 fallback).", id);
-                    }
-                } else if (s_seedDiag <= 6) {
-                    s_seedDiag++;
-                    Log::Warn("[AMMO] seed via1 sem inter (via2 fallback).");
+                    if (ok) Log::Infof("[AMMO] seed nativo id=%d qtd=%d (GotLoot).", id, dose);
                 }
             }
-            // Via 2 (fallback): Create + AddItem(Inventory=1).
-            // filter=1 VALIDADO CE MCP em partida (storage n=2→3, stored 0→200).
-            // filter=0 TRAVA O JOGO (hang 21/09) — nunca usar.
-            if (!ok) {
-                static int s_via2diag = 0;
-                if (s_via2diag < 2) {
-                    s_via2diag++;
-                    Log::Infof("[AMMO] seed via2: mCreate=%d mAdd=%d.", mCreateItem ? 1 : 0, mAddItem ? 1 : 0);
-                }
-            }
+            // Via 2 (fallback): CreateInventoryItem(static) + AddItem(filter=1).
+            // filter: enum INT (0=Inventory trava! 1=Equipment validado via CE).
             if (!ok && mCreateItem && mAddItem) {
-                void* cargs[2] = { &id, &dose };
+                int idArg = id, doseArg = dose;
+                void* cargs[2] = { &idArg, &doseArg };
                 MonoObject* exc = nullptr;
                 MonoObject* ret = pInvoke(mCreateItem, nullptr, cargs, &exc);
                 if (exc || !ret) { Log::Warn("[AMMO] CreateInventoryItem falhou."); return; }
                 void* item = ret;
-                int filter = 1; // Inventory (enum vivo; 0 = hang, 2 = equipment)
+                int filter = 1;
                 void* aargs[2] = { &item, &filter };
                 MonoObject* exc2 = nullptr;
                 MonoObject* ret2 = pInvoke(mAddItem, pinv, aargs, &exc2);
                 ok = (!exc2 && ret2 && *(unsigned char*)pUnbox(ret2) != 0);
             }
             if (ok) {
-                // VERIFICA no storage (auditoria 20/09): conta pilhas do tipo
-                // AGORA (nao no proximo ciclo). Sumiu = foi p/ lugar errado:
-                // tenta de novo (nao marca). Apareceu = marca + TopStacks topa.
+                // VERIFICA no storage: conta pilhas do tipo AGORA. So marca
+                // com pilha visivel no storage (HUD conta). Fora = tenta de novo.
                 int found = 0;
                 {
                     void* cont = ReadP(pinv, FieldOff(fStorage));
                     void* ls = cont ? ReadP(cont, FieldOff(fItems)) : nullptr;
                     int oS = FieldOff(fStack), oI = FieldOff(fId);
                     if (ls && oS >= 0 && oI >= 0) WalkList(ls, 64, [&](void* it, int) {
-                        int iid = ReadI(it, oI, -1);
-                        if (iid == id) found++;
+                        if (ReadI(it, oI, -1) == id) found++;
                     });
                 }
                 if (found > 0) {
-                    s_pileMade[slot] = true; // so marca com pilha no storage
+                    s_pileMade[slot] = true;
                     Log::Infof("[AMMO] pilha criada: id=%d qtd=%d no storage (HUD conta).", id, dose);
                 } else {
                     Log::Infof("[AMMO] pilha id=%d aceita mas fora do storage (tentativa %d/3).", id, s_pileTries[slot]);
@@ -2060,24 +2078,36 @@ namespace Mono {
                 }
             }
             static int s_coopNoReloadWhy = 0;
-            if (coop && Config::bInfAmmo && armsC && mTryReload && oAmmo >= 0) {
+            // COOP CLIENTE 23/09 (reload infinito): como cliente, o pente fica
+            // LIVRE (lockMag=false) e a reserva trava cheia. Se o pente zera e
+            // chamamos TryStartReload em loop, o host pode nunca confirmar
+            // (Pull sem sync) e o jogo entra em recarga eterna. Por isso: 1
+            // recarga por zerada (borda de subida), max 3x, depois para de
+            // insistir (a reserva cheia garante a proxima recarga manual com R).
+            static long long s_lastReload = 0;
+            static int s_reloadN = 0;
+            static bool s_wasZero = false;
+            if (coop && Config::bInfAmmo && armsC && oAmmo >= 0) {
                 // Coop cliente: pente vazio na equipada REAL -> TryStartReload.
                 void* itemC = EquippedReal(armsC, peq);
                 int ammoC = itemC ? ReadI(itemC, oAmmo, -1) : -1;
-                if (itemC && ammoC == 0) {
-                    // Pente vazio: recarrega pelo fluxo do jogo.
-                    static long long s_lastReload = 0;
+                bool isZero = (itemC && ammoC == 0);
+                if (isZero && !s_wasZero) { s_reloadN = 0; } // zerou de novo: libera
+                s_wasZero = isZero;
+                if (isZero && s_reloadN < 3) {
+                    // Pente vazio: recarrega pelo fluxo do jogo (1x por zerada).
                     long long nowR = PiNow();
                     if (!mTryReload && s_coopNoReloadWhy != 1) {
                         s_coopNoReloadWhy = 1;
                         Log::Warn("[AMMO-COOP] sem TryStartReload (nao resolvido).");
                     }
-                    if (mTryReload && nowR - s_lastReload > 1000000LL) {
+                    if (mTryReload && nowR - s_lastReload > 3000000LL) {
                         s_lastReload = nowR;
+                        s_reloadN++;
                         __try {
                             MonoObject* excR = nullptr;
                             pInvoke(mTryReload, armsC, nullptr, &excR);
-                            Log::Info("[AMMO-COOP] recarga automatica (pente vazio).");
+                            Log::Infof("[AMMO-COOP] recarga %d/3 (pente vazio).", s_reloadN);
                         } __except (EXCEPTION_EXECUTE_HANDLER) {}
                     }
                 }
@@ -2090,93 +2120,231 @@ namespace Mono {
             // stackCount=stackMax na 1a pilha do tipo; se nao existe pilha,
             // converte 1 slot vazio? Nao — sem slot livre, so loga (o loot
             // natural cria a pilha e a trava assume).
-            // Troca de arma: s_ammoIdCur muda -> tipo novo ganha pilha cheia;
-            // tipo antigo PARA de travar (volta a gastar normal = "descarta").
-            if (heavy) {
-                static int oAmmoId = -2;
-                if (oAmmoId == -2) {
-                    oAmmoId = -1;
-                    if (cDbGun) {
-                        MonoClassField* f = pFieldFrom(cDbGun, "ammoID");
-                        oAmmoId = FieldOff(f);
-                    }
+            // Eleicao da arma EM USO (22/09, sem selectedItem):
+            // E1 gasto observado (tiro = ammo caiu) > E2 varredura weapons[].
+            // selectedItem (EquippedReal) virou fonte opcional, nunca gate.
+            // Ciclo leve registra ammoCur por indice; pesado elege + semeia.
+            static int oAmmoId = -2;
+            if (oAmmoId == -2) {
+                oAmmoId = -1;
+                if (cDbGun) {
+                    MonoClassField* f = pFieldFrom(cDbGun, "ammoID");
+                    oAmmoId = FieldOff(f);
                 }
-                if (armsC && oAmmoId >= 0 && mGetDb) {
-                    void* eqItem = EquippedReal(armsC, peq);
-                    if (eqItem) {
-                        void* db = DbCached(eqItem);
-                        if (db) {
-                            int aid = ReadI(db, oAmmoId, -1);
-                            if (aid >= 10 && aid <= 116 && s_ammoIdCur != aid) {
+            }
+            // E2: varredura weapons[] — registra TODOS os tipos de bala das
+            // armas (db valido, stackMax==1). Funciona sem tiro e sem selectedItem.
+            // ANTI-HANG 22/09: roda 1x a cada ~4s (pesadoConta), NAO todo pesado.
+            // No loading (mapa assentando), items ainda nao tem db registrado e
+            // cada DbCached miss = 1 invoke; 4 armas x invokes seguidos no frame
+            // de carga = deadlock com o loader. Espacar resolve.
+            // E1 (gasto/tiro) continua todo pesado: so ReadI, zero invoke.
+            static int s_e2div = 0;
+            bool e2vez = ((++s_e2div & 15) == 0); // 1x/16 pesados (~4s)
+            if (heavy && oAmmoId >= 0 && mGetDb && oWeapons >= 0) {
+                void* wlist = ReadP(peq, oWeapons);
+                // E1 primeiro (barato, sem invoke): detecta tiro por queda de ammo.
+                static int s_prevAmmo[64] = { -2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2 };
+                if (wlist) WalkList(wlist, 16, [&](void* it, int idx) {
+                    if (idx < 0 || idx >= 64) return;
+                    int cur = ReadI(it, oAmmo, -1);
+                    if (cur < 0 || cur > 100000) return;
+                    if (s_prevAmmo[idx] != -2 && cur < s_prevAmmo[idx] && s_ammoIdCur >= 2) {
+                        // Tiro: arma idx gastou. Descobre o tipo SEM invoke
+                        // (cache db); sem cache, o E2 resolve no proximo ciclo.
+                        void* db0 = DbCached(it);
+                        if (db0) {
+                            int aid0 = ReadI(db0, oAmmoId, -1);
+                            if (aid0 >= 2 && aid0 <= 116 && s_ammoIdCur != aid0) {
                                 int old = s_ammoIdCur;
-                                s_ammoIdCur = aid;
-                                Log::Infof("[AMMO] arma trocada %d->%d (reserva segue o tipo novo).", old, aid);
+                                s_ammoIdCur = aid0;
+                                Log::Infof("[AMMO-ELECT] tiro na arma slot=%d (ammoID %d->%d).", idx, old, aid0);
                             }
-                            if (aid >= 10 && aid <= 116) AmmoIdAdd(aid);
+                        }
+                    }
+                    s_prevAmmo[idx] = cur;
+                });
+                // E2 (com invoke, espacado): descobre tipos novos 1x/~4s.
+                // ROUND-ROBIN 22/09: 1 arma por vez (e2cursor) — 4 invokes no
+                // mesmo ciclo travavam; 1 invoke/ciclo nao trava.
+                // MISS-LOG 22/09 (auditoria: slots 0/1/3 descartados em
+                // silencio): 1 linha por visita (ja espacada, sem spam).
+                static int s_e2cursor = 0;
+                if (e2vez && wlist) {
+                    int nW = 0;
+                    __try { memcpy(&nW, (char*)wlist + Off::L_size, sizeof(nW)); }
+                    __except (EXCEPTION_EXECUTE_HANDLER) { nW = 0; }
+                    if (nW > 0 && nW <= 16) {
+                        int idx = s_e2cursor % nW;
+                        s_e2cursor++;
+                        void* arr = ReadP(wlist, Off::L_items);
+                        void* it = nullptr;
+                        __try {
+                            if (arr) memcpy(&it, (char*)arr + Off::A_data + (size_t)idx * 8, 8);
+                        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+                        if (!it) {
+                            Log::Infof("[AMMO-E2] slot=%d it=null (vazio/bloqueado).", idx);
+                        } else {
+                            int cur = ReadI(it, oAmmo, -1);
+                            void* db = DbCached(it);
+                            int sm = db ? ReadI(db, FieldOff(fDbStack), -9) : -99;
+                            int aid = (db && oAmmoId >= 0) ? ReadI(db, oAmmoId, -9) : -99;
+                            if (cur >= 0 && cur <= 100000 && db && sm == 1 && aid >= 2 && aid <= 116) {
+                                if (!AmmoIdKnown(aid))
+                                    Log::Infof("[AMMO-CAND] arma slot=%d ammoID=%d (tipo novo).", idx, aid);
+                                AmmoIdAdd(aid);
+                            } else {
+                                Log::Infof("[AMMO-E2] slot=%d cur=%d db=0x%p sm=%d aid=%d (descartado).",
+                                    idx, cur, db, sm, aid);
+                            }
                         }
                     }
                 }
-            }
-            // Pente: trava ammo=maxAmmo na equipada (so se ARMA).
-            // + fallback troca de arma (bug 21/09: crash 1->3): se a equipada
-            // mudou (SetType/Value novo) e o item eh arma com ammo<max, trava
-            // direto sem esperar o TopAmmo resolver o db (db pode estar em
-            // transicao no frame da troca = DbCached null = pente esvazia e o
-            // jogo tenta recarregar do nada = AV na animacao de swap).
-            {
-                void* eqItem = EquippedReal(armsC, peq);
-                if (lockMag && eqItem) {
-                    TopAmmo(eqItem, oAmmo, oMax);
-                    // Fallback imediato: maxAmmo ja conhecido do db anterior do
-                    // mesmo slot? Sem db, usa o ammo atual +1 como piso (nunca
-                    // deixa zerar no frame da troca).
-                    int ac = ReadI(eqItem, oAmmo, -1);
-                    if (ac == 0) {
-                        // Pente zerou no frame da troca: repoe 1 p/ nao travar
-                        // a animacao de swap (o TopAmmo completa no proximo).
-                        WriteI(eqItem, oAmmo, 1);
-                    }
+                // Sem tiro ainda: primeiro tipo registrado vira o ativo
+                // (fail-open: semeia e trava por ele ate o tiro eleger outro).
+                if (s_ammoIdCur < 2 && s_ammoIds[0] >= 2) {
+                    s_ammoIdCur = s_ammoIds[0];
+                    Log::Infof("[AMMO-ELECT] sem tiro: ativo=%d (primeiro tipo).", s_ammoIdCur);
                 }
             }
-            // Ciclo leve: so o pente (sem invoke; maxAmmo ja cacheado).
-            // Equipada pode ter trocado no meio: re-resolve barato.
-            if (armsC && lockMag) {
-                void* eqItem = EquippedReal(armsC, peq);
-                if (eqItem) TopAmmo(eqItem, oAmmo, oMax);
+            // Pente: trava ammo=maxAmmo em TODAS as armas de weapons[]
+            // (fail-open: sem selectedItem confiavel, trava todas — custo de
+            // 2-4 escritas/ciclo, sem invoke). TopAmmo so escreve em ARMA com
+            // db valido (stackMax==1, max plausivel); pilha nunca entra aqui.
+            // ANTI-HANG 22/09: TopAmmo com db NAO cacheado invoca (miss). No
+            // loading isso deadlocka. So trava pente com db JA cacheado:
+            // 1o ciclo apos ativar = so registra (E2 espaçado resolve o db).
+            // Excecao: ciclo leve apos e2vez (db acabou de resolver).
+            static bool s_dbPrimed = false;
+            if (e2vez) s_dbPrimed = true;
+            if (lockMag && s_dbPrimed && oWeapons >= 0) {
+                void* wlist = ReadP(peq, oWeapons);
+                if (wlist) WalkList(wlist, 16, [&](void* it, int) {
+                    TopAmmo((void*)it, oAmmo, oMax);
+                });
             }
-            // Reserva (bInfAmmo) + pilhas gerais (bInfItems): offsets resolvidos 1x.
-            // NOTA 21/09 16h (IL EquipmentHUDAmmo.Show): o HUD da arma na MAO
-            // usa StoredItemCount do pinv passado no Show — que eh o inventario
-            // do LOCAL. Seed/trava no local = HUD conta. Sem excecao.
+            // Offsets de storage (declarado antes do Instant Reload p/ compilar).
+            // + save/load de SetGenericNumericValue (pilha da reserva topa no teto).
             static int oStorage = -2, oItems = -2, oStack = -2, oDbStack = -2, oId = -2;
             if (oStorage == -2) {
                 oStorage = FieldOff(fStorage); oItems = FieldOff(fItems);
                 oStack = FieldOff(fStack); oDbStack = FieldOff(fDbStack);
                 oId = FieldOff(fId);
             }
-            if (Config::bInfAmmo) {
-                TopStacks(local, oInv, oStorage, oItems, oStack, oDbStack, oId, false);
-                // Cria pilha quando zerada (auditoria 20/09: TopStacks so topa
-                // o que existe; storage vazio = reserva 0 p/ sempre). Roda no
-                // ciclo pesado (heavy) p/ nao invocar a 30Hz.
-                if (heavy && s_ammoIdCur >= 10 && s_ammoIdCur <= 116) {
-                    // smax do tipo: usa o maior visto (s_pileSmax) ou maxAmmo.
-                    int smax = 0;
-                    for (int k = 0; k < 8; ++k)
-                        if (s_ammoIds[k] == s_ammoIdCur && s_pileSmax[k] > smax)
-                            smax = s_pileSmax[k];
-                    if (smax <= 0) smax = 200; // teto padrao de bala
-                    // So cria se NAO ha pilha do tipo no storage.
-                    bool has = false;
-                    {
+            static int s_irHits = 0, s_irSkipDb = 0, s_irSkipFull = 0, s_irSkipRes = 0;
+            static int s_irSkipSm = 0, s_irSkipMax = 0;
+            // INSTANT RELOAD 23/09 (checkbox da aba PLAYER/Weapon): PENTE SEMPRE
+            // CHEIO — igual aos grandes cheats (nunca zera, nunca recarrega).
+            // Modelo: se cur < max, completa na hora puxando da reserva
+            // (need=Pull, igual ao ReloadGun mas sem timer/animacao). Como a
+            // reserva e infinita (TopStacks trava no teto), o pulled sempre
+            // cobre o need = pente nunca esvazia = sem animacao de recarga.
+            // So single/host (cliente: host valida o dano via sync; completar
+            // local sem passar pelo ReloadGun do servidor gera divergencia —
+            // la vale o TryStartReload limitado + R manual).
+            // Condicao: bInstantReload ON + bInfAmmo ON (reserva infinita) +
+            // arma com db valido. Roda TODO ciclo (leve, sem invoke: memcpy).
+            // Sem bInfAmmo junto, a reserva esvazia e o instant "falha" (pulled=0).
+            // DIAG 23/09 (instant nao dispara em single): loga 1x o estado das
+            // condicoes (coop? armsC? s_dbPrimed?) p/ achar o gate que barra.
+            {
+                static bool s_irDiag = false;
+                if (Config::bInstantReload && !s_irDiag) {
+                    s_irDiag = true;
+                    Log::Infof("[INSTANT] on: coop=%d armsC=0x%p primed=%d oWep=%d oMax=%d bInfAmmo=%d",
+                        coop ? 1 : 0, armsC, s_dbPrimed ? 1 : 0, oWeapons, oMax, Config::bInfAmmo ? 1 : 0);
+                }
+                if (!Config::bInstantReload) s_irDiag = false;
+            }
+            if (Config::bInstantReload && !coop && oWeapons >= 0 && oMax >= 0) {
+                void* wlist = ReadP(peq, oWeapons);
+                if (wlist) WalkList(wlist, 16, [&](void* it, int) {
+                    int cur = ReadI(it, oAmmo, -1);
+                    // Pente ZERADO tambem completa (0->max direto, sem animacao).
+                    // Antes pulava cur<=0 e caia no reload normal (que nao vinha).
+                    if (cur < 0 || cur > 100000) return;
+                    void* db = DbCached(it);
+                    if (!db) { s_irSkipDb++; return; }
+                    int sm = ReadI(db, FieldOff(fDbStack), -1);
+                    if (sm != 1) { s_irSkipSm++; return; } // so arma
+                    int max = ReadI(db, oMax, -1);
+                    if (max <= 0 || max > 100000) { s_irSkipMax++; return; }
+                    if (cur >= max) { s_irSkipFull++; return; }
+                    // need=quanto falta; pulled=min(need, reserva do tipo).
+                    int aid = (oAmmoId >= 0) ? ReadI(db, oAmmoId, -1) : -1;
+                    int reserve = 0;
+                    if (aid >= 2 && aid <= 116 && oStorage >= 0 && oItems >= 0 && oId >= 0 && oStack >= 0) {
                         void* cont = ReadP(pinv, oStorage);
                         void* ls = cont ? ReadP(cont, oItems) : nullptr;
-                        if (ls && oId >= 0) WalkList(ls, 64, [&](void* it, int) {
-                            if (has) return;
-                            if (ReadI(it, oId, -1) == s_ammoIdCur) has = true;
+                        if (ls) WalkList(ls, 64, [&](void* p, int) {
+                            if (ReadI(p, oId, -1) == aid) {
+                                int sc = ReadI(p, oStack, 0);
+                                if (sc > 0) reserve += sc;
+                            }
                         });
                     }
-                    if (!has) AmmoEnsurePile(pinv, s_ammoIdCur, smax);
+                    int need = max - cur;
+                    int pulled = (reserve < need) ? reserve : need;
+                    if (pulled <= 0) { s_irSkipRes++; return; }
+                    // Consome da 1a pilha do tipo (igual ao PullStoredItems).
+                    int left = pulled;
+                    if (oStorage >= 0 && oItems >= 0 && oId >= 0 && oStack >= 0) {
+                        void* cont = ReadP(pinv, oStorage);
+                        void* ls = cont ? ReadP(cont, oItems) : nullptr;
+                        if (ls) WalkList(ls, 64, [&](void* p, int) {
+                            if (left <= 0) return;
+                            if (ReadI(p, oId, -1) != aid) return;
+                            int sc = ReadI(p, oStack, 0);
+                            if (sc <= 0) return;
+                            int take = (sc < left) ? sc : left;
+                            WriteI(p, oStack, sc - take);
+                            left -= take;
+                        });
+                    }
+                    WriteI(it, oAmmo, cur + (pulled - left));
+                    if (pulled - left > 0) { s_ammoWrites++; s_irHits++; }
+                });
+                // Telemetria 1x/5s: diz se o instant roda e onde trava.
+                static long long s_irLogT = 0;
+                {
+                    long long now = PiNow();
+                    if (now - s_irLogT > 5000000LL) {
+                        s_irLogT = now;
+                        Log::Infof("[INSTANT] hits=%d skipDb=%d skipFull=%d skipRes=%d skipSm=%d skipMax=%d",
+                            s_irHits, s_irSkipDb, s_irSkipFull, s_irSkipRes, s_irSkipSm, s_irSkipMax);
+                    }
+                }
+            }
+            // Reserva (bInfAmmo) + pilhas gerais (bInfItems). Offsets resolvidos
+            // acima (antes do Instant Reload). HUD = StoredItemCount(local).
+            if (Config::bInfAmmo) {
+                TopStacks(local, oInv, oStorage, oItems, oStack, oDbStack, oId, false);
+                // Seed: 1 pilha cheia POR TIPO REGISTRADO (todas as armas de
+                // weapons[], nao so a ativa). Cada tipo sem pilha no storage
+                // ganha 1 seed (round-robin: 1 tipo por ciclo pesado, com o
+                // backoff interno do EnsurePile). Trocar de arma = tipo novo
+                // ja tem pilha cheia esperando; tipo antigo para de travar
+                // (TopStacks so trava o ativo + balas genericas 10-13/108).
+                if (heavy) {
+                    for (int k = 0; k < 8; ++k) {
+                        int tid = s_ammoIds[k];
+                        if (tid < 2 || tid > 116) continue;
+                        if (s_pileMade[k]) continue; // tipo ja semeado
+                        int smax = (s_pileSmax[k] > 0 && s_pileSmax[k] <= 100000)
+                            ? s_pileSmax[k] : 200;
+                        bool has = false;
+                        {
+                            void* cont = ReadP(pinv, oStorage);
+                            void* ls = cont ? ReadP(cont, oItems) : nullptr;
+                            if (ls && oId >= 0) WalkList(ls, 64, [&](void* it, int) {
+                                if (has) return;
+                                if (ReadI(it, oId, -1) == tid) has = true;
+                            });
+                        }
+                        if (has) { s_pileMade[k] = true; continue; }
+                        AmmoEnsurePile(pinv, tid, smax);
+                        break; // 1 seed por ciclo pesado (backoff seguro)
+                    }
                 }
             }
             if (Config::bInfItems)
@@ -2184,10 +2352,8 @@ namespace Mono {
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 
-    // Leva o ammo de um InventoryItem ao teto (maxAmmo via DatabaseGun;
-    // fallback: segura o maior valor ja visto). So escreve se caiu.
-    // Anti-flood: so mexe se o item for ARMA (stackMax==1 via DatabaseItem).
-    // Pilha (granada/bala solta) tem stackMax>1 e eh ignorada aqui.
+    // Trava item.ammo = DatabaseGun.maxAmmo. So ARMA (stackMax==1).
+    // Sem max valido = nao escreve (nunca fantasma). So escreve se caiu.
     static void TopAmmo(void* item, int oAmmo, int oMax) {
         if (!item || oAmmo < 0) return;
         static int oDbStackGun = -2;
@@ -2288,12 +2454,16 @@ namespace Mono {
         // Reserva do HUD = StoredItemCount = SO storage.items (IL auditado
         // 19/09). Por isso reserva caminha SO storage: pilha fora do storage
         // (misc/weapons) NAO conta no "x/RESERVA" do HUD.
+        // COSMETICO 23/09: a aba Equipamento (TAB) mostra stackCount das
+        // ARMAS em weapons[] (9/1 em vez de 9/200). Por isso reserva (!items)
+        // caminha storage[0] + weapons[1]: no weapons, normaliza stackCount=1
+        // nas armas (igual ao SetGenericNumericValue do jogo ao criar).
         static int s_tsSlowN = 0;
         bool tsHeavy = ((++s_tsSlowN & 3) == 0);
         __try {
             void* pinv = ReadP(local, oInv);
             if (!pinv) return;
-            // Reserva (!items): SO storage (igual ao StoredItemCount do HUD).
+            // Reserva (!items): storage[0] + weapons[1] (cosmetico TAB).
             // Items (true): storage + misc + weapons (tudo trava no teto).
             void* lists[3] = { nullptr, nullptr, nullptr };
             int nLists = 0;
@@ -2301,6 +2471,14 @@ namespace Mono {
             if (cont) {
                 void* ls = ReadP(cont, oItems);
                 if (ls) lists[nLists++] = ls;
+            }
+            if (!items) {
+                // weapons em [1] (li==1): so normalizacao cosmetica.
+                void* peq = ReadP(pinv, FieldOff(fEq));
+                if (peq && oWepList >= 0 && nLists < 3) {
+                    void* lw = ReadP(peq, oWepList);
+                    if (lw) lists[nLists++] = lw;
+                }
             }
             if (items && oMisc >= 0) {
                 void* peq = ReadP(pinv, FieldOff(fEq));
@@ -2337,7 +2515,6 @@ namespace Mono {
                     }
                 }
                 int smax = ReadI(db, oDbStack, -1);
-                if (smax <= 1) return; // stackMax==1 -> eh arma (ammo), nao pilha
                 if (smax <= 0 || smax > 100000) return; // db lixo/GC: nao toca
                 if (oId < 0 || oStack < 0) return;
                 int id = ReadI(it, oId, -1);
@@ -2345,6 +2522,14 @@ namespace Mono {
                 // GC SAFETY: id fora do enum (2..116) ou stack absurdo =
                 // item morto/reciclado: nao registra, nao escreve.
                 if (id < 2 || id > 116) return;
+                // COSMETICO 23/09 (aba Equipamento mostra stackCount das armas):
+                // ARMA (stackMax==1) na lista weapons (li>0, reserva): normaliza
+                // stackCount=1 (igual ao SetGenericNumericValue do jogo ao criar:
+                // stackMax==1 -> stackCount=1, ammo=dose). Pente intacto (TopAmmo).
+                if (smax == 1) {
+                    if (!items && li > 0 && cur != 1) WriteI(it, oStack, 1);
+                    return; // arma: nunca trava como pilha
+                }
                 if (cur < 0 || cur > smax) return;
                 if (!items) {
                     // Reserva: trava stackCount=stackMax na pilha do ammoID da
@@ -2352,7 +2537,7 @@ namespace Mono {
                     // Compara com s_ammoIdCur (tipo real da equipada), nao com
                     // faixa fixa — cobre RiotShell e qualquer calibre especial.
                     // Fallback: balas basicas 10-13/108 (antes do 1o resolve).
-                    bool isWanted = (s_ammoIdCur >= 10 && id == s_ammoIdCur) ||
+                    bool isWanted = (s_ammoIdCur >= 2 && id == s_ammoIdCur) ||
                         ((id >= 10 && id <= 13) || id == 108);
                     if (!isWanted) return;
                     AmmoIdAdd(id); // registra p/ pente extra + telemetria
@@ -3327,6 +3512,204 @@ namespace Mono {
             }
             // Restore knife ao desligar: Duration/transition voltam ao base.
             if (!Config::bFastKnife) RestoreRun(s_rsDur, 64, "knife");
+        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
+
+    // ========================================================================
+    // AIMBOT ciclo 1 (23/09): selecao + FOV + escrita de camera.
+    // PlayerCamera = pitch (set_Angle, clamp ±80 no jogo) + yaw (Rotate no
+    // transform do PlayerCamera). Nunca no CameraTransform (sobrescrito).
+    // Alvo = snapshot do ESP (BuildEsp ja validou: vivo, on-screen, dist).
+    // Ordem mercado: valido → FOV px → prioridade → smoothing → escreve.
+    // Ciclo 1 = visivel, sem silent/trigger/prediction (ciclos 2-4).
+    // ========================================================================
+    static bool s_aimOk = true;   // false = cadeia incompleta (retry, sem morte)
+    static bool s_aimLogged = false;
+    static void ApplyAim(void* local) {
+        if (!local) return;
+        bool want = Config::bAimbot || Config::bAutoAim;
+        if (!want) return;
+        // Tecla: Hold (segurando) ou Toggle (travado). Sem tecla = AutoAim
+        // mira sozinho; com tecla = exige pressionada (padrao mercado).
+        bool keyDown = false;
+        if (Config::bAutoAim && !Config::bAimbot) {
+            keyDown = true; // auto: sem tecla
+        } else {
+            int vk = Config::iAimKey;
+            if (vk == 0) keyDown = true;
+            else keyDown = (GetAsyncKeyState(vk) & 0x8000) != 0;
+            if (Config::iAimMode == 1) { // Toggle: trava no 1o aperto
+                static bool s_toggle = false;
+                static bool s_prevDown = false;
+                if (keyDown && !s_prevDown) s_toggle = !s_toggle;
+                s_prevDown = keyDown;
+                keyDown = s_toggle;
+            }
+        }
+        if (!keyDown) return;
+        // Resolve 1x (offsets via API; metodos set_Angle/get_Angle).
+        static int oCam = -2, oAngle = -2;
+        if (oCam == -2) {
+            oCam = -1; oAngle = -1;
+            if (cPlayer) oCam = FieldOff(fMainCam);
+            oAngle = FieldOff(fCamAngle);
+            if (!s_aimLogged) {
+                s_aimLogged = true;
+                Log::Infof("[AIMBOT] offs cam=%d angle=%d setAngle=%d getAngle=%d",
+                    oCam, oAngle, mSetAngle ? 1 : 0, mGetAngle ? 1 : 0);
+            }
+            if (oCam < 0 || !mSetAngle) {
+                Log::Warn("[AIMBOT] cadeia incompleta — aimbot em espera.");
+                s_aimOk = false;
+                return;
+            }
+        }
+        if (oCam < 0 || !mSetAngle) return;
+        __try {
+            // PlayerCamera do LOCAL (PlayerMain.cam), nao singleton.
+            void* pcam = ReadP(local, oCam);
+            if (!pcam) return;
+            // Snapshot: melhor alvo por prioridade (le o front, sem lock —
+            // mesmo padrao do Present; 1 frame velho no pior caso).
+            EspEntry* f = s_espFront;
+            int n = s_espNFront;
+            if (n < 0) n = 0;
+            if (n > 128) n = 128;
+            if (n <= 0) return;
+            float cx = s_vpW * 0.5f, cy = s_vpH * 0.5f;
+            float fovPx = Config::bLimitFov && !Config::b360Mode
+                ? Config::fFovAngle * 4.0f : 1e9f;
+            if (fovPx < 30.0f) fovPx = 30.0f;
+            int best = -1;
+            float bestScore = 1e30f;
+            for (int i = 0; i < n; ++i) {
+                const EspEntry& e = f[i];
+                if (!e.onScreen || e.hp <= 0) continue;
+                // Posicao do bone por iAimBone: head (padrao) / neck / chest /
+                // pelvis. Skeleton tem as 4 regioes: HEAD=0, NECK=1, peito =
+                // media SP2/SP1, quadril = HL. Sem skeleton = head/foot.
+                float tx = 0, ty = 0;
+                bool hasBone = false;
+                if (e.skN == SK_COUNT) {
+                    int b = SK_HEAD;
+                    if (Config::iAimBone == 1) b = SK_NECK;
+                    else if (Config::iAimBone == 2) b = SK_SP2;   // chest
+                    else if (Config::iAimBone == 3) b = SK_HL;    // pelvis
+                    if (b >= 0 && b < 20 && e.skV[b]) {
+                        tx = e.skX[b]; ty = s_vpH - e.skY[b];
+                        hasBone = true;
+                    }
+                }
+                if (!hasBone) {
+                    // Fallback sem skeleton: topo da box (head aprox).
+                    tx = (e.headX + e.footX) * 0.5f;
+                    ty = s_vpH - e.headY;
+                    if (!(tx > -10000 && tx < 10000 && ty > -10000 && ty < 10000))
+                        continue;
+                }
+                float dx = tx - cx, dy = ty - cy;
+                float dPx = sqrtf(dx * dx + dy * dy);
+                if (dPx > fovPx) continue; // fora do FOV
+                if (Config::fMaxDistance > 0 && e.dist > Config::fMaxDistance)
+                    continue;
+                float score = 1e30f;
+                if (Config::iAimPriority == 2) score = e.dist;        // Nearest
+                else if (Config::iAimPriority == 1) score = e.hp;     // LowestHP
+                else score = dPx;                                     // Crosshair
+                if (score < bestScore) { bestScore = score; best = i; }
+            }
+            if (best < 0) return;
+            // Converte pixel -> yaw/pitch via matriz VP inversa implicita:
+            // usa a posicao 3D do bone (mundo) + posicao da camera.
+            // Caminho barato e exato: W2S reverso via razao angular —
+            // pitch = Angle atual + atan2(dy_px, H/2 / tan(fov/2)).
+            // Sem FOV vertical real: aproxima com sensibilidade angular
+            // medida (graus por pixel a 1080p). Erro < 1 grau no centro.
+            const EspEntry& t = f[best];
+            float dx = 0, dy = 0;
+            {
+                float tx = 0, ty = 0;
+                if (t.skN == SK_COUNT) {
+                    int b = SK_HEAD;
+                    if (Config::iAimBone == 1) b = SK_NECK;
+                    else if (Config::iAimBone == 2) b = SK_SP2;
+                    else if (Config::iAimBone == 3) b = SK_HL;
+                    if (b >= 0 && b < 20 && t.skV[b]) {
+                        tx = t.skX[b]; ty = s_vpH - t.skY[b];
+                    } else { tx = (t.headX + t.footX) * 0.5f; ty = s_vpH - t.headY; }
+                } else { tx = (t.headX + t.footX) * 0.5f; ty = s_vpH - t.headY; }
+                dx = tx - cx; dy = ty - cy;
+            }
+            // Graus por pixel: FOV vertical padrao ~60° em 1080p altura.
+            // Ajusta pelo fFovAngle do menu (circulo desenhado = fov*4 px).
+            float degPerPx = 60.0f / s_vpH;
+            if (Config::fFovAngle > 1.0f && Config::fFovAngle < 360.0f)
+                degPerPx = (Config::fFovAngle * 0.5f) / (Config::fFovAngle * 4.0f);
+            float dYaw = dx * degPerPx;
+            float dPitch = -dy * degPerPx; // tela Y desce, pitch sobe
+            // Smoothing em espaco angular (padrao mercado): divide o delta.
+            // fSmoothing 1 = snap; 6-8 = legit; >20 = lento.
+            float sm = Config::fSmoothing;
+            if (!(sm >= 1.0f && sm <= 30.0f)) sm = 8.0f;
+            // Snap de perto: <0.15 grau = vai direto (evita jitter parado).
+            float angDist = sqrtf(dYaw * dYaw + dPitch * dPitch);
+            if (angDist < 0.15f) { dYaw = 0; dPitch = 0; }
+            else { dYaw /= sm; dPitch /= sm; }
+            // Le pitch atual, soma, clamp ±80 (igual ao jogo), escreve.
+            // Yaw: Rotate(up * dYaw) no transform do PlayerCamera.
+            __try {
+                MonoObject* exc = nullptr;
+                // get_Angle (1 invoke, barato; fora do orcamento do ESP).
+                float curPitch = 0;
+                if (mGetAngle) {
+                    MonoObject* ret = pInvoke(mGetAngle, pcam, nullptr, &exc);
+                    if (!exc && ret) memcpy(&curPitch, pUnbox(ret), 4);
+                } else if (oAngle >= 0) {
+                    curPitch = ReadF(pcam, oAngle, 0.0f);
+                }
+                float want = curPitch + dPitch;
+                if (want < -80.0f) want = -80.0f;
+                if (want > 80.0f) want = 80.0f;
+                if (mSetAngle) {
+                    void* args[1] = { &want };
+                    MonoObject* exc2 = nullptr;
+                    pInvoke(mSetAngle, pcam, args, &exc2);
+                } else if (oAngle >= 0) {
+                    WriteF(pcam, oAngle, want);
+                }
+                // Yaw via Transform.Rotate(up * dYaw): precisa do transform
+                // do PlayerCamera (Component.get_transform) + eixo up.
+                // Custo: 2 invokes. So quando |dYaw| > 0.05 grau.
+                if (dYaw > 0.05f || dYaw < -0.05f) {
+                    if (mGetTrans && cTrans) {
+                        MonoObject* exc3 = nullptr;
+                        MonoObject* tr = pInvoke(mGetTrans, pcam, nullptr, &exc3);
+                        if (!exc3 && tr) {
+                            // Rotate(Vector3 up, angle): metodo do Transform.
+                            // Resolve 1x (static): Transform.Rotate(Vector3,Single).
+                            static MonoMethod* s_mRot = nullptr;
+                            static bool s_rotInit = false;
+                            if (!s_rotInit) {
+                                s_rotInit = true;
+                                s_mRot = pMethodFrom(cTrans, "Rotate", 2);
+                            }
+                            if (s_mRot) {
+                                // up = (0,1,0) como Vector3 boxeado: 12 bytes.
+                                float up[3] = { 0.0f, 1.0f, 0.0f };
+                                void* rargs[2] = { &up, &dYaw };
+                                MonoObject* exc4 = nullptr;
+                                pInvoke(s_mRot, tr, rargs, &exc4);
+                            }
+                        }
+                    }
+                }
+                static int s_aimLogged = 0;
+                if (s_aimLogged < 2) {
+                    s_aimLogged++;
+                    Log::Infof("[AIMBOT] alvo=%d dYaw=%.2f dPitch=%.2f sm=%.0f.",
+                        best, (double)dYaw, (double)dPitch, (double)sm);
+                }
+            } __except (EXCEPTION_EXECUTE_HANDLER) {}
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 
