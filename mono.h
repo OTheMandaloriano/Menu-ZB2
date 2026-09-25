@@ -31,8 +31,6 @@ namespace Mono {
         float footX, footY;  // pes (tela)
         float hp, maxHp;
         float dist; // metros ate a camera
-        float bx, by, bz;  // posicao 3D do BONE DE MIRA (mundo, padrao wohax)
-        bool  hasBone3d;   // false = mira cai no topo da box (fallback)
         float px[8], py[8]; // cantos da AABB projetados (pixels Unity, y p/ cima)
         bool  pv[8];        // canto na frente da camera
         bool  has3d;        // AABB valida (Box 3D real; senao fallback 2D)

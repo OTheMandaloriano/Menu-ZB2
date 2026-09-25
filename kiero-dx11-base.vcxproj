@@ -96,6 +96,9 @@
     <ClInclude Include="config.h" />
     <ClInclude Include="log.h" />
     <ClInclude Include="mono.h" />
+    <ClInclude Include="aim_logic.h" />
+    <ClInclude Include="aim_runtime.inl" />
+    <ClInclude Include="latest_snapshot.h" />
     <ClInclude Include="offsets.h" />
     <ClInclude Include="classes.h" />
     <ClInclude Include="gui.h" />

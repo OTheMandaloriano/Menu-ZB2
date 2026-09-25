@@ -1039,7 +1039,7 @@ namespace GUI {
             }
         }
         // Circulo do raio (wohax show_aim_radius): so com raio > 0.
-        if (Config::bDrawFov && Config::bAimbot && Config::bLimitFov && !Config::b360Mode && Config::fFovAngle > 0.0f) {
+        if (Config::bDrawFov && (Config::bAimbot || Config::bAutoAim || Config::bAutoFire) && Config::bLimitFov && !Config::b360Mode && Config::fFovAngle > 0.0f) {
             ImVec2 sc = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
             float r = Config::fFovAngle * 4.0f;
             dl->AddCircle(sc, r, IM_COL32(120, 220, 255, 200), 64, 1.2f);
@@ -1086,15 +1086,13 @@ namespace GUI {
                 ImGui::Combo("Aim Bone", &Config::iAimBone, kAimBones, 4); Tip("Head/Neck/Chest/Pelvis (bone 3D, igual ao wohax).");
                 ImGui::Combo("Aim Priority", &Config::iAimPriority, kAimPrio, 3); Tip("Crosshair = menor px (wohax); Nearest/HP = extensao.");
                 ImGui::SliderFloat("Smoothing", &Config::fSmoothing, 1, 8, "%.0f"); Tip("1 = snap seco wohax (padrao). 2-8 = divide o passo (suave, mais lento).");
-                ImGui::SliderFloat("Aim Radius", &Config::fFovAngle, 0, 360, "%.0f px"); Tip("Raio em px (aim_radius wohax, 0 = off = infinito).");
+                float radiusPixels = Config::fFovAngle * 4.0f;
+                if (ImGui::SliderFloat("Aim Radius", &radiusPixels, 0, 1440, "%.0f px")) Config::fFovAngle = radiusPixels / 4.0f;
+                Tip("Raio real em pixels. Zero desativa o limite.");
                 ImGui::SliderFloat("Aim Distance", &Config::fAimDistance, 10, 500, "%.0fm"); Tip("Só o AIM obedece (ate onde mira). O ESP tem a propria distancia no VISUAL.");
                 ImGui::Checkbox("Auto Aim", &Config::bAutoAim); Tip("Mira sozinho, sem tecla (firing sempre 1).");
-                // Silent/AutoFire/Trigger: funcionam COM ou SEM AutoAim.
-                // - Triggerbot: voce mira, ele atira (centro no inimigo).
-                // - Auto Fire: ele mira + atira sozinho.
-                // - Silent Aim: atira sem puxar a camera (tiro sai de onde
-                //   a camera ja esta; sem forja de tiro — honesto).
-                ImGui::Checkbox("Silent Aim", &Config::bSilentAim); Tip("Atira sem mover a camera. Exige Auto Aim junto (elege+mira invisivel+atira).");
+                // Automatic actions still require visibility and an active game window.
+                ImGui::TextDisabled("Silent Aim: indisponivel"); Tip("Este jogo usa a direcao real da camera para disparar. A opcao antiga nao implementava Silent Aim.");
                 ImGui::Checkbox("Auto Fire", &Config::bAutoFire); Tip("Mira + atira sozinho quando ha alvo valido e visivel.");
                 ImGui::Checkbox("Triggerbot", &Config::bTriggerbot); Tip("Voce mira, ele atira quando o centro encosta no inimigo (12px).");
                 ImGui::Separator();
@@ -1102,7 +1100,7 @@ namespace GUI {
                 // LimitFOV vira "raio on/off", Draw desenha o raio, 360 = raio
                 // infinito. Prediction/Lag seguem vitrine (ciclo futuro).
                 ImGui::Checkbox("Limit Radius", &Config::bLimitFov); Tip("On = mira so dentro do raio (wohax aim_radius). Off = infinito.");
-                ImGui::Checkbox("360 Mode", &Config::b360Mode); Tip("Mira em qualquer direcao (ignora o raio). Só o AIM: o ESP continua desenhando normal.");
+                ImGui::Checkbox("Sem limite de raio", &Config::b360Mode); Tip("Ignora o raio para alvos projetados a frente da camera.");
                 ImGui::Checkbox("Draw Radius", &Config::bDrawFov); Tip("Desenha o circulo do raio (aim_can_show_radius wohax).");
                 ImGui::Separator();
                 ImGui::Text("Weapon Mods");
@@ -1148,7 +1146,7 @@ namespace GUI {
                 if (ImGui::BeginTable("visual_cols", 2)) {
                     ImGui::TableNextColumn();
                     Section("Zumbis");
-                    ImGui::Checkbox("Ativo##Z", &Config::bZombieEsp); Tip("Master do ESP de zumbis (worker + desenho).");
+                    ImGui::Checkbox("Ativo##Z", &Config::bZombieEsp); Tip("Ativa o desenho do ESP. A coleta da mira e independente.");
                     if (Config::bZombieEsp) {
                         ImGui::Indent();
                         ImGui::Checkbox("Box", &Config::bZombieBoxShow); Tip("Desenha o retangulo. Desmarcar nao mata nome/vida.");

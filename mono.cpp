@@ -1,3 +1,5 @@
+#include "aim_logic.h"
+#include "latest_snapshot.h"
 #include "mono.h"
 #include "config.h"
 #include "log.h"
@@ -40,7 +42,7 @@ typedef void* (__cdecl* FnClassGetMethods)(void*, void**);
 typedef void* (__cdecl* FnMethodSig)(void*);
 typedef const char* (__cdecl* FnMethodName)(void*);
 typedef int (__cdecl* FnSigParamCount)(void*);
-typedef void* (__cdecl* FnSigGetParam)(void*, void**); // (sig, iter) — GeoArray-like, iter avanza
+typedef void* (__cdecl* FnSigGetParam)(void*, void**); // (sig, iter) â€” GeoArray-like, iter avanza
 typedef int (__cdecl* FnTypeGetType)(void*);
 typedef const char* (__cdecl* FnTypeGetName)(void*); // mono_type_get_name (auditoria [SIG])
 typedef void* (__cdecl* FnClassGetFields)(void*, void**); // mono_class_get_fields (auditoria [FIELDS])
@@ -50,14 +52,16 @@ typedef MonoObject* (__cdecl* FnRuntimeInvoke)(MonoMethod*, void*, void**, MonoO
 typedef void*       (__cdecl* FnObjectUnbox)(MonoObject*);
 typedef char*       (__cdecl* FnStringUtf8)(MonoObject*);
 typedef void        (__cdecl* FnFree)(void*);
-typedef void        (__cdecl* FnAssmForeach)(void*, void*); // mono_assembly_foreach
+typedef void (__cdecl* AssemblyCallback)(void*, void*);
+typedef void (__cdecl* FnAssmForeach)(AssemblyCallback, void*);
+typedef int (__cdecl* FnClassValueSize)(MonoClass*, unsigned*); // mono_assembly_foreach
 typedef void*       (__cdecl* FnAssmImage)(void*); // mono_assembly_get_image
 
 // Offsets validados (auditoria #1). Nao adivinhar: tudo veio de CE MCP.
 namespace Off {
     // PlayersController
     constexpr int PCS_players = 48;
-    // PlayerMain (instancia) — offsets validados OFFSETS.md (CE MCP 12/09).
+    // PlayerMain (instancia) â€” offsets validados OFFSETS.md (CE MCP 12/09).
     // healthFast/healthSlow: float, 100.0 cheio. stamina*: 100.0 cheio.
     constexpr int PM_healthFast = 204;
     constexpr int PM_healthSlow = 208;
@@ -130,6 +134,7 @@ namespace Mono {
     static FnFree           pFree = nullptr;
     static FnAssmForeach    pAssmForeach = nullptr;
     static FnAssmImage      pAssmImage = nullptr;
+    static FnClassValueSize pClassValueSize = nullptr;
     static MonoMethod* mGetName = nullptr;
     static MonoMethod* mGetBounds = nullptr; // Renderer.get_bounds (Box 3D real)
     static MonoMethod* mGetViewMat = nullptr; // Camera.get_worldToCameraMatrix (VP proprio)
@@ -180,7 +185,7 @@ namespace Mono {
     static MonoMethod* mTryReload = nullptr; // PlayerArms.TryStartReload (coop: recarga legitima)
     static MonoMethod* mCreateItem = nullptr; // InventoryItem.CreateInventoryItem(ID,int)
     static MonoMethod* mAddItem = nullptr;    // PlayerInventory.AddItem(item,filter)
-    static MonoMethod* mGotLoot = nullptr;    // PlayerInteraction.GotLootFromServer(ID,int) — seed nativo
+    static MonoMethod* mGotLoot = nullptr;    // PlayerInteraction.GotLootFromServer(ID,int) â€” seed nativo
     static MonoMethod* mDropLoot = nullptr;   // PlayerInventory.DropLoot(item)
     // Dinheiro (Currency singleton: Dollar/Silver/Gold -> CurrencyData.amount).
     static MonoClass* cCur = nullptr;        // Currency
@@ -199,7 +204,7 @@ namespace Mono {
     static MonoMethod* mUnlockAll = nullptr;     // LoadoutSelector.UnlockAll()
     static bool s_loadoutDone = false;           // 1x por sessao
     // Arma/Movimento (sessao dnlib 19/09, dump/sessao-2026-09-19_12-00.txt).
-    // Tudo via nome (FieldOff) — offsets reais so em runtime.
+    // Tudo via nome (FieldOff) â€” offsets reais so em runtime.
     static MonoClass* cArms = nullptr;        // PlayerArms (selectedItem, EquippedGun)
     static MonoClass* cWBase = nullptr;       // WeaponBase (singleton: precisionMultiplier, gunSway)
     static MonoClass* cDbgMod = nullptr;      // DebugModifiers (singleton: General)
@@ -240,7 +245,7 @@ namespace Mono {
     static MonoMethod* mHasLocal = nullptr;
     // Telemetria por site de pInvoke (Fase 1, SEM mudar logica): conta chamadas
     // e falhas por ciclo na worker; o agregado sai 1x/5s no [PI-CALL], e so
-    // loga se fail>0 OU media>500us. Leitura atômica nao precisa (worker unica
+    // loga se fail>0 OU media>500us. Leitura atÃ´mica nao precisa (worker unica
     // escreve, Present so le via GetEsp com TryEnter).
     // Fase 1b: fail discriminado por sub-causa (exc = exc||!ret, hd = hd
     // NaN/<=0, seh = __except). Budget negado NAO conta (nao e falha do jogo).
@@ -279,11 +284,11 @@ namespace Mono {
             s->n = 0; s->fail = 0; s->exc = 0; s->hd = 0; s->seh = 0; s->dt_us = 0;
         }
     }
-    // Orçamento de invokes por ciclo de BuildEsp (anti-crash em horda).
+    // OrÃ§amento de invokes por ciclo de BuildEsp (anti-crash em horda).
     // Cada invoke cruza para o Mono e compete com o jogo; com 50+ zumbis,
     // centenas de invokes por ciclo de 33ms viram corrida com o LOD
     // (ver crash 15/09 15:51). Estoura o teto? O resto do ciclo usa o
-    // último valor conhecido (fail-open, sem flicker).
+    // Ãºltimo valor conhecido (fail-open, sem flicker).
     static int  s_budgetLeft = 0;
     static int  s_budgetMax = 64; // 64 invokes/ciclo p/ maos do skeleton.
     static bool s_budgetLogged = false;
@@ -302,7 +307,7 @@ namespace Mono {
     static bool s_handLogged = false; // diagnostico HAND (1x: ponta da mao em mundo)
     static bool s_handLogged2 = false; // diagnostico HAND2 (1x: maos vivas pos-fix)
     static DWORD WINAPI EspThread(LPVOID); // forward (definida apos BuildEsp)
-    static void UnityAssmCb(void* assm, void* ud); // callback mono_assembly_foreach
+    static MonoClass* FindUnityClass(const char* name, MonoImage** image = nullptr);
     static MonoImage* UnityImageWithTransform(void); // imagem com UnityEngine.Transform
     static void ApplyMoney(); // forward (dinheiro infinito, worker)
     static void ApplySlots(void* local); // forward (slots desbloqueados, 1x)
@@ -332,21 +337,13 @@ namespace Mono {
     static Vec3 s_camW = { 0, 0, 0 }; // posicao da camera do ciclo (gate skeleton)
     static bool s_camWok = false;
     static float s_skDist2 = -1.0f; // dist2 da entidade atual (gate skeleton, sem invoke)
-    // Snapshot double-buffer sem lock no frame (item 14b, Rodada 1 inocentou
-    // a worker): Present NUNCA toca em CS — le o ponteiro do buffer pronto
-    // (troca atomica). Worker publica no back e vira o ponteiro sob 1 CS curto.
-    static EspEntry s_espA[128];
-    static EspEntry s_espB[128];
-    static EspEntry* s_espFront = s_espA; // lido pelo Present (sem lock)
-    static EspEntry* s_espBack = s_espB;  // escrito pela worker (sob CS curto)
-    static int s_espNFront = 0;
-    static int s_espNBack = 0;
-    static EspEntry s_esp[128]; // legado: mantido p/ diff minimo (nao usado)
-    static int s_espN = 0;
-    static CRITICAL_SECTION s_espCS;
-    static bool s_csInit = false;
+    // Each thread owns its buffer; publication never overwrites the reader.
+    struct EntitySnapshot { EspEntry entries[128] = {}; int count = 0; };
+    static LatestSnapshot<EntitySnapshot> s_entitySnapshot;
+    static bool s_csInit = false; // worker initialization state
+    static void ClearEntitySnapshot() { s_entitySnapshot.Publish(EntitySnapshot{}); }
     static HANDLE s_espThread = nullptr;
-    static volatile bool s_espRun = false;
+    static std::atomic<bool> s_espRun{false};
     static float s_dbgEyeY = 0, s_dbgFootY = 0; // medida real p/ calibrar a box
 
     template <typename T>
@@ -549,6 +546,29 @@ namespace Mono {
         return out;
     }
 
+    struct UnityClassQuery { const char* name; MonoClass* klass; MonoImage* image; };
+    static void __cdecl FindUnityClassInAssembly(void* assembly, void* context) {
+        auto& query = *static_cast<UnityClassQuery*>(context);
+        if (query.klass || !assembly) return;
+        auto image = static_cast<MonoImage*>(pAssmImage(assembly));
+        if (!image) return;
+        query.klass = pClassFrom(image, "UnityEngine", query.name);
+        if (query.klass) query.image = image;
+    }
+    static MonoClass* FindUnityClass(const char* name, MonoImage** image) {
+        UnityClassQuery query = {name, nullptr, nullptr};
+        if (!pAssmForeach || !pAssmImage || !pClassFrom) return nullptr;
+        __try { pAssmForeach(FindUnityClassInAssembly, &query); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { return nullptr; }
+        if (image) *image = query.image;
+        return query.klass;
+    }
+    static MonoImage* UnityImageWithTransform() {
+        MonoImage* image = nullptr;
+        FindUnityClass("Transform", &image);
+        return image;
+    }
+
     bool Init() {
         if (s.ready) return true;
         if (!s_bound) {
@@ -584,6 +604,7 @@ namespace Mono {
             // Enumera imagens p/ achar UnityEngine.PhysicsModule (nao-fatal).
             Bind(m, "mono_assembly_foreach", pAssmForeach);
             Bind(m, "mono_assembly_get_image", pAssmImage);
+            Bind(m, "mono_class_value_size", pClassValueSize);
             if (!ok) { Log::Error("Mono bind incompleto."); return false; }
             s_dom = pGetRoot();
             if (!s_dom) return false;
@@ -615,7 +636,7 @@ namespace Mono {
         ResolveField(cPlayers, "PlayersController", "instance", fPCInst);
         ResolveMethod(cPlayer, "PlayerMain", "get_HasLocalControl", 0, mHasLocal);
         // Municao: classes/campos/metodos (falha = nao-fatal; ApplyAmmo desliga sozinho).
-        // selectedItem fica no PlayerArms (nao no PlayerMain): resolve via cPlayer? nao —
+        // selectedItem fica no PlayerArms (nao no PlayerMain): resolve via cPlayer? nao â€”
         // via classe PlayerArms separada. Como arms eh field de PlayerMain, resolve a classe
         // PlayerArms direto pelo nome.
         ResolveClass("PlayerInventory", cPInv);
@@ -697,7 +718,7 @@ namespace Mono {
         ResolveClass("DebugModifiers", cDbgMod);
         ResolveClass("DebugGeneralModifiers", cDbgGen);
         ResolveClass("DebugBoolean", cDbgBool);
-        // Defeito 2 (auditoria 21/09): faltava General — dbg sempre 0.
+        // Defeito 2 (auditoria 21/09): faltava General â€” dbg sempre 0.
         // Nome exato via dnlib: field "general" em DebugModifiers.
         ResolveField(cDbgMod, "DebugModifiers", "General", fDbgGen);
         if (!fDbgGen) ResolveField(cDbgMod, "DebugModifiers", "<General>k__BackingField", fDbgGen);
@@ -723,7 +744,7 @@ namespace Mono {
         ResolveField(cAtkBase, "MeleeAttackBase", "Instance", fAtkInst);
         ResolveField(cAtkBase, "MeleeAttackBase", "AllAttacks", fAtkAll);
         // Node = nested ValueType (MeleeMoveSet/MeleeMoveSetNode): resolve via
-        // classe pai + get_nested_types? nao ha API simples — usa o field do
+        // classe pai + get_nested_types? nao ha API simples â€” usa o field do
         // array (nodes) e calcula tMin/tMax por posicao (attack=ptr@0,
         // tMin@8, tMax@12). Sem FieldOff: offsets fixos da struct.
         ResolveClass("PlayerMovement", cMove);
@@ -751,17 +772,12 @@ namespace Mono {
             if (cObj) { s.resolvedClasses++; ResolveMethod(cObj, "Object", "get_name", 0, mGetName); }
             MonoClass* cRend = pClassFrom(s_unity, "UnityEngine", "Renderer");
             if (cRend) { s.resolvedClasses++; ResolveMethod(cRend, "Renderer", "get_bounds", 0, mGetBounds); }
-            // IsVisible (aimbot): Physics.RaycastAll/4 (resolve lazy no
-            // WohaxVisible; falha = visivel). Classe resolve aqui 1x.
-            cPhys = pClassFrom(s_unity, "UnityEngine", "Physics");
-            if (cPhys) s.resolvedClasses++;
-            else Log::Warn("Classe nao resolvida: UnityEngine.Physics (IsVisible off)");
+            // Physics resolves lazily from its own assembly in aim_runtime.inl.
         }                     else Log::Warn("Imagem UnityEngine.CoreModule nao carregada.");
 
         s.ready = (cDay && cPlayer && cZombie && cZLoader && cPlayers
             && fDayInst && fZLInst && fPCInst && mHasLocal);
         if (s.ready && !s_csInit) {
-            InitializeCriticalSection(&s_espCS);
             s_csInit = true;
             s_espRun = true;
             s_espThread = CreateThread(nullptr, 0, EspThread, nullptr, 0, nullptr);
@@ -776,7 +792,7 @@ namespace Mono {
     }
 
     // invoke Transform.get_position -> mundo. Retorna false se falhar.
-    // GetPos fora do orçamento (posicao e dado vital: box/skeleton
+    // GetPos fora do orÃ§amento (posicao e dado vital: box/skeleton
     // dependem dela; sem posicao a entidade some). O teto que protege a
     // horda e o de entidades/ciclo, nao este.
     static bool GetPos(void* trans, Vec3& out) {
@@ -841,7 +857,7 @@ namespace Mono {
             float cx = s_vp[0] * w.x + s_vp[4] * w.y + s_vp[8] * w.z + s_vp[12];
             float cy = s_vp[1] * w.x + s_vp[5] * w.y + s_vp[9] * w.z + s_vp[13];
             float cw = s_vp[3] * w.x + s_vp[7] * w.y + s_vp[11] * w.z + s_vp[15];
-            if (!(cw > 0.05f)) return false; // melee (~1m) ainda projeta; sanidade barra o lixo
+            if (!(cw > Aim::NearPlane)) return false; // melee (~1m) ainda projeta; sanidade barra o lixo
             float inv = 1.0f / cw;
             float nx = cx * inv, ny = cy * inv;
             if (!(nx == nx && ny == ny)) return false;
@@ -857,7 +873,7 @@ namespace Mono {
             MonoObject* ret = pInvoke(mW2S, cam, args, &exc);
             if (exc || !ret) return false;
             memcpy(&out, pUnbox(ret), sizeof(out));
-            return out.z > 1.0f;
+            return out.z > Aim::NearPlane;
         } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
     }
 
@@ -902,12 +918,12 @@ namespace Mono {
     // Item 12 Skeleton real: juntas pelos indices auditados ([BONE] 14/09).
     // Ordem SkJoint: head12 neck11 sp3-10 sp2-9 sp1-8 | perna L: hl1 l1l2 l2l3 fl4
     // perna R: l1r5 l2r6 fr7 (topo = sp1) | braco L: sl13 a1l14 a2l15 | R: sr16 a1r17 a2r18.
-    // FIX Bug 3: array com SK_PHYS (18) entradas — iterar so ossos fisicos e
+    // FIX Bug 3: array com SK_PHYS (18) entradas â€” iterar so ossos fisicos e
     // calcular HL2L/HL2R explicitamente (fix bugs 1-2: mGetRot + unificado 2D/3D).
     static const int kBoneIdx[SkJoint::SK_PHYS] = {
         12, 11, 10, 9, 8, 1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 16, 17, 18
     };
-    // Rotacao do Transform: get_rotation retorna QUATERNION (x,y,z,w — 16 bytes),
+    // Rotacao do Transform: get_rotation retorna QUATERNION (x,y,z,w â€” 16 bytes),
     // nao matriz. FIX Bug 4 (causa raiz): copiar 36 bytes do quat lia lixo alem
     // do objeto e a mao ia para dentro do peito. Converte quat->matriz 3x3 aqui.
     static bool GetQuat(void* trans, float q[4]) {
@@ -1038,14 +1054,12 @@ namespace Mono {
         return true;
     }
 
+    #include "aim_runtime.inl"
+
     static void CollectJoints(void* zo, void* cam, EspEntry& out) {
         out.skN = SkJoint::SK_COUNT;
         for (int k = 0; k < SkJoint::SK_COUNT; ++k) { out.skV[k] = false; out.skX[k] = out.skY[k] = 0; }
-        // Ciclo 1 aimbot (23/09): bone de mira 3D sai junto com as juntas.
-        // Garante: WohaxLookAt/WohaxAim NUNCA leem wp (zerado/invalido) se o
-        // bone da mira nao foi lido com sucesso neste ciclo.
-        out.hasBone3d = false; out.bx = out.by = out.bz = 0.0f;
-        // Ciclo 2 (spec VISUAL §4.2): worker respeita Config::bZombieSkeleton
+        // Ciclo 2 (spec VISUAL Â§4.2): worker respeita Config::bZombieSkeleton
         // (menu VISUAL manda; ReadLayout nao decide mais sozinho). Aliados usam
         // a mesma flag por enquanto (item 15 define a separacao).
         if (!Config::bZombieSkeleton) { out.skN = 0; return; }
@@ -1132,59 +1146,6 @@ namespace Mono {
                 if (!Sane2(s3.x, s3.y)) continue;
                 out.skX[dst] = s3.x; out.skY[dst] = s3.y; out.skV[dst] = true;
             }
-            // Ciclo 1 aimbot (23/09): bone de mira 3D no rig nao-padrao
-            // (boss). Le a junta escolhida DIRETO do Transform (1 GetPos,
-            // zero projecao): WohaxLookAt mira vetor 3D, nao pixel.
-            // Escolha = menu Aim Bone: 0=Head 1=Neck 2=Chest(SP2) 3=Pelvis(HL).
-            // Boss pode nao ter a junta: sem leitura = hasBone3d=false (mira
-            // nao move; nunca wp zerado). Custo: 1 invoke/entidade, so se
-            // bAimbot||bAutoAim (fora do orcamento do skeleton: mira e vital).
-            if ((Config::bAimbot || Config::bAutoAim) && len > 0) {
-                int dstAim = SkJoint::SK_HEAD;
-                if (Config::iAimBone == 1) dstAim = SkJoint::SK_NECK;
-                else if (Config::iAimBone == 2) dstAim = SkJoint::SK_SP2;
-                else if (Config::iAimBone == 3) dstAim = SkJoint::SK_HL;
-                static const char* kAimNm[SkJoint::SK_COUNT] = {
-                    "head","neck","sp3","sp2","sp1","hl","l1l","l2l","fl",
-                    "l1r","l2r","fr","sl","a1l","a2l","sr","a1r","a2r",0,0
-                };
-                const char* want = (dstAim >= 0 && dstAim < SkJoint::SK_PHYS) ? kAimNm[dstAim] : nullptr;
-                if (want) {
-                    for (long long k = 0; k < len && k < 64; ++k) {
-                        void* bone = nullptr;
-                        __try { memcpy(&bone, (char*)arr + Off::A_data + (size_t)k * 8, 8); }
-                        __except (EXCEPTION_EXECUTE_HANDLER) { bone = nullptr; }
-                        if (!bone) continue;
-                        char nmB[64] = { 0 };
-                        const char* nm = nullptr;
-                        __try {
-                            if (mGetGO && mGetName) {
-                                MonoObject* exc = nullptr;
-                                MonoObject* go = pInvoke(mGetGO, bone, nullptr, &exc);
-                                if (!exc && go) {
-                                    MonoObject* exc2 = nullptr;
-                                    MonoObject* ret = pInvoke(mGetName, go, nullptr, &exc2);
-                                    if (!exc2 && ret) {
-                                        char* u = pStrUtf8(ret);
-                                        if (u) { strncpy_s(nmB, u, _TRUNCATE); pFree(u); nm = nmB; }
-                                    }
-                                }
-                            }
-                        } __except (EXCEPTION_EXECUTE_HANDLER) {}
-                        if (!nm || strcmp(nm, want)) continue;
-                        Vec3 w;
-                        if (!GetPos(bone, w)) break;
-                        if (!Fin(w.x) || !Fin(w.y) || !Fin(w.z)) break;
-                        if (w.x > -10000.0f && w.x < 10000.0f &&
-                            w.y > -10000.0f && w.y < 10000.0f &&
-                            w.z > -10000.0f && w.z < 10000.0f) {
-                            out.bx = w.x; out.by = w.y; out.bz = w.z;
-                            out.hasBone3d = true;
-                        }
-                        break;
-                    }
-                }
-            }
             return; // rig nao-padrao: sem maos estimadas (indices de comum nao valem)
         }
         void* bones[SkJoint::SK_PHYS] = { nullptr };
@@ -1195,40 +1156,13 @@ namespace Mono {
         Vec3 wp[SkJoint::SK_PHYS];
         bool wok[SkJoint::SK_PHYS] = { false };
         // Causa A (item 14b): skeleton longe vira box 2D leve. 18 get_position
-        // por zumbi x 96 = ~1700 invokes/ciclo — e o LOD mexe nesses mesmos
+        // por zumbi x 96 = ~1700 invokes/ciclo â€” e o LOD mexe nesses mesmos
         // Transforms. Longe (>50m) nao precisa de osso: pula o loop inteiro.
         // A flag bZombieSkeleton continua mandando (respeita o menu).
         // Probe com distancia JA conhecida no ciclo (eye/foot do 2D ou center
-        // da AABB do 3D) — nunca invoke extra (o probe com GetPos batia justo
+        // da AABB do 3D) â€” nunca invoke extra (o probe com GetPos batia justo
         // no objeto mais fragil: armature se formando no spawn).
         if (s_skDist2 >= 0 && s_skDist2 > 50.0f * 50.0f) {
-            // Ciclo 1 aimbot (23/09): skeleton longe vira box 2D leve, MAS a
-            // mira precisa do bone 3D mesmo longe (ate fAimDistance).
-            // NOTA: o cull de distancia do AIM roda na eleicao (WohaxAim);
-            // aqui o ESP publica tudo ate fEspDistance (VISUAL manda).
-            // Leitura direta: 1 GetPos no bone da mira (sem loop de 18,
-            // sem rotacao, sem projecao). Barato e seguro: SEH + Fin + faixa.
-            if (Config::bAimbot || Config::bAutoAim) {
-                int dstAim = SkJoint::SK_HEAD;
-                if (Config::iAimBone == 1) dstAim = SkJoint::SK_NECK;
-                else if (Config::iAimBone == 2) dstAim = SkJoint::SK_SP2;
-                else if (Config::iAimBone == 3) dstAim = SkJoint::SK_HL;
-                if (dstAim >= 0 && dstAim < SkJoint::SK_PHYS) {
-                    void* bone = nullptr;
-                    __try { memcpy(&bone, (char*)arr + Off::A_data + (size_t)kBoneIdx[dstAim] * 8, 8); }
-                    __except (EXCEPTION_EXECUTE_HANDLER) { bone = nullptr; }
-                    if (bone) {
-                        Vec3 w;
-                        if (GetPos(bone, w) && Fin(w.x) && Fin(w.y) && Fin(w.z) &&
-                            w.x > -10000.0f && w.x < 10000.0f &&
-                            w.y > -10000.0f && w.y < 10000.0f &&
-                            w.z > -10000.0f && w.z < 10000.0f) {
-                            out.bx = w.x; out.by = w.y; out.bz = w.z;
-                            out.hasBone3d = true;
-                        }
-                    }
-                }
-            }
             out.skN = 0; return;
         }
         for (int k = 0; k < SkJoint::SK_PHYS; ++k) {
@@ -1241,30 +1175,7 @@ namespace Mono {
             if (!Sane2(s3.x, s3.y)) continue;
             out.skX[k] = s3.x; out.skY[k] = s3.y; out.skV[k] = true;
         }
-        // Ciclo 1 aimbot (23/09): preenche o bone de mira 3D a partir das
-        // juntas JA lidas acima (wp/wok, zero invoke extra). Escolha = menu
-        // Aim Bone: 0=Head 1=Neck 2=Chest(SP2) 3=Pelvis(HL). Sem leitura
-        // valida = hasBone3d=false (mira nao move; nunca wp zerado).
-        // Fora do orcamento do skeleton (BudgetTake): mira e dado vital,
-        // igual a GetPos (posicao); o teto que protege a horda e o de
-        // entidades/ciclo (96), nao este.
-        {
-            int dstAim = SkJoint::SK_HEAD;
-            if (Config::iAimBone == 1) dstAim = SkJoint::SK_NECK;
-            else if (Config::iAimBone == 2) dstAim = SkJoint::SK_SP2;
-            else if (Config::iAimBone == 3) dstAim = SkJoint::SK_HL;
-            if ((Config::bAimbot || Config::bAutoAim) &&
-                dstAim >= 0 && dstAim < SkJoint::SK_PHYS && wok[dstAim]) {
-                const Vec3& w = wp[dstAim];
-                if (w.x > -10000.0f && w.x < 10000.0f &&
-                    w.y > -10000.0f && w.y < 10000.0f &&
-                    w.z > -10000.0f && w.z < 10000.0f) {
-                    out.bx = w.x; out.by = w.y; out.bz = w.z;
-                    out.hasBone3d = true;
-                }
-            }
-        }
-        // Maos estimadas via rotacao do antebraco — unificado p/ 2D e 3D (fix bugs 1-4).
+        // Maos estimadas via rotacao do antebraco â€” unificado p/ 2D e 3D (fix bugs 1-4).
         Vec3 bodyFwd = { 0, 0, 0 };
         bool hasBodyFwd = GetBodyForward(wp, wok, bodyFwd);
         {
@@ -1335,24 +1246,25 @@ namespace Mono {
     static void BuildEsp() {
         EspEntry tmp[128] = {};
         int n = 0;
-        if (!Config::bZombieEsp || !mGetPos || !mW2S || !mGetTrans) return;
+        s_aimCount = 0; s_camWok = false;
+        if ((!Config::bZombieEsp && !AimRequested()) || !mGetPos || !mW2S || !mGetTrans) { ClearEntitySnapshot(); return; }
         // MainCamera.instance (static) -> cam@32 (UnityEngine.Camera).
         // Re-resolve aqui (barato, 2Hz) para pegar a Camera viva.
         MonoClass* cMC = pClassFrom(s_img, "", "MainCamera");
-        if (!cMC) return;
+        if (!cMC) { ClearEntitySnapshot(); return; }
         MonoClassField* fInst = pFieldFrom(cMC, "instance");
-        if (!fInst) return;
+        if (!fInst) { ClearEntitySnapshot(); return; }
         void* mcObj = nullptr;
-        if (!StaticInstance(cMC, fInst, mcObj)) return;
+        if (!StaticInstance(cMC, fInst, mcObj)) { ClearEntitySnapshot(); return; }
         void* cam = ReadP(mcObj, Off::MC_cam);
-        if (!cam) return;
+        if (!cam) { ClearEntitySnapshot(); return; }
         // FIX P0-2 (crash em transicao de cena 15/09): valida o wrapper da camera
         // antes de qualquer invoke. Se a cena trocou (morte/troca de mapa), o
         // MainCamera.instance pode apontar p/ objeto destruido. Probe de 1 byte
         // com SEH: wrapper morto = AV capturado aqui, fora do JIT do Mono.
         { volatile char probe = 0;
           __try { memcpy((void*)&probe, cam, 1); }
-          __except (EXCEPTION_EXECUTE_HANDLER) { return; } }
+          __except (EXCEPTION_EXECUTE_HANDLER) { ClearEntitySnapshot(); return; } }
         // VP proprio 1x por ciclo (2 invokes): todas as projecoes do ciclo usam a mesma matriz.
         s_vpOk = false;
         {
@@ -1375,19 +1287,17 @@ namespace Mono {
             PiAdd(s_piTrC, PiNow() - t0c, hasCamW);
         }
         s_camW = camW; s_camWok = hasCamW;
-            // ESP usa a distancia propria (fEspDistance): o AIM tem a dele
-            // (fAimDistance, PLAYER). Um nao mexe no outro.
-            float maxD = Config::fEspDistance;
+        float maxD = Config::fEspDistance;
         float maxD2 = maxD * maxD;
         LARGE_INTEGER t0, t1;
         QueryPerformanceCounter(&t0);
-        // Orçamento do ciclo: reseta a cada BuildEsp. Sem orçamento o skeleton
+        // OrÃ§amento do ciclo: reseta a cada BuildEsp. Sem orÃ§amento o skeleton
         // vira leitura barata (sem invoke) em vez de travar o jogo.
         s_budgetLeft = s_budgetMax;
         void* zl = nullptr;
-        if (!cZLoader) return;
+        if (!cZLoader) { ClearEntitySnapshot(); return; }
         MonoClassField* fZL = pFieldFrom(cZLoader, "Instance");
-        if (!fZL || !StaticInstance(cZLoader, fZL, zl)) return;
+        if (!fZL || !StaticInstance(cZLoader, fZL, zl)) { ClearEntitySnapshot(); return; }
         void* list = ReadP(zl, Off::ZL_zombies);
         WalkList(list, 512, [&](void* e, int) {
             if (n >= 128) return;
@@ -1412,6 +1322,8 @@ namespace Mono {
             if (!alive2 || hp2 <= 0 || hp2 != hp) { s_ghostDead++; return; }
             void* zo = ReadP(e, Off::Z_obj);
             if (!zo) return;
+            CollectAimTarget(e, zo, cam, hp);
+            if (!Config::bZombieEsp) return;
             // Anti-horda: teto de 96 entidades por ciclo. O resto fica p/ o
             // proximo ciclo (o snapshot segura as cores). Sem isso, horda de
             // 200+ entidades x ~8 invokes = corrida com o LOD (crash 15/09).
@@ -1500,8 +1412,8 @@ namespace Mono {
                     }
                     int nv = 0; // Fix B: cantos atras da camera nao desenham (sem fragmentos)
                     for (int k = 0; k < 8; ++k) if (tmpEn.pv[k]) nv++;
-                    if (nv < 6) return;
-                    // Maos ja calculadas em CollectJoints (fix bugs 1-2, 4) — vale p/ 2D e 3D.
+                    if (nv < 2) return; // partially clipped close body still has visible edges
+                    // Maos ja calculadas em CollectJoints (fix bugs 1-2, 4) â€” vale p/ 2D e 3D.
                     // s_skDist2 alimenta o gate de skeleton longe (sem invoke extra).
                     // Kill-window melee (item 14b): revalida HP/isAlive apos o
                     // skeleton; mudou = publica box+skeleton (cor unica).
@@ -1515,26 +1427,6 @@ namespace Mono {
                         } __except (EXCEPTION_EXECUTE_HANDLER) { hp3 = 0; alive3 = 0; }
                         if (!alive3 || hp3 <= 0 || hp3 != hp) {
                             s_ghostDead++;
-                            EspEntry& en = tmp[n++];
-                            memcpy(en.name, tmpEn.name, sizeof(en.name));
-                            en.has3d = false;
-                            en.dist = dist;
-                            memcpy(en.px, tmpEn.px, sizeof(en.px));
-                            memcpy(en.py, tmpEn.py, sizeof(en.py));
-                            memcpy(en.pv, tmpEn.pv, sizeof(en.pv));
-                            en.skN = tmpEn.skN;
-                            memcpy(en.skX, tmpEn.skX, sizeof(en.skX));
-                            memcpy(en.skY, tmpEn.skY, sizeof(en.skY));
-                            memcpy(en.skV, tmpEn.skV, sizeof(en.skV));
-                            // Ciclo 1 aimbot: kill-window publica o bone de
-                            // mira junto (sem ele a mira nao move no frame).
-                            en.bx = tmpEn.bx; en.by = tmpEn.by; en.bz = tmpEn.bz;
-                            en.hasBone3d = tmpEn.hasBone3d;
-                            en.has3d = true;
-                            en.ent = e; en.ex = bb.extents.x; en.ey = bb.extents.y; en.ez = bb.extents.z;
-                            en.headX = en.headY = en.footX = en.footY = 0;
-                            en.hp = hp; en.maxHp = mx;
-                            en.onScreen = true; en.isAlly = false; en.isBoss = tmpEn.isBoss;
                             return;
                         }
                     }
@@ -1563,9 +1455,6 @@ namespace Mono {
                     memcpy(en.skX, tmpEn.skX, sizeof(en.skX));
                     memcpy(en.skY, tmpEn.skY, sizeof(en.skY));
                     memcpy(en.skV, tmpEn.skV, sizeof(en.skV));
-                    // Ciclo 1 aimbot: bone de mira 3D (CollectJoints).
-                    en.bx = tmpEn.bx; en.by = tmpEn.by; en.bz = tmpEn.bz;
-                    en.hasBone3d = tmpEn.hasBone3d;
                     en.has3d = true;
                     en.ent = e; en.ex = bb.extents.x; en.ey = bb.extents.y; en.ez = bb.extents.z;
                     en.headX = en.headY = en.footX = en.footY = 0;
@@ -1597,8 +1486,7 @@ namespace Mono {
                     {
                         float vw = s_vpW > 64 ? s_vpW : 1280.0f;
                         float vh = s_vpH > 64 ? s_vpH : 768.0f;
-                        bool inScr = (sh.x > -80 && sh.x < vw + 80 && sf.x > -80 && sf.x < vw + 80 &&
-                                      sh.y > -80 && sh.y < vh + 80 && sf.y > -80 && sf.y < vh + 80);
+                        bool inScr = Aim::IntersectsViewport(sh.x, sh.y, sf.x, sf.y, vw, vh);
                         if (!inScr) return;
                     }
                     if (!Sane2(sh.x, sh.y) || !Sane2(sf.x, sf.y)) { // P1: 2D aborta inteiro
@@ -1627,17 +1515,11 @@ namespace Mono {
             memcpy(en.skX, tmpEn.skX, sizeof(en.skX));
             memcpy(en.skY, tmpEn.skY, sizeof(en.skY));
             memcpy(en.skV, tmpEn.skV, sizeof(en.skV));
-            // Ciclo 1 aimbot: bone de mira 3D (CollectJoints).
-            en.bx = tmpEn.bx; en.by = tmpEn.by; en.bz = tmpEn.bz;
-            en.hasBone3d = tmpEn.hasBone3d;
             en.ent = e; en.ex = en.ey = en.ez = 0;
             en.hp = hp; en.maxHp = mx;
             en.onScreen = true; en.isAlly = false; en.isBoss = tmpEn.isBoss;
         });
-        // Publicacao double-buffer (item 14b): worker escreve no back, vira o
-        // ponteiro sob 1 CS curto. Present le o front SEM lock (ponteiro).
-        // = tenta no proximo ciclo (33ms), nunca trava.
-        if (!TryEnterCriticalSection(&s_espCS)) return;
+        // Publish only a completed frame; failures publish an empty frame.
         // Telemetria de orcamento (1x/sessao): prova que o teto segura a horda.
         if (!s_budgetLogged) {
             s_budgetLogged = true;
@@ -1664,18 +1546,15 @@ namespace Mono {
             }
             s_lastN = n > 128 ? 128 : n;
             for (int i = 0; i < s_lastN; ++i) s_lastEnts[i] = tmp[i].ent;
-            s_espNBack = s_lastN;
-            s.espShown = s_espNBack;
+            EntitySnapshot snapshot;
+            snapshot.count = s_lastN;
+            s.espShown = snapshot.count;
             extern long s_ammoWritesExt();
             s.ammoWrites = (int)s_ammoWritesExt();
-            for (int i = 0; i < s_espNBack; ++i) s_espBack[i] = tmp[i];
-            // Vira o ponteiro: front novo = back cheio (troca atomica de ptr).
-            EspEntry* t = s_espFront; s_espFront = s_espBack; s_espBack = t;
-            s_espNFront = s_espNBack;
-            s_espN = s_espNFront; // legado: espelho p/ debug
+            for (int i = 0; i < snapshot.count; ++i) snapshot.entries[i] = tmp[i];
+            s_entitySnapshot.Publish(snapshot);
         }
-        LeaveCriticalSection(&s_espCS);
-        // Métrica de custo do ciclo (fora do lock).
+        // MÃ©trica de custo do ciclo (fora do lock).
         QueryPerformanceCounter(&t1);
         {
             LARGE_INTEGER fr;
@@ -1690,7 +1569,7 @@ namespace Mono {
     // ciclo precisa ANTES de qualquer invoke: imagem C#, ZombieLoader vivo,
     // MainCamera.instance + cam+32 nao-nulo, lista de zumbis legivel. Falhou
     // qualquer um = transicao (kill = Destroy, loading = troca de cena):
-    // worker dorme 500ms e tenta de novo — nunca invoca no escuro.
+    // worker dorme 500ms e tenta de novo â€” nunca invoca no escuro.
     static bool SceneAlive() {
         __try {
             if (!s_img || !s_dom) return false;
@@ -1769,7 +1648,8 @@ namespace Mono {
             // SceneAlive pode retornar true (camera + ZombieLoader existem),
             // mas o player nao existe ainda. Sem gate = invoke em objeto nulo =
             // hang/crash reportado pelo operador.
-            bool wantDef = s.ready && (Config::bGodMode || Config::bInfStamina || Config::bInfAmmo || Config::bInfItems || Config::bInfMoney || Config::bUnlockSlots || Config::bUnlockLoadout || Config::bNoRecoil || Config::bNoSpread || Config::bNoSway || Config::bTightAim || Config::bRapidFire || Config::bSuperJump || Config::bFastKnife || Config::bInstantReload || Config::bAimbot || Config::bAutoAim);
+            void* aimLocal = nullptr;
+            bool wantDef = s.ready && (Config::bGodMode || Config::bInfStamina || Config::bInfAmmo || Config::bInfItems || Config::bInfMoney || Config::bUnlockSlots || Config::bUnlockLoadout || Config::bNoRecoil || Config::bNoSpread || Config::bNoSway || Config::bTightAim || Config::bRapidFire || Config::bSuperJump || Config::bFastKnife || Config::bInstantReload || AimRequested());
             if (wantDef && SceneAlive()) {
                 // Modo real via MultiplayerController (throttle 2s, SEH).
                 // coopMode: 0=LOBBY 1=SINGLE 2=CLIENTE 3=HOST.
@@ -1848,7 +1728,7 @@ namespace Mono {
                     if (Config::bUnlockSlots) ApplySlots(localEnt);
                     if (Config::bUnlockLoadout) ApplyLoadout();
                     if (Config::bInfAmmo || Config::bInfItems || Config::bInstantReload) ApplyAmmo(localEnt, coop);
-                    if (Config::bAimbot || Config::bAutoAim) WohaxAim(localEnt);
+                    aimLocal = localEnt;
                 }
                 if (++s_defN >= 60) {
                     s_defN = 0;
@@ -1856,20 +1736,22 @@ namespace Mono {
                     AuditBones();
                 }
             }
-            if (s.ready && Config::bZombieEsp) {
+            if (s.ready && (Config::bZombieEsp || AimRequested())) {
                 if (!SceneAlive()) {
                     // Cena morta/trocando (respawn): zera o snapshot e espera.
                     // TryEnter: se o Present estiver lendo, pula em vez de travar.
-                    if (TryEnterCriticalSection(&s_espCS)) { s_espN = 0; s_lastN = 0; LeaveCriticalSection(&s_espCS); }
-                    if (++s_deadN == 1) Log::Warn("[SCENE] loader morto — worker em espera (respawn?).");
+                    ClearEntitySnapshot(); s_lastN = 0;
+                    if (++s_deadN == 1) Log::Warn("[SCENE] loader morto â€” worker em espera (respawn?).");
+                    ResetAim(); s_camWok = false;
                     Sleep(500);
                     continue;
                 }
-                if (s_deadN > 0) { s_deadN = 0; Log::Info("[SCENE] loader vivo — worker retomada."); }
+                if (s_deadN > 0) { s_deadN = 0; Log::Info("[SCENE] loader vivo â€” worker retomada."); }
                 if (MapSettling()) {
                     // Mapa gerando celulas: zero invoke neste ciclo.
-                    if (TryEnterCriticalSection(&s_espCS)) { s_espN = 0; LeaveCriticalSection(&s_espCS); }
-                    Log::Warn("[SCENE] mapa assentando — ciclo pulado (LOD gerando).");
+                    ClearEntitySnapshot();
+                    Log::Warn("[SCENE] mapa assentando â€” ciclo pulado (LOD gerando).");
+                    ResetAim(); s_camWok = false;
                     Sleep(500);
                     continue;
                 }
@@ -1878,6 +1760,7 @@ namespace Mono {
                 // e o ritmo adaptativo so reagia DEPOIS.
                 // Novo ritmo: posicao+skeleton TODO ciclo (barato, ~2ms).
                 BuildEsp();
+                WohaxAim(aimLocal);
                 // Defesa ja rodada no bloco rapido acima: aqui so o lento.
                 if (s_defN == 0) { /* ReadAll/AuditBones feitos no ciclo rapido */ }
                 else {
@@ -1898,16 +1781,16 @@ namespace Mono {
                     Log::Infof("[PERF] ciclo %.1fms -> intervalo %dms.", (double)s.espMs, want);
                 }
             }
-            else { EnterCriticalSection(&s_espCS); s_espN = 0; LeaveCriticalSection(&s_espCS); }
+            else { ClearEntitySnapshot(); ResetAim(); s_camWok = false; }
             Sleep(s_sleepMs);
         }
         return 0;
     }
 
     // ========================================================================
-    // AMMO — subsistema de municao infinita (reescrito 22/09, revisao senior).
+    // AMMO â€” subsistema de municao infinita (reescrito 22/09, revisao senior).
     //
-    // MODELO DO JOGO (IL auditado via dnlib — nao mexer sem re-auditar):
+    // MODELO DO JOGO (IL auditado via dnlib â€” nao mexer sem re-auditar):
     // - InventoryItem eh CLASSE (MonoObject + 16B header). Campos via FieldOff:
     //   id / stackCount / ammo. Regra: stackMax==1 -> usa .ammo (arma);
     //   senao usa .stackCount (pilha). Get/SetGenericNumericValue confirmam.
@@ -1930,7 +1813,7 @@ namespace Mono {
     //   ZERO invoke. Pente (ammo=maxAmmo) + reserva (stackCount=stackMax).
     // - Ciclo PESADO (1x/4 ticks): resolve db novo (DbCached) + ammoID da
     //   equipada + seed de pilha (1 invoke max por tipo, com backoff).
-    // - Seed de pilha: GotLootFromServer(ammoID, stackMax) — o MESMO caminho
+    // - Seed de pilha: GotLootFromServer(ammoID, stackMax) â€” o MESMO caminho
     //   do botao Descarregar. Sem pilha no storage = reserva 0 (correto pelo
     //   modelo do jogo); o seed cria 1x por tipo.
     // - Troca de arma: s_ammoIdCur segue o tipo novo; tipo antigo para de
@@ -1963,7 +1846,7 @@ namespace Mono {
     }
     static void AmmoIdAdd(int id) {
         // Faixa do enum InventoryItem/ID: 2..116 (auditoria 22/09: o miss-log
-        // provou que balas reais usam aid 9 (fuzil), 0 e 1 — a faixa 10-116
+        // provou que balas reais usam aid 9 (fuzil), 0 e 1 â€” a faixa 10-116
         // as descartava em silencio, por isso so a pistola ganhava reserva).
         if (id < 2 || id > 116 || AmmoIdKnown(id)) return;
         for (int k = 0; k < 8; ++k) {
@@ -1976,9 +1859,9 @@ namespace Mono {
     }
     // Cria pilha do tipo quando zerada (pente extra no limite do jogo).
     // Via CreateInventoryItem(id,30)+AddItem(Both). LootPlacingFilter real
-    // (enum byte): 0=Inventory, 1=Equipment, 2=Both — Both tenta os dois.
+    // (enum byte): 0=Inventory, 1=Equipment, 2=Both â€” Both tenta os dois.
     // Retry LIMITADO: 3 tentativas por tipo por sessao (cada AddItem sem lugar
-    // faz o proprio jogo dropar no chao — retry infinito = tapete de loot).
+    // faz o proprio jogo dropar no chao â€” retry infinito = tapete de loot).
     // Falhou 3x = para e avisa (libere slot ou Desbloquear Slots).
     // Estado do seed: 1 pilha por tipo (slot indexado pelo s_ammoIds).
     // (s_pileMade/s_pileTries declarados acima, antes do AmmoCachesClear.)
@@ -2005,7 +1888,7 @@ namespace Mono {
         for (int k = 0; k < 8; ++k) if (s_ammoIds[k] == id) slot = k;
         if (slot < 0 || s_pileMade[slot]) return;
         if (s_pileTries[slot] >= 3) return;
-        // Resolve 1x (fora do backoff — resolve nao invoca, nao trava).
+        // Resolve 1x (fora do backoff â€” resolve nao invoca, nao trava).
         if (!mGotLoot) {
             static bool s_gotInit = false;
             if (!s_gotInit) {
@@ -2095,13 +1978,13 @@ namespace Mono {
             } else {
                 Log::Infof("[AMMO] pilha id=%d recusada (tentativa %d/3).", id, s_pileTries[slot]);
                 if (s_pileTries[slot] >= 3)
-                    Log::Warn("[AMMO] sem espaco p/ pilha (3 tentativas) — libere slot ou Desbloquear Slots. Nao tenta mais.");
+                    Log::Warn("[AMMO] sem espaco p/ pilha (3 tentativas) â€” libere slot ou Desbloquear Slots. Nao tenta mais.");
             }
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
     static void ApplyAmmo(void* local, bool coop) {
         if (!local || !s_ammoOk) return;
-        // Resolve preguiçoso dos offsets (1x; API pode indisponivel no Unity 6).
+        // Resolve preguiÃ§oso dos offsets (1x; API pode indisponivel no Unity 6).
         static int oInv = -2, oEq = -2, oSel = -2, oAmmo = -2, oMax = -2;
         static int oArms = -2, oWeapons = -2;
         static MonoClassField* fArms = nullptr;
@@ -2120,7 +2003,7 @@ namespace Mono {
                     oInv, oEq, oArms, oSel, oAmmo, oMax, oWeapons, mGetEq ? 1 : 0, mGetDb ? 1 : 0, s_ammoMode);
             }
             if (oInv < 0 || oEq < 0 || oAmmo < 0 || s_ammoMode == 0) {
-                Log::Warn("[AMMO] cadeia incompleta — municao infinita desativada (sem crash).");
+                Log::Warn("[AMMO] cadeia incompleta â€” municao infinita desativada (sem crash).");
                 s_ammoOk = false;
                 s.ammoOk = false; // debug overlay mostra AMMO:OFF
                 return;
@@ -2143,7 +2026,7 @@ namespace Mono {
             if (!peq) return;
             // Coop cliente: pente LIVRE (host valida o dano; travar gera
             // pacote inconsistente e o tiro/dinamite nao conta). So identifica
-            // o ammoID (leitura) e garante reserva (abaixo) — fluxo legitimo.
+            // o ammoID (leitura) e garante reserva (abaixo) â€” fluxo legitimo.
             // Recarga automatica: ammo==0 -> TryStartReload (fluxo normal do
             // jogo: PullStoredItems da reserva cheia; host aceita, dano conta).
             // Pente extra ao ativar: ao ligar bInfAmmo (borda de subida),
@@ -2254,12 +2137,12 @@ namespace Mono {
                 }
             }
             // Pente extra REAL (19/09, regra do ReloadGun): a reserva do HUD
-            // e StoredItemCount(ammoID da equipada) — soma dos stackCount das
+            // e StoredItemCount(ammoID da equipada) â€” soma dos stackCount das
             // pilhas no STORAGE com id == ammoID. Entao: garante 1 pilha cheia
             // (stackCount=stackMax) do tipo da EQUIPADA no storage.
             // Sem Create/AddItem (sem invoke = sem hang/crash): escreve direto
             // stackCount=stackMax na 1a pilha do tipo; se nao existe pilha,
-            // converte 1 slot vazio? Nao — sem slot livre, so loga (o loot
+            // converte 1 slot vazio? Nao â€” sem slot livre, so loga (o loot
             // natural cria a pilha e a trava assume).
             // Eleicao da arma EM USO (22/09, sem selectedItem):
             // E1 gasto observado (tiro = ammo caiu) > E2 varredura weapons[].
@@ -2273,7 +2156,7 @@ namespace Mono {
                     oAmmoId = FieldOff(f);
                 }
             }
-            // E2: varredura weapons[] — registra TODOS os tipos de bala das
+            // E2: varredura weapons[] â€” registra TODOS os tipos de bala das
             // armas (db valido, stackMax==1). Funciona sem tiro e sem selectedItem.
             // ANTI-HANG 22/09: roda 1x a cada ~4s (pesadoConta), NAO todo pesado.
             // No loading (mapa assentando), items ainda nao tem db registrado e
@@ -2306,7 +2189,7 @@ namespace Mono {
                     s_prevAmmo[idx] = cur;
                 });
                 // E2 (com invoke, espacado): descobre tipos novos 1x/~4s.
-                // ROUND-ROBIN 22/09: 1 arma por vez (e2cursor) — 4 invokes no
+                // ROUND-ROBIN 22/09: 1 arma por vez (e2cursor) â€” 4 invokes no
                 // mesmo ciclo travavam; 1 invoke/ciclo nao trava.
                 // MISS-LOG 22/09 (auditoria: slots 0/1/3 descartados em
                 // silencio): 1 linha por visita (ja espacada, sem spam).
@@ -2349,12 +2232,12 @@ namespace Mono {
                 }
             }
             // Pente: trava ammo=maxAmmo em TODAS as armas de weapons[]
-            // (fail-open: sem selectedItem confiavel, trava todas — custo de
+            // (fail-open: sem selectedItem confiavel, trava todas â€” custo de
             // 2-4 escritas/ciclo, sem invoke). TopAmmo so escreve em ARMA com
             // db valido (stackMax==1, max plausivel); pilha nunca entra aqui.
             // ANTI-HANG 22/09: TopAmmo com db NAO cacheado invoca (miss). No
             // loading isso deadlocka. So trava pente com db JA cacheado:
-            // 1o ciclo apos ativar = so registra (E2 espaçado resolve o db).
+            // 1o ciclo apos ativar = so registra (E2 espaÃ§ado resolve o db).
             // Excecao: ciclo leve apos e2vez (db acabou de resolver).
             static bool s_dbPrimed = false;
             if (e2vez) s_dbPrimed = true;
@@ -2375,7 +2258,7 @@ namespace Mono {
             static int s_irHits = 0, s_irSkipDb = 0, s_irSkipFull = 0, s_irSkipRes = 0;
             static int s_irSkipSm = 0, s_irSkipMax = 0;
             // INSTANT RELOAD 23/09 (checkbox da aba PLAYER/Weapon): PENTE SEMPRE
-            // CHEIO — igual aos grandes cheats (nunca zera, nunca recarrega).
+            // CHEIO â€” igual aos grandes cheats (nunca zera, nunca recarrega).
             // Modelo: se cur < max, completa na hora puxando da reserva
             // (need=Pull, igual ao ReloadGun mas sem timer/animacao). Como a
             // reserva e infinita (TopStacks trava no teto), o pulled sempre
@@ -2383,7 +2266,7 @@ namespace Mono {
             // CLIENTE 23/09: funciona em todos os modos. Como cliente o host
             // valida o DANO (halt no ShootGun seria pacote inconsistente), mas
             // completar o pente local + consumir a reserva local e exatamente
-            // o que o ReloadGun legitimo faria — o sync leva o estado final e
+            // o que o ReloadGun legitimo faria â€” o sync leva o estado final e
             // o host aceita (igual ao TryStartReload, sem divergencia).
             // DIAG 23/09: loga 1x o estado das condicoes p/ achar gate que barra.
             {
@@ -2600,7 +2483,7 @@ namespace Mono {
     //   id == ammoID da arma (HUD reserva honesto: 30/150, nao 30/0).
     // - Com bInfItems: trava stackCount=stackMax em pilhas de misc+storage
     //   por SUBTIPO (municao/arremessavel/consumivel; material/chave/peca
-    //   fora pela raiz — anti-flood por categoria, nao por numero).
+    //   fora pela raiz â€” anti-flood por categoria, nao por numero).
     // - Toda escrita passa pelo guardiao (direcao+teto+quarentena).
     // - B2: caminha storage E misc (categoria 5 mora em misc).
     static int oMisc = -2; // offset de PlayerEquippedItems.misc (via API)
@@ -2701,7 +2584,7 @@ namespace Mono {
                 // Stun 53, Grenade 54, Dynamite 89, He40mmAmmo 107 (tabela
                 // audit18/stackmax_table.txt, 116/116 via CE MCP).
                 // Eleva o DatabaseItem.stackMax (objeto compartilhado por tipo):
-                // vira teto legitimo — WillStack/PullStoredItems/HUD/seed passam
+                // vira teto legitimo â€” WillStack/PullStoredItems/HUD/seed passam
                 // a usar 50 em vez de 20. Vale p/ reserva (!items) e items.
                 if ((id == 53 || id == 54 || id == 89 || id == 107) && smax == 20) {
                     WriteI(db, oDbStack, 50);
@@ -2722,7 +2605,7 @@ namespace Mono {
                     // Reserva: trava stackCount=stackMax na pilha do ammoID da
                     // arma (auditoria 20/09: HUD = StoredItemCount(ammoID)).
                     // Compara com s_ammoIdCur (tipo real da equipada), nao com
-                    // faixa fixa — cobre RiotShell e qualquer calibre especial.
+                    // faixa fixa â€” cobre RiotShell e qualquer calibre especial.
                     // Fallback: balas basicas 10-13/108 (antes do 1o resolve).
                     bool isWanted = (s_ammoIdCur >= 2 && id == s_ammoIdCur) ||
                         ((id >= 10 && id <= 13) || id == 108);
@@ -2846,7 +2729,7 @@ namespace Mono {
                     oDollar, oSilver, oGold, oAmount, mAddCur ? 1 : 0);
             }
             if (oDollar < 0 || oAmount < 0) {
-                Log::Warn("[MONEY] cadeia incompleta — desativado.");
+                Log::Warn("[MONEY] cadeia incompleta â€” desativado.");
                 s_moneyOk = false;
                 return;
             }
@@ -2884,17 +2767,17 @@ namespace Mono {
     // IDs reais preservados no historico do commit p/ fase futura.
     // mCreateItem/mAddItem continuam (AmmoEnsurePile cria pilha de reserva).
 
-    // C4: LoadoutSelector.UnlockAll — desbloqueia todas as armas/itens do vendedor.
+    // C4: LoadoutSelector.UnlockAll â€” desbloqueia todas as armas/itens do vendedor.
     // Invoke 1x por sessao (flag permanente do jogo). SEH total.
     // NOTA 18/09 (auditoria loja): o VENDEDOR (VendorMenu/BuyOffer) usa
     // Pricing.IsBlocked, NAO LoadoutSelector. UnlockAll abre o LOADOUT (tela
-    // de kits); a loja (compra Loadout I/II/III) precisa de dinheiro —
+    // de kits); a loja (compra Loadout I/II/III) precisa de dinheiro â€”
     // por isso existe o Infinite Money (99999). LOAD:ON = kits livres.
     static void ApplyLoadout() {
         if (s_loadoutDone) { s.loadoutOn = true; return; }
         if (!cLoadout || !fLoadInst || !mUnlockAll) {
             static bool s_warned = false;
-            if (!s_warned) { s_warned = true; Log::Warn("[LOADOUT] cadeia incompleta — desativado."); }
+            if (!s_warned) { s_warned = true; Log::Warn("[LOADOUT] cadeia incompleta â€” desativado."); }
             return;
         }
         __try {
@@ -2920,7 +2803,7 @@ namespace Mono {
     // misc travado por UnlockedMiscSlotsCount. Resolve os 3 + GRID:
     // 4) ItemContainer.TotalSize/UsableSize (IntVec2): sem grid util nao ha
     // onde por a pilha (AddItem recusa = x/0 eterno, bug 21/09). Metodos
-    // SetTotalSize/SetUsableSize existem — invoke 1x por container.
+    // SetTotalSize/SetUsableSize existem â€” invoke 1x por container.
     static void ApplySlots(void* local) {
         // Roda a cada ativacao (borda de subida) + reforco todo ciclo (o jogo
         // pode re-travar ao trocar de cena). Sem 'done' permanente: barato
@@ -2944,7 +2827,7 @@ namespace Mono {
                 }
                 Log::Infof("[SLOTS] offs storage=%d misc=%d umisc=%d wst=%d", oTU, oMU, oUMisc, oWST);
                 s.slotsOk = (oTU >= 0 && oMU >= 0);
-                if (!s.slotsOk) Log::Warn("[SLOTS] campos nao resolveram — slots intactos.");
+                if (!s.slotsOk) Log::Warn("[SLOTS] campos nao resolveram â€” slots intactos.");
             }
             if (oTU >= 0) {
                 unsigned char v = 0;
@@ -3127,7 +3010,7 @@ namespace Mono {
         bool want = Config::bNoRecoil || Config::bNoSpread || Config::bNoSway
             || Config::bTightAim || Config::bRapidFire;
         // Restore ANTES do early-return (auditoria 21/09: desligar tudo era
-        // inalcançavel). Cada restore roda com sua flag desligada.
+        // inalcanÃ§avel). Cada restore roda com sua flag desligada.
         if (!Config::bRapidFire) { RestoreRun(s_rsRof, 16, "rof"); RestoreRunB(s_rsFull, 16, "fullauto"); }
         if (!Config::bTightAim) RestoreRun(s_rsAim, 4, "aim");
         if (!Config::bNoSway) { RestoreRun(s_rsSway, 4, "sway"); SwayBaseOkReset(); }
@@ -3136,7 +3019,7 @@ namespace Mono {
         if (!Config::bFastKnife) RestoreRun(s_rsDur, 64, "knife");
         if (!Config::bSuperJump) RestoreRun(s_rsJump, 4, "jump");
         if (!want) return;
-        // Resolve preguiçoso 1x (offsets via API; singleton via vtable).
+        // Resolve preguiÃ§oso 1x (offsets via API; singleton via vtable).
         static int oAmmoId = -2, oMax = -2, oSpread = -2, oRof = -2;
         static int oRecoil = -2, oRecoilRnd = -2;
         static int oFull = -2, oBurst = -2;
@@ -3155,7 +3038,7 @@ namespace Mono {
             oBoolVal = FieldOff(fBoolVal);
             oGen = FieldOff(fDbgGen); oDisSway = FieldOff(fDisSway);
             if (cPEq) { fWep = pFieldFrom(cPEq, "weapons"); oWep = FieldOff(fWep); }
-            // Defeito 5 (auditoria 21/09): singletons com retry — se a 1a
+            // Defeito 5 (auditoria 21/09): singletons com retry â€” se a 1a
             // resolucao pegou cena incompleta, tenta de novo (nao congela).
             if (!s_wbase && cWBase && s_dom) {
                 __try {
@@ -3189,7 +3072,7 @@ namespace Mono {
                 // Retry com throttle (sem morte permanente).
                 static int s_weapFailN = 0;
                 if (++s_weapFailN > 500) {
-                    Log::Warn("[WEAPON] cadeia incompleta apos 500 ciclos — arma em espera (troque de cena).");
+                    Log::Warn("[WEAPON] cadeia incompleta apos 500 ciclos â€” arma em espera (troque de cena).");
                     s_weapFailN = 0;
                 }
                 return;
@@ -3199,7 +3082,7 @@ namespace Mono {
             // Dbs de TODAS as armas: inventory -> equippedItems -> weapons[]
             // -> item -> GetDataBaseItem (cache DbCached). Rof/recoil/spread
             // sao do ASSET: 1 db pode servir 2 armas iguais.
-            // Defeito 1 (auditoria 21/09): SEM dedup permanente — escreve
+            // Defeito 1 (auditoria 21/09): SEM dedup permanente â€” escreve
             // idempotente todo ciclo (reaplica apos troca de cena/loja).
             // Custo: poucas armas x 3 floats, irrelevante.
             void* pinv = ReadP(local, FieldOff(fInv));
@@ -3262,7 +3145,7 @@ namespace Mono {
                 }
                 // Full Auto universal: 1-tiro/rajada vira automatica.
                 // fullAuto=true + burstCount=0 em TODA arma (asset): pistola
-                // 12/12, Riot 1/1, sniper — todas seguram o gatilho.
+                // 12/12, Riot 1/1, sniper â€” todas seguram o gatilho.
                 // Defeito 7: restore NAO-destrutivo (guarda base 1 byte).
                 if (Config::bRapidFire) {
                     if (oFull >= 0) {
@@ -3309,7 +3192,7 @@ namespace Mono {
                 }
             });
             // Rapid Fire universal (parte 2): Cooldown zerado na prop atual.
-            // Defeito 10: resolve 1x (static) — antes pFieldFrom+pMethodFrom
+            // Defeito 10: resolve 1x (static) â€” antes pFieldFrom+pMethodFrom
             // todo ciclo a 30Hz (custo + risco de hang).
             if (Config::bRapidFire && cArms && cPlayer) {
                 static int oCd = -2, oArmsEq = -2;
@@ -3419,7 +3302,7 @@ namespace Mono {
                     __try {
                         void* ds = ReadP(s_dbgGen, oDisSway);
                         if (ds) {
-                            // Defeito 9: bool tem 1 byte — memcpy, nao WriteI
+                            // Defeito 9: bool tem 1 byte â€” memcpy, nao WriteI
                             // (4 bytes corrompia vizinhos).
                             unsigned char cur = 0;
                             memcpy(&cur, (char*)ds + oBoolVal, 1);
@@ -3468,19 +3351,19 @@ namespace Mono {
             }
             if ((Config::bSuperJump && (oMove < 0 || oJump < 0)) ||
                 (Config::bFastKnife && oDur < 0)) {
-                Log::Warn("[MOVE] cadeia incompleta — movimento desativado (sem crash).");
+                Log::Warn("[MOVE] cadeia incompleta â€” movimento desativado (sem crash).");
                 s_moveOk = false;
                 return;
             }
         }
         __try {
             // Super Pulo: jumpSpeed x fJumpMult (guarda base 1x + restore).
-            // Teto 10x (slider). Altura fisica = v²/2g: jumpSpeed 6→60 =
+            // Teto 10x (slider). Altura fisica = vÂ²/2g: jumpSpeed 6â†’60 =
             // ~10x a altura (nao linear). Anti-podador: LimitVerticalVelocity
-            // corta em -fallDamageThreshold — sobe o threshold junto (guarda
+            // corta em -fallDamageThreshold â€” sobe o threshold junto (guarda
             // base + restore). Sem isso 10x nunca voa (bug 19/09).
             // FIX 19/09 (pulo fraco mesmo no max): o write FALHAVA silencioso
-            // porque cur==want na comparacao (float ja arredondado) — agora
+            // porque cur==want na comparacao (float ja arredondado) â€” agora
             // reescreve se |cur-want|>0.01. E loga 1x o estado real.
             if (Config::bSuperJump && oMove >= 0 && oJump >= 0) {
                 void* mv = ReadP(local, oMove);
@@ -3518,7 +3401,7 @@ namespace Mono {
                         }
                     }
                     // Anti-podador: threshold acompanha o mult (queda de 100m
-                    // continua sem dano de queda — bonus, nao custo).
+                    // continua sem dano de queda â€” bonus, nao custo).
                     if (oFall >= 0) {
                         float fc = ReadF(mv, oFall, -1.0f);
                         if (s_fallBase < 0.0f && fc > 0.0f && fc < 1000.0f) {
@@ -3537,7 +3420,7 @@ namespace Mono {
             }
             // Fast Knife: TODA arma branca via base global (pa, pa, facao,
             // faca, taco, cano). Caminho: MeleeAttackBase.Instance.AllAttacks
-            // (Dictionary ID->PlayerMeleeAttack) — cobre tudo sem depender da
+            // (Dictionary ID->PlayerMeleeAttack) â€” cobre tudo sem depender da
             // mao. Dict Mono: entries[] vetor de {key, value}; value =
             // PlayerMeleeAttack -> Duration / mult. Alem disso mantem o
             // caminho do MoveSet da mao (transitionTime, chain rapido).
@@ -3551,7 +3434,7 @@ namespace Mono {
                     oAll = FieldOff(fAtkAll);
                     Log::Infof("[KNIFE] offs all=%d dur=%d", oAll, oDur);
                     if (oAll < 0)
-                        Log::Warn("[KNIFE] AllAttacks sem offset — so MoveSet da mao.");
+                        Log::Warn("[KNIFE] AllAttacks sem offset â€” so MoveSet da mao.");
                 }
                 if (oAll >= 0 && cAtkBase && s_dom) {
                     __try {
@@ -3652,7 +3535,7 @@ namespace Mono {
                     oNodes = FieldOff(fn);
                     Log::Infof("[KNIFE] offs moveset=%d nodes=%d dur=%d", oMS, oNodes, oDur);
                     if (oMS < 0 || oNodes < 0)
-                        Log::Warn("[KNIFE] cadeia incompleta — fast knife parcial (pulo segue).");
+                        Log::Warn("[KNIFE] cadeia incompleta â€” fast knife parcial (pulo segue).");
                 }
                 if (oMS >= 0 && oNodes >= 0 && cArms && cPlayer) {
                     // EquippedMelee via arms (resolve metodo 1x, static).
@@ -3761,465 +3644,6 @@ namespace Mono {
     // Aqui: mesma maquina de estados, adaptada p/ Unity Mono (PlayerCamera
     // Angle+pitch + Rotate yaw; gatilho = Aim Key Hold/Toggle ou AutoAim).
     // ========================================================================
-    // Estado persistente (espelho das locals do wohax).
-    static void* s_wxTargetEnt = nullptr; // PONTEIRO da entidade travada
-    static long long s_wxTargetT = 0;  // quando travou (aim_last_target_time)
-    static bool  s_wxToggle = false;   // toggle da tecla (Hold/Toggle)
-    static bool  s_wxPrevDown = false;
-    static int   s_wxKey = 0, s_wxMode = -1;
-    static bool  s_wxLogged = false;
-    // Resolve da mira (1x; falha = espera, sem morte).
-    static MonoClass* s_wxCam = nullptr;      // PlayerCamera
-    static MonoClassField* s_wxCamF = nullptr; // PlayerMain.cam
-    static MonoClassField* s_wxAngleF = nullptr; // PlayerCamera.<Angle>
-    static MonoMethod* s_wxSetAngle = nullptr;
-    static MonoMethod* s_wxGetAngle = nullptr;
-    static bool WohaxResolve(void) {
-        if (s_wxCam && s_wxSetAngle) return true;
-        s_wxCam = pClassFrom(s_img, "", "PlayerCamera");
-        if (!s_wxCam) return false;
-        s_wxCamF = nullptr;
-        if (cPlayer) s_wxCamF = pFieldFrom(cPlayer, "cam");
-        s_wxAngleF = pFieldFrom(s_wxCam, "<Angle>k__BackingField");
-        s_wxSetAngle = pMethodFrom(s_wxCam, "set_Angle", 1);
-        s_wxGetAngle = pMethodFrom(s_wxCam, "get_Angle", 0);
-        if (!s_wxCamF || !s_wxSetAngle) {
-            if (!s_wxLogged) {
-                s_wxLogged = true;
-                Log::Warn("[AIM] PlayerCamera sem cadeia — aimbot em espera.");
-            }
-            return false;
-        }
-        if (!s_wxLogged) {
-            s_wxLogged = true;
-            Log::Info("[AIM] PlayerCamera resolvido (Angle + transform).");
-        }
-        return true;
-    }
-    // Distancia do crosshair em px (wohax GetDistanceFromCrosshair):
-    // projeta o bone, mede hypot(dx,dy) do centro. Fora da tela = -1.
-    static float WohaxDistPx(const EspEntry& e, float cx, float cy, float radius) {
-        (void)radius;
-        float tx = 0, ty = 0;
-        if (e.skN == SK_COUNT) {
-            int b = SK_HEAD;
-            if (Config::iAimBone == 1) b = SK_NECK;
-            else if (Config::iAimBone == 2) b = SK_SP2;
-            else if (Config::iAimBone == 3) b = SK_HL;
-            if (b >= 0 && b < 20 && e.skV[b]) {
-                tx = e.skX[b]; ty = s_vpH - e.skY[b];
-            } else { tx = (e.headX + e.footX) * 0.5f; ty = s_vpH - e.headY; }
-        } else { tx = (e.headX + e.footX) * 0.5f; ty = s_vpH - e.headY; }
-        if (!(tx > -10000 && tx < 10000 && ty > -10000 && ty < 10000))
-            return -1.0f;
-        float dx = tx - cx, dy = ty - cy;
-        return sqrtf(dx * dx + dy * dy);
-    }
-    // ActorLookAt wohax: vector = normalize(bone3d - camPos); aplica na
-    // direcao do ator. Aqui = pitch absoluto (Angle) + yaw relativo (Rotate/1
-    // euler, igual ao jogo). Sem pixel→grau: o vetor ja e' o angulo.
-    static void WohaxLookAt(void* pcam, const EspEntry& t) {
-        if (!pcam || !t.hasBone3d || !s_camWok) return;
-        float vx = t.bx - s_camW.x;
-        float vy = t.by - s_camW.y;
-        float vz = t.bz - s_camW.z;
-        float len = sqrtf(vx * vx + vy * vy + vz * vz);
-        if (!(len > 0.5f) || !(len < 100000.0f)) return;
-        vx /= len; vy /= len; vz /= len;
-        float wantYaw = atan2f(vx, vz) * 57.29577951f;
-        float cl = vy > 1.0f ? 1.0f : (vy < -1.0f ? -1.0f : vy);
-        float wantPitch = asinf(cl) * 57.29577951f;
-        // Smoothing: wohax mira direto (snap). sm=1 = snap seco (padrao).
-        // 2-8 = divide o passo (suave, mais lento). Acima de 8 o jogo
-        // re-sincroniza a camera todo frame e a mira nunca alcança.
-        float sm = Config::fSmoothing;
-        if (!(sm >= 1.0f && sm <= 8.0f)) sm = 1.0f;
-        __try {
-            // Pitch: le atual, interpola, clamp ±80, escreve.
-            float cur = 0;
-            if (s_wxGetAngle) {
-                MonoObject* exc = nullptr;
-                MonoObject* ret = pInvoke(s_wxGetAngle, pcam, nullptr, &exc);
-                if (!exc && ret) memcpy(&cur, pUnbox(ret), 4);
-            } else {
-                cur = ReadF(pcam, FieldOff(s_wxAngleF), 0.0f);
-            }
-            float dP = wantPitch - cur;
-            dP /= sm;
-            float want = cur + dP;
-            if (want < -80.0f) want = -80.0f;
-            if (want > 80.0f) want = 80.0f;
-            if (s_wxSetAngle) {
-                void* args[1] = { &want };
-                MonoObject* exc2 = nullptr;
-                pInvoke(s_wxSetAngle, pcam, args, &exc2);
-            }
-            // Yaw: IGUAL ao pitch (malha fechada, absoluto). Le o yaw atual
-            // da CameraTransform (euler Y), calcula o ERRO ate o alvo
-            // (wrap ±180), aplica a fracao 1/sm via Rotate, e RELE o yaw
-            // p/ proxima iteracao. Sem acumulo, sem ancora, sem deriva:
-            // o erro medido ja inclui o que o jogo/recoil fez no frame.
-            // Ordem Unity: Rotate aplica ANTES do proximo UpdateCamera do
-            // jogo (SetupFPSCameraTransform re-sincroniza do player), entao
-            // a leitura seguinte ve o efeito real. Mesma logica do pitch.
-            static MonoMethod* s_rot = nullptr;
-            static bool s_ri = false;
-            if (!s_ri) {
-                s_ri = true;
-                if (mGetTrans && cTrans) s_rot = pMethodFrom(cTrans, "Rotate", 1);
-            }
-            if (mGetTrans && s_rot) {
-                MonoObject* exc3 = nullptr;
-                MonoObject* tr = pInvoke(mGetTrans, pcam, nullptr, &exc3);
-                if (!exc3 && tr) {
-                    Vec3 eu;
-                    if (GetEulerY(tr, eu)) {
-                        float dY = wantYaw - eu.y;
-                        while (dY > 180.0f) dY -= 360.0f;
-                        while (dY < -180.0f) dY += 360.0f;
-                        dY /= sm;
-                        if (dY > 0.05f || dY < -0.05f) {
-                            float eul[3] = { 0.0f, dY, 0.0f };
-                            void* ra[1] = { &eul };
-                            MonoObject* exc4 = nullptr;
-                            pInvoke(s_rot, tr, ra, &exc4);
-                        }
-                    }
-                }
-            }
-        } __except (EXCEPTION_EXECUTE_HANDLER) {}
-    }
-    static void UnityAssmCb(void* assm, void* ud) {
-        MonoImage** out = (MonoImage**)ud;
-        if (*out || !assm || !pAssmImage || !pClassFrom) return;
-        void* img = pAssmImage(assm);
-        if (!img) return;
-        void* t = pClassFrom((MonoImage*)img, "UnityEngine", "Transform");
-        if (t) *out = (MonoImage*)img;
-    }
-    static MonoImage* UnityImageWithTransform(void) {
-        MonoImage* found = nullptr;
-        if (!pAssmForeach || !pAssmImage || !pClassFrom) return nullptr;
-        __try {
-            pAssmForeach((void*)UnityAssmCb, (void*)&found);
-        } __except (EXCEPTION_EXECUTE_HANDLER) { return found; }
-        return found;
-    }
-    // IsVisible = Raycast bool-only. Bateu = parede. +0.3m origem.
-    // Mascara do tiro: PlayerArms.shotLayerMask (1x/sessao). Falha = -1.
-    static int WohaxShotMask(void* local) {
-        static int s_mask = 0;
-        static bool s_done = false;
-        if (s_done) return s_mask ? s_mask : -1;
-        s_done = true;
-        s_mask = -1;
-        __try {
-            if (local && cPlayer) {
-                MonoClassField* fa = pFieldFrom(cPlayer, "arms");
-                void* arms = fa ? ReadP(local, FieldOff(fa)) : nullptr;
-                if (arms) {
-                    MonoClass* cA = nullptr;
-                    if (ResolveClass("PlayerArms", cA) && cA) {
-                        MonoClassField* fm = pFieldFrom(cA, "shotLayerMask");
-                        int o = FieldOff(fm);
-                        if (o >= 0) {
-                            int v = 0;
-                            memcpy(&v, (char*)arms + o, sizeof(v));
-                            if (v != 0) s_mask = v;
-                        }
-                    }
-                }
-            }
-        } __except (EXCEPTION_EXECUTE_HANDLER) {}
-        if (s_mask != -1) Log::Infof("[AIM] shotLayerMask=0x%X.", s_mask);
-        return s_mask;
-    }
-    // Physics.Raycast(Vector3,Vector3,float,int) por assinatura.
-    static MonoMethod* FindPhysicsRaycast(void) {
-        if (!cPhys || !pClassMethods || !pSigOf || !pSigCount || !pSigParam || !pTypeKind)
-            return nullptr;
-        MonoMethod* found = nullptr;
-        __try {
-            void* iter = nullptr;
-            while (true) {
-                void* mh = pClassMethods(cPhys, &iter);
-                if (!mh) break;
-                MonoMethod* m = (MonoMethod*)mh;
-                const char* nm = pMethodGetName ? pMethodGetName(m) : nullptr;
-                if (!nm || strcmp(nm, "Raycast")) continue;
-                void* sig = pSigOf(m);
-                if (!sig) continue;
-                if (pSigCount(sig) != 4) continue;
-                bool ok = false;
-                void* pit = nullptr;
-                void* p0 = pSigParam(sig, &pit);
-                void* p1 = pSigParam(sig, &pit);
-                void* p2 = pSigParam(sig, &pit);
-                void* p3 = pSigParam(sig, &pit);
-                if (p0 && p1 && p2 && p3) {
-                    int t0 = pTypeKind(p0), t1 = pTypeKind(p1);
-                    int t2 = pTypeKind(p2), t3 = pTypeKind(p3);
-                    if (t0 == 0x11 && t1 == 0x11 && t2 == 0x0c && t3 == 0x08)
-                        ok = true;
-                }
-                if (ok) { found = m; break; }
-            }
-        } __except (EXCEPTION_EXECUTE_HANDLER) { found = nullptr; }
-        return found;
-    }
-
-    // IsVisible = Raycast bool-only: Physics.Raycast(org,dir,maxD,mask).
-    // Bateu = parede. Origem +0.3m (fora do collider do player).
-    // Resolve por assinatura (V3,V3,float,mask); overload errado nunca.
-    static bool WohaxVisible(const Vec3& from, const EspEntry& t, void* local) {
-        if (!cPhys) return true;
-        if (!t.hasBone3d) return true;
-        // Resolve lazy 1x (o modulo de fisica pode carregar depois).
-        static MonoMethod* s_ray = nullptr;
-        static bool s_rayInit = false;
-        if (!s_rayInit) {
-            s_rayInit = true;
-            s_ray = FindPhysicsRaycast();
-            if (s_ray) Log::Info("[AIM] Raycast(V3,V3,float,mask) on (IsVisible).");
-            else Log::Warn("[AIM] Raycast(V3,V3,float,mask) off — fail-open, mira tudo.");
-        }
-        if (!s_ray) return true;
-        float dx = t.bx - from.x, dy = t.by - from.y, dz = t.bz - from.z;
-        float len = sqrtf(dx * dx + dy * dy + dz * dz);
-        if (!(len > 0.5f) || !(len < 100000.0f)) return false;
-        float dir[3] = { dx / len, dy / len, dz / len };
-        // Origem avancada 0.3m (sai do collider do player/parede colada).
-        Vec3 org = { from.x + dir[0] * 0.3f, from.y + dir[1] * 0.3f, from.z + dir[2] * 0.3f };
-        float maxD = (len - 0.3f) * 1.1f; // igual ao tiro (GetHitList: *1.1)
-        if (maxD < 1.0f) maxD = 1.0f;
-        int mask = WohaxShotMask(local);
-        bool hit = false; // bool-only: bateu = parede (sem layout de hit).
-        __try {
-            MonoObject* exc = nullptr;
-            void* args[4] = { (void*)&org, (void*)dir, (void*)&maxD, (void*)&mask };
-            MonoObject* ret = pInvoke(s_ray, nullptr, args, &exc);
-            if (!exc && ret) {
-                unsigned char b = 0;
-                memcpy(&b, pUnbox(ret), 1); // bool = 1 byte boxeado
-                hit = (b != 0);
-            }
-        } __except (EXCEPTION_EXECUTE_HANDLER) {}
-        return !hit;
-    }
-    // canTargetNext wohax: nao troca de alvo antes de aim_interval ms.
-    // Lock por PONTEIRO da entidade (nao indice): o snapshot reordena a
-    // cada ciclo (morte/spawn), indice velho = outro zumbi = mira pula.
-    static bool WohaxCanNext(void* ent) {
-        if (ent == s_wxTargetEnt) return true;
-        long long dtMs = (PiNow() - s_wxTargetT) / 1000LL;
-        int interval = 500; // aim_interval wohax (ms entre trocas)
-        return dtMs >= interval;
-    }
-    // WohaxAim(local): maquina de estados 1:1 com o aim() do wohax.
-    // firing = tecla (Hold) / toggle travado / AutoAim. So mira com firing=1
-    // (igual ao `if firing and aim_mode == 1` deles).
-    // AUDITORIA 25/09 (padrao grandes cheats):
-    // - Aim Key = FIRE (botao de atirar). Aimbot mira + atira junto.
-    // - Triggerbot = moraleja separada: NAO move a mira; so ATIRA quando o
-    //   centro da tela ja esta num inimigo visivel (raycast do centro).
-    // - Auto Fire = trigger + mira: elege + mira + atira sozinho.
-    // - Silent Aim: NESTE jogo o tiro sai de CameraTransform.forward
-    //   (GetCameraBasedShotPath) — nao ha angulo de tiro separado da camera.
-    //   Silent de verdade = forjar o tiro sem mover a camera = ciclo futuro
-    //   (hook/processo de disparo). Aqui ele NAO finge: desliga a mira
-    //   visivel e usa o trigger (atira sem puxar a camera).
-    static void WohaxAim(void* local) {
-        if (!local) return;
-        // --- tecla (Aim Key + Hold/Toggle + reset, padrao BF) ---
-        bool firing = false;
-        if (Config::bAutoAim && !Config::bAimbot) {
-            firing = true;
-        } else {
-            int vk = Config::iAimKey;
-            bool down = (vk == 0) || ((GetAsyncKeyState(vk) & 0x8000) != 0);
-            if (vk != s_wxKey || Config::iAimMode != s_wxMode) {
-                s_wxKey = vk; s_wxMode = Config::iAimMode;
-                s_wxToggle = false; s_wxPrevDown = false;
-            }
-            if (Config::iAimMode == 1) {
-                if (down && !s_wxPrevDown) s_wxToggle = !s_wxToggle;
-                s_wxPrevDown = down;
-                firing = s_wxToggle;
-            } else {
-                firing = down;
-            }
-        }
-        // Radius wohax (aim_radius px; 0 = off = infinito).
-        // 360 Mode = raio infinito SÓ no AIM (eleição). O ESP desenha
-        // normal (não há raio no ESP; ele usa fEspDistance).
-        float cx = s_vpW * 0.5f, cy = s_vpH * 0.5f;
-        float radius = Config::bLimitFov && !Config::b360Mode
-            ? Config::fFovAngle * 4.0f : 1e9f;
-        if (radius < 0.0f) radius = 0.0f;
-        // --- eleicao (EnumCallback wohax): menor distancia do crosshair ---
-        // Regra de ouro: SEMPRE re-eleja pelo menor px do snapshot atual.
-        // Sticky so SEGURA a troca (nao elege): se o travado continua valido
-        // e o intervalo nao venceu, mira nele mesmo que outro esteja mais
-        // perto. Snapshot reordena todo ciclo: lock e por PONTEIRO (ent),
-        // nunca por indice.
-        EspEntry* f = s_espFront;
-        int n = s_espNFront;
-        if (n < 0) n = 0;
-        if (n > 128) n = 128;
-        int best = -1;
-        float bestD = 1e30f;
-        for (int i = 0; i < n; ++i) {
-            const EspEntry& e = f[i];
-            if (!e.onScreen || e.hp <= 0) continue;      // vivo (IsPlayerAlive)
-            if (e.isAlly) continue;                      // PvE: zumbi e' inimigo
-            if (Config::fAimDistance > 0 && e.dist > Config::fAimDistance)
-                continue; // AIM Distance (PLAYER): so o aim obedece
-            if (!e.hasBone3d) continue;                  // sem bone = mira nao move; nem elege
-            float d = WohaxDistPx(e, cx, cy, radius);
-            if (d < 0.0f) continue;                      // fora da tela
-            if (radius > 0.0f && d > radius) continue;   // fora do raio
-            // Prioridade do menu (extensao nossa; default = crosshair wohax).
-            float score = d;
-            if (Config::iAimPriority == 2) score = e.dist;
-            else if (Config::iAimPriority == 1) score = e.hp;
-            if (score < bestD) { bestD = score; best = i; }
-        }
-        if (best < 0) { s_wxTargetEnt = nullptr; return; }
-        // --- sticky (canTargetNext): trava no PONTEIRO, nao no indice ---
-        void* bestEnt = f[best].ent;
-        if (s_wxTargetEnt && s_wxTargetEnt != bestEnt && !WohaxCanNext(bestEnt)) {
-            // Intervalo nao venceu: procura o travado no snapshot atual.
-            int kept = -1;
-            for (int i = 0; i < n; ++i) {
-                if (f[i].ent == s_wxTargetEnt && f[i].onScreen &&
-                    f[i].hp > 0 && f[i].hasBone3d) { kept = i; break; }
-            }
-            if (kept < 0) { s_wxTargetEnt = nullptr; return; } // travado morreu/saiu: solta
-            best = kept; bestEnt = f[best].ent; bestD = WohaxDistPx(f[best], cx, cy, radius);
-        } else {
-            s_wxTargetEnt = bestEnt;
-            s_wxTargetT = PiNow();
-        }
-        const EspEntry& t = f[best];
-        // hasBone3d ja filtrado na eleicao: chegou aqui, tem bone.
-        // --- mira so com firing=1 (wohax: `if firing and aim_mode == 1`) ---
-        if (!firing) return;
-        if (!WohaxResolve()) return;
-        int oCam = FieldOff(s_wxCamF);
-        if (oCam < 0) return;
-        void* pcam = ReadP(local, oCam);
-        if (!pcam) return;
-        // Revalida o lock no frame do tiro: o travado pode ter morrido
-        // entre o BuildEsp e este WohaxAim (kill-window da mira).
-        // So-morte: hp<=0 ou isAlive=0 = solta. HP MUDOU (dano) = mantem:
-        // comparar float exato com dano/regen no meio quebra o lock.
-        {
-            float hpNow = -1.0f;
-            unsigned char aliveNow = 0;
-            void* hNow = nullptr;
-            __try {
-                if (t.ent) {
-                    memcpy(&hNow, (char*)t.ent + Off::Z_health, sizeof(hNow));
-                    if (hNow) {
-                        memcpy(&hpNow, (char*)hNow + Off::ZH_amount, sizeof(hpNow));
-                        memcpy(&aliveNow, (char*)hNow + Off::ZH_alive, 1);
-                    }
-                }
-            } __except (EXCEPTION_EXECUTE_HANDLER) { hpNow = -1.0f; aliveNow = 0; }
-            if (!aliveNow || hpNow <= 0) {
-                s_wxTargetEnt = nullptr; // solta o lock; proximo ciclo elege de novo
-                return;
-            }
-        }
-        // IsVisible (wohax RayTraceCheck): nao mira atras de parede.
-        // TOP-3 VISIVEL (padrao grandes cheats p/ horda): testa os 3
-        // melhores por px; mira no PRIMEIRO visivel. Sem isso, o melhor
-        // atras da parede segurava a mira e os visiveis atras dele nunca
-        // eram mirados (parecia "mirar na parede").
-        // Do olho da camera ate o bone; parede no meio = pula p/ proximo.
-        // Nenhum dos 3 visivel = mantem o lock (sticky) sem mover a mira.
-        // Fail-open: sem resolve = visivel (nunca cega por erro de infra).
-        // SILENT AIM (modo honesto): nao move a camera — o tiro sai de onde
-        // a camera JA esta (GetCameraBasedShotPath usa CameraTransform).
-        // Entao com silent ON a mira pula esta etapa: o trigger abaixo atira
-        // sem puxar a camera. Sem silent: mira normal (WohaxLookAt).
-        bool wantSilent = Config::bSilentAim && Config::bAutoAim;
-        int visIdx = -1;
-        if (s_camWok) {
-            // Candidatos: melhor + 2 seguintes por px (ja filtrados acima).
-            int cand[3] = { best, -1, -1 };
-            {
-                float used[3] = { bestD, 1e30f, 1e30f };
-                for (int i = 0; i < n && (cand[1] < 0 || cand[2] < 0); ++i) {
-                    if (i == best) continue;
-                    const EspEntry& e = f[i];
-                    if (!e.onScreen || e.hp <= 0 || e.isAlly) continue;
-                    if (Config::fAimDistance > 0 && e.dist > Config::fAimDistance) continue;
-                    if (!e.hasBone3d) continue;
-                    float d = WohaxDistPx(e, cx, cy, radius);
-                    if (d < 0.0f) continue;
-                    if (radius > 0.0f && d > radius) continue;
-                    float score = d;
-                    if (Config::iAimPriority == 2) score = e.dist;
-                    else if (Config::iAimPriority == 1) score = e.hp;
-                    if (score < used[1]) { used[2] = used[1]; cand[2] = cand[1]; used[1] = score; cand[1] = i; }
-                    else if (score < used[2]) { used[2] = score; cand[2] = i; }
-                }
-            }
-            for (int k = 0; k < 3; ++k) {
-                if (cand[k] < 0) continue;
-                if (WohaxVisible(s_camW, f[cand[k]], local)) { visIdx = cand[k]; break; }
-            }
-            if (visIdx < 0) {
-                static int s_visLogged = 0;
-                if (s_visLogged < 2) {
-                    s_visLogged++;
-                    Log::Info("[AIM] top3 atras de parede — mira segurada.");
-                }
-                return;
-            }
-            best = visIdx;
-            bestEnt = f[best].ent;
-            s_wxTargetEnt = bestEnt;
-            s_wxTargetT = PiNow();
-        }
-        const EspEntry& vt = f[best];
-        if (!wantSilent) WohaxLookAt(pcam, vt);
-        // --- disparo (trigger): atira quando ha alvo valido + visivel ---
-        // TRIGGERBOT (padrao mercado): NAO move a mira (voce mira); so
-        // aperta o gatilho quando o CENTRO da tela esta no inimigo.
-        // AUTO FIRE: trigger + mira do aimbot (elege + mira + atira).
-        // Ambos usam mouse_event LEFTDOWN/UP (o jogo le input do Windows;
-        // PlayerInputReader.MyUpdate consome Input.GetAxis de mouse).
-        // Cooldown 150ms entre cliques (rajada da arma manda no resto).
-        if (Config::bTriggerbot || Config::bAutoFire) {
-            bool canShoot = Config::bTriggerbot && !Config::bAutoFire
-                ? (bestD < 12.0f) // trigger puro: centro em cima (12px)
-                : true;           // auto fire: mira ja esta no alvo
-            if (canShoot) {
-                static long long s_lastClick = 0;
-                long long now = PiNow();
-                if ((now - s_lastClick) / 1000LL >= 150) {
-                    s_lastClick = now;
-                    __try {
-                        mouse_event(2 /*LEFTDOWN*/, 0, 0, 0, 0);
-                        mouse_event(4 /*LEFTUP*/, 0, 0, 0, 0);
-                    } __except (EXCEPTION_EXECUTE_HANDLER) {}
-                }
-            }
-        }
-        // Log 1x (alvo + distancia px + bone3d + visivel, sem spam).
-        {
-            static int s_wlog = 0;
-            if (s_wlog < 3) {
-                s_wlog++;
-                Log::Infof("[AIM] alvo=%d dPx=%.0f firing=%d bone=(%.1f,%.1f,%.1f) vis=%d.",
-                    best, (double)bestD, firing ? 1 : 0,
-                    (double)vt.bx, (double)vt.by, (double)vt.bz, visIdx >= 0 ? 1 : 0);
-            }
-        }
-    }
-
     // (FOV real via menu fCamFov; sem leitura extra.)
 
     static void AuditAmmoTick(void* pcs); // forward (diagnostico 1x/2s, so leitura)
@@ -4466,7 +3890,7 @@ namespace Mono {
     }
 
     void Tick() {
-        // Present NUNCA invoca — so copia snapshot (Get/GetEsp).
+        // Present NUNCA invoca â€” so copia snapshot (Get/GetEsp).
         // ReadAll/AuditBones migraram p/ worker (EspThread, 1x/2s).
         ++s_tick;
         if (!s.ready && !Init()) return;
@@ -4475,20 +3899,15 @@ namespace Mono {
     const State& Get() { return s; }
     int GetEsp(EspEntry* out, int max) {
         if (!out || max <= 0) return 0;
-        // Present SEM lock (item 14b): le o front via ponteiro. A virada do
-        // ponteiro e atomica no x64; o pior caso e 1 frame com o buffer
-        // anterior — nunca trava, nunca memcpy sob lock no frame.
-        EspEntry* f = s_espFront;
-        int n = s_espNFront < max ? s_espNFront : max;
-        if (n < 0) n = 0;
-        if (n > 128) n = 128;
-        for (int i = 0; i < n; ++i) out[i] = f[i];
+        const auto& snapshot = s_entitySnapshot.Read();
+        const int n = (std::min)(snapshot.count, max);
+        for (int i = 0; i < n; ++i) out[i] = snapshot.entries[i];
         return n;
     }
     void Shutdown() {
         s_espRun = false;
         if (s_espThread) { WaitForSingleObject(s_espThread, 1000); CloseHandle(s_espThread); s_espThread = nullptr; }
-        if (s_csInit) { DeleteCriticalSection(&s_espCS); s_csInit = false; }
+        s_csInit = false;
         s = State();
         s_bound = false; s_logged = false;
         s_dom = nullptr; s_img = nullptr;
