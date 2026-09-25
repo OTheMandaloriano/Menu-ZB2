@@ -47,12 +47,13 @@ namespace Config {
     bool  bTriggerbot = false;
     int   iAimBone = 0;
     int   iAimPriority = 0;
-    float fSmoothing = 8.0f;
+    float fSmoothing = 1.0f;
     bool  bLimitFov = true;
     float fFovAngle = 90.0f;
     bool  b360Mode = false;
     bool  bDrawFov = true;
-    float fMaxDistance = 200.0f;
+    float fEspDistance = 200.0f;
+    float fAimDistance = 120.0f;
     bool  bPrediction = false;
     float fLagComp = 50.0f;
 
@@ -646,7 +647,7 @@ namespace GUI {
         JB(bGodMode); JB(bInfStamina); JB(bInfItems); JB(bInfMoney); JB(bUnlockSlots); JB(bUnlockLoadout);
         JB(bAimbot); JI(iAimKey); JI(iAimMode); JB(bAutoAim); JB(bSilentAim); JB(bAutoFire);
         JB(bTriggerbot); JI(iAimBone); JI(iAimPriority); JF(fSmoothing);
-        JB(bLimitFov); JF(fFovAngle); JB(b360Mode); JB(bDrawFov); JF(fMaxDistance);
+        JB(bLimitFov); JF(fFovAngle); JB(b360Mode); JB(bDrawFov); JF(fEspDistance); JF(fAimDistance);
         JB(bPrediction); JF(fLagComp);
         JB(bNoRecoil); JB(bNoSpread); JB(bNoSway); JB(bTightAim); JB(bRapidFire); JF(fRapidMult); JB(bFastKnife); JF(fKnifeMult);
         JB(bInfAmmo); JB(bInstantReload); JB(bFullAuto); JB(bSaitama); JF(fNadeTime);
@@ -735,7 +736,7 @@ namespace GUI {
         LB(bGodMode); LB(bInfStamina); LB(bInfItems); LB(bInfMoney); LB(bUnlockSlots); LB(bUnlockLoadout);
         LB(bAimbot); LI(iAimKey); LI(iAimMode); LB(bAutoAim); LB(bSilentAim); LB(bAutoFire);
         LB(bTriggerbot); LI(iAimBone); LI(iAimPriority); LF(fSmoothing);
-        LB(bLimitFov); LF(fFovAngle); LB(b360Mode); LB(bDrawFov); LF(fMaxDistance);
+        LB(bLimitFov); LF(fFovAngle); LB(b360Mode); LB(bDrawFov); LF(fEspDistance); LF(fAimDistance);
         LB(bPrediction); LF(fLagComp);
         LB(bNoRecoil); LB(bNoSpread); LB(bNoSway); LB(bTightAim); LB(bRapidFire); LF(fRapidMult); LB(bFastKnife); LF(fKnifeMult);
         LB(bInfAmmo); LB(bInstantReload); LB(bFullAuto); LB(bSaitama); LF(fNadeTime);
@@ -1084,28 +1085,24 @@ namespace GUI {
                 }
                 ImGui::Combo("Aim Bone", &Config::iAimBone, kAimBones, 4); Tip("Head/Neck/Chest/Pelvis (bone 3D, igual ao wohax).");
                 ImGui::Combo("Aim Priority", &Config::iAimPriority, kAimPrio, 3); Tip("Crosshair = menor px (wohax); Nearest/HP = extensao.");
-                ImGui::SliderFloat("Smoothing", &Config::fSmoothing, 1, 30, "%.0f"); Tip("1 = snap wohax; 6-8 = suave.");
+                ImGui::SliderFloat("Smoothing", &Config::fSmoothing, 1, 8, "%.0f"); Tip("1 = snap seco wohax (padrao). 2-8 = divide o passo (suave, mais lento).");
                 ImGui::SliderFloat("Aim Radius", &Config::fFovAngle, 0, 360, "%.0f px"); Tip("Raio em px (aim_radius wohax, 0 = off = infinito).");
-                ImGui::SliderFloat("Max Distance", &Config::fMaxDistance, 10, 500, "%.0fm");
+                ImGui::SliderFloat("Aim Distance", &Config::fAimDistance, 10, 500, "%.0fm"); Tip("Só o AIM obedece (ate onde mira). O ESP tem a propria distancia no VISUAL.");
                 ImGui::Checkbox("Auto Aim", &Config::bAutoAim); Tip("Mira sozinho, sem tecla (firing sempre 1).");
-                if (!Config::bAutoAim) {
-                    ImGui::BeginDisabled();
-                    ImGui::Checkbox("Silent Aim", &Config::bSilentAim);
-                    ImGui::Checkbox("Auto Fire", &Config::bAutoFire);
-                    ImGui::Checkbox("Triggerbot", &Config::bTriggerbot);
-                    ImGui::EndDisabled();
-                    Tip("Ciclos 2-4: forja de tiro, gatilho e disparo (em breve).");
-                } else {
-                    ImGui::Checkbox("Silent Aim", &Config::bSilentAim);
-                    ImGui::Checkbox("Auto Fire", &Config::bAutoFire);
-                    ImGui::Checkbox("Triggerbot", &Config::bTriggerbot);
-                }
+                // Silent/AutoFire/Trigger: funcionam COM ou SEM AutoAim.
+                // - Triggerbot: voce mira, ele atira (centro no inimigo).
+                // - Auto Fire: ele mira + atira sozinho.
+                // - Silent Aim: atira sem puxar a camera (tiro sai de onde
+                //   a camera ja esta; sem forja de tiro — honesto).
+                ImGui::Checkbox("Silent Aim", &Config::bSilentAim); Tip("Atira sem mover a camera. Exige Auto Aim junto (elege+mira invisivel+atira).");
+                ImGui::Checkbox("Auto Fire", &Config::bAutoFire); Tip("Mira + atira sozinho quando ha alvo valido e visivel.");
+                ImGui::Checkbox("Triggerbot", &Config::bTriggerbot); Tip("Voce mira, ele atira quando o centro encosta no inimigo (12px).");
                 ImGui::Separator();
                 // wohax nao tem 360/prediction/lag — mantidos, apagados do mira:
                 // LimitFOV vira "raio on/off", Draw desenha o raio, 360 = raio
                 // infinito. Prediction/Lag seguem vitrine (ciclo futuro).
                 ImGui::Checkbox("Limit Radius", &Config::bLimitFov); Tip("On = mira so dentro do raio (wohax aim_radius). Off = infinito.");
-                ImGui::Checkbox("360 Mode", &Config::b360Mode); Tip("Ignora o raio (raio infinito).");
+                ImGui::Checkbox("360 Mode", &Config::b360Mode); Tip("Mira em qualquer direcao (ignora o raio). Só o AIM: o ESP continua desenhando normal.");
                 ImGui::Checkbox("Draw Radius", &Config::bDrawFov); Tip("Desenha o circulo do raio (aim_can_show_radius wohax).");
                 ImGui::Separator();
                 ImGui::Text("Weapon Mods");
@@ -1176,7 +1173,7 @@ namespace GUI {
                         ImGui::Checkbox("Ponto na cabeca", &Config::bZombieHeadDot); Tip("Head dot projetado na junta HEAD.");
                         SwatchR("##CorDotZ", Config::colZombieDot, "Cor do ponto.");
                         ImGui::SetNextItemWidth(160.0f);
-                        ImGui::SliderFloat("Dist. maxima", &Config::fMaxDistance, 10, 500, "%.0fm"); Tip("Alem disso a entidade e ignorada (chefao ignora).");
+                        ImGui::SliderFloat("Dist. maxima", &Config::fEspDistance, 10, 500, "%.0fm"); Tip("Só o ESP obedece (ate onde desenha). O AIM tem a propria distancia no PLAYER.");
                         ImGui::Unindent();
                     }
                     Section("Aliados");
