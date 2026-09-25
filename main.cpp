@@ -49,6 +49,8 @@ static void CleanupRenderTarget() {
 // ResizeBuffers: recria RTV (Alt+Tab / resize). Sem isso, tela preta/crash.
 static long __stdcall hkResizeBuffers(IDXGISwapChain* pSwapChain, UINT BufferCount,
     UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags) {
+    if (!g_bInit)
+        return oResizeBuffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
     CleanupRenderTarget();
     ImGui_ImplDX11_InvalidateDeviceObjects();
     long hr = oResizeBuffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
@@ -149,6 +151,7 @@ static LRESULT CALLBACK hkWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         return CallWindowProc(oWndProc, hWnd, uMsg, wParam, lParam);
     }
     if (uMsg == WM_KEYDOWN && ((int)wParam == Config::iMenuKey || wParam == VK_DELETE)) {
+        if (lParam & (1LL << 30)) return TRUE; // one toggle per physical press
         Config::bMenuOpen = !Config::bMenuOpen;
         // Cursor (v0.7.1): idempotente por estado + diagnostico no log.
         // ShowCursor tem contador GLOBAL da sessao; builds antigas (loop)
