@@ -15,21 +15,27 @@ struct Target {
     std::uintptr_t entity = 0;
     Point position = {};
     float pixels = 0, distance = 0, hp = 0;
+    float angle = 0;
+    bool projected = true;
+    std::uintptr_t bone = 0;
 };
-struct Policy { float distance = 120, radius = 360; int priority = 0; };
+struct Policy { float distance = 120, radius = 360; int priority = 0; bool fullCircle = false; };
 enum class Visibility { Unknown, Clear, TargetHit, Blocked };
 inline bool CanAim(Visibility value) {
     return value == Visibility::Clear || value == Visibility::TargetHit;
 }
 inline bool Valid(const Target& t, const Policy& policy) {
-    return t.entity && std::isfinite(t.pixels) && t.pixels >= 0 &&
+    return t.entity && std::isfinite(t.angle) && t.angle >= 0 && t.angle <= 180 &&
         std::isfinite(t.distance) && t.distance >= 0 &&
         std::isfinite(t.hp) && t.hp > 0 &&
         std::isfinite(t.position.x) && std::isfinite(t.position.y) && std::isfinite(t.position.z) &&
-        t.distance <= policy.distance && (policy.radius <= 0 || t.pixels <= policy.radius);
+        t.distance <= policy.distance && (policy.fullCircle ||
+        (t.projected && std::isfinite(t.pixels) && t.pixels >= 0 &&
+         (policy.radius <= 0 || t.pixels <= policy.radius)));
 }
-inline float Score(const Target& t, int priority) {
-    return priority == 1 ? t.hp : priority == 2 ? t.distance : t.pixels;
+inline float Score(const Target& t, const Policy& policy) {
+    return policy.priority == 1 ? t.hp : policy.priority == 2 ? t.distance :
+        policy.fullCircle ? t.angle : t.pixels;
 }
 struct Lock {
     std::uintptr_t entity = 0;
@@ -40,22 +46,23 @@ struct Lock {
         if (entity != next) { entity = next; since = now; }
     }
 };
-inline std::array<int, VisibilityBudget> Rank(const Target* targets, int count,
+inline std::array<int, MaxTargets> Rank(const Target* targets, int count,
     const Policy& policy, const Lock& lock, std::int64_t now) {
-    std::array<int, VisibilityBudget> result = { -1, -1, -1 };
+    std::array<int, MaxTargets> result;
+    result.fill(-1);
     auto better = [&](int left, int right) {
         if (right < 0) return true;
         const auto& a = targets[left]; const auto& b = targets[right];
         if (lock.Sticky(now) && (a.entity == lock.entity) != (b.entity == lock.entity))
             return a.entity == lock.entity;
-        const float sa = Score(a, policy.priority), sb = Score(b, policy.priority);
-        return sa < sb || (sa == sb && (a.pixels < b.pixels || (a.pixels == b.pixels && a.entity < b.entity)));
+        const float sa = Score(a, policy), sb = Score(b, policy);
+        return sa < sb || (sa == sb && (a.angle < b.angle || (a.angle == b.angle && a.entity < b.entity)));
     };
     for (int i = 0; i < std::min(count, MaxTargets); ++i) {
         if (!Valid(targets[i], policy)) continue;
-        for (int slot = 0; slot < VisibilityBudget; ++slot) {
+        for (int slot = 0; slot < MaxTargets; ++slot) {
             if (!better(i, result[slot])) continue;
-            for (int j = VisibilityBudget - 1; j > slot; --j) result[j] = result[j - 1];
+            for (int j = MaxTargets - 1; j > slot; --j) result[j] = result[j - 1];
             result[slot] = i;
             break;
         }
@@ -81,6 +88,21 @@ inline bool Ray(Point from, Point to, Point& direction, float& distance) {
     if (!std::isfinite(distance) || distance <= 0.01f || distance > 10000) return false;
     direction.x /= distance; direction.y /= distance; direction.z /= distance;
     return true;
+}
+inline float Angle(Point forward, Point direction) {
+    const float a = forward.x*forward.x + forward.y*forward.y + forward.z*forward.z;
+    const float b = direction.x*direction.x + direction.y*direction.y + direction.z*direction.z;
+    if (!std::isfinite(a) || !std::isfinite(b) || a < 1e-8f || b < 1e-8f) return -1;
+    const float dot = (forward.x*direction.x + forward.y*direction.y + forward.z*direction.z) / std::sqrt(a*b);
+    return std::acos((std::max)(-1.0f, (std::min)(1.0f, dot))) * 57.29577951f;
+}
+inline void KeepBest(Target* targets, int& count, const Target& candidate, const Policy& policy) {
+    if (!Valid(candidate, policy)) return;
+    if (count < MaxTargets) { targets[count++] = candidate; return; }
+    int worst = 0;
+    for (int i = 1; i < count; ++i)
+        if (Score(targets[i], policy) > Score(targets[worst], policy)) worst = i;
+    if (Score(candidate, policy) < Score(targets[worst], policy)) targets[worst] = candidate;
 }
 inline bool IntersectsViewport(float hx, float hy, float fx, float fy, float width, float height) {
     if (!std::isfinite(hx) || !std::isfinite(hy) || !std::isfinite(fx) || !std::isfinite(fy)) return false;

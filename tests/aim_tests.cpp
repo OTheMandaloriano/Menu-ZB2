@@ -50,5 +50,30 @@ int main() {
     Check(!Ray({}, {}, direction, distance), "zero-length ray rejected");
     Check(IntersectsViewport(960, 1800, 960, -500, 1920, 1080), "close body crossing viewport stays visible");
     Check(!IntersectsViewport(960, 1800, 960, 1700, 1920, 1080), "fully offscreen body stays culled");
+    Check(std::fabs(Angle({0,0,1}, {0,0,-1})-180) < .001f, "behind target has 180 degree angle");
+    Check(std::fabs(Angle({0,0,1}, {1,0,0})-90) < .001f, "side target has 90 degree angle");
+    Check(Angle({}, {0,0,1}) < 0, "invalid camera direction is rejected");
+    Target behind = {100, {0,0,-5}, 0, 5, 100, 180, false};
+    policy = Policy{};
+    Check(!Valid(behind, policy), "normal aim rejects unprojected enemy behind camera");
+    policy.fullCircle = true;
+    policy.radius = 1;
+    Check(Valid(behind, policy), "360 accepts enemy behind camera despite screen radius");
+    behind.distance = 200;
+    Check(!Valid(behind, policy), "360 still respects world distance");
+    behind.distance = 5;
+    Target around[] = {behind, {101, {1,0,0}, 500, 1, 100, 90, true}, {102, {0,0,1}, 600, 1, 100, 0, true}};
+    lock.Clear();
+    auto all = Rank(around, 3, policy, lock, 0);
+    Check(all[0] == 2 && all[1] == 1 && all[2] == 0, "360 crosshair priority uses angle, not nonexistent pixels");
+    Target crowded[MaxTargets] = {}; int kept = 0;
+    for (int i=0; i<MaxTargets+1; ++i) {
+        Target next = {static_cast<std::uintptr_t>(i+1), {}, 0, 5, 100, float(180-i), false};
+        KeepBest(crowded, kept, next, policy);
+    }
+    Check(kept == MaxTargets && Rank(crowded, kept, policy, lock, 0)[0] == 0,
+          "bounded collection replaces worst with better late enemy");
+    Check(Rank(crowded, kept, policy, lock, 0)[MaxTargets-1] >= 0,
+          "visibility queue retains candidates beyond top three");
     std::printf("PASS: %d targeting regression checks\n", checks);
 }

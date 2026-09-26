@@ -1039,7 +1039,7 @@ namespace GUI {
             }
         }
         // Circulo do raio (wohax show_aim_radius): so com raio > 0.
-        if (Config::bDrawFov && (Config::bAimbot || Config::bAutoAim || Config::bAutoFire) && Config::bLimitFov && !Config::b360Mode && Config::fFovAngle > 0.0f) {
+        if (Config::bDrawFov && (Config::bAimbot || Config::bAutoAim || Config::bAutoFire || Config::bSilentAim) && Config::bLimitFov && !Config::b360Mode && Config::fFovAngle > 0.0f) {
             ImVec2 sc = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
             float r = Config::fFovAngle * 4.0f;
             dl->AddCircle(sc, r, IM_COL32(120, 220, 255, 200), 64, 1.2f);
@@ -1084,24 +1084,21 @@ namespace GUI {
                     Tip("LED vivo: acende segurando a tecla.");
                 }
                 ImGui::Combo("Aim Bone", &Config::iAimBone, kAimBones, 4); Tip("Head/Neck/Chest/Pelvis (bone 3D, igual ao wohax).");
-                ImGui::Combo("Aim Priority", &Config::iAimPriority, kAimPrio, 3); Tip("Crosshair = menor px (wohax); Nearest/HP = extensao.");
-                ImGui::SliderFloat("Smoothing", &Config::fSmoothing, 1, 8, "%.0f"); Tip("1 = snap seco wohax (padrao). 2-8 = divide o passo (suave, mais lento).");
+                ImGui::Combo("Aim Priority", &Config::iAimPriority, kAimPrio, 3); Tip("Crosshair: mais proximo do centro; em 360 usa angulo 3D. Nearest: menor distancia. LowestHP: menor vida.");
+                ImGui::SliderFloat("Smoothing", &Config::fSmoothing, 1, 8, "%.0f"); Tip("Suaviza o movimento da camera. Nao altera o tiro do Silent Aim.");
                 float radiusPixels = Config::fFovAngle * 4.0f;
-                if (ImGui::SliderFloat("Aim Radius", &radiusPixels, 0, 1440, "%.0f px")) Config::fFovAngle = radiusPixels / 4.0f;
+                if (ImGui::SliderFloat("FOV Radius", &radiusPixels, 0, 1440, "%.0f px")) Config::fFovAngle = radiusPixels / 4.0f;
                 Tip("Raio real em pixels. Zero desativa o limite.");
                 ImGui::SliderFloat("Aim Distance", &Config::fAimDistance, 10, 500, "%.0fm"); Tip("Só o AIM obedece (ate onde mira). O ESP tem a propria distancia no VISUAL.");
                 ImGui::Checkbox("Auto Aim", &Config::bAutoAim); Tip("Mira sozinho, sem tecla (firing sempre 1).");
                 // Automatic actions still require visibility and an active game window.
-                ImGui::TextDisabled("Silent Aim: indisponivel"); Tip("Este jogo usa a direcao real da camera para disparar. A opcao antiga nao implementava Silent Aim.");
-                ImGui::Checkbox("Auto Fire", &Config::bAutoFire); Tip("Mira + atira sozinho quando ha alvo valido e visivel.");
-                ImGui::Checkbox("Triggerbot", &Config::bTriggerbot); Tip("Voce mira, ele atira quando o centro encosta no inimigo (12px).");
+                ImGui::Checkbox("Silent Aim (solo)", &Config::bSilentAim); Tip("Redireciona o tiro sem mover a camera. Segure Aim Key ou use Auto Aim. Requer adaptador gerenciado e linha de visao; lancadores e cooperativo nao suportados.");
+                ImGui::Checkbox("Auto Fire", &Config::bAutoFire); Tip("Ativa a mira e solicita disparo quando alinhado. Com Silent, redireciona sem virar. Respeita municao e cooldown.");
+                ImGui::Checkbox("Triggerbot", &Config::bTriggerbot); Tip("Atira quando o raio central acerta um inimigo vivo. Sozinho nao move a camera nem redireciona o tiro.");
                 ImGui::Separator();
-                // wohax nao tem 360/prediction/lag — mantidos, apagados do mira:
-                // LimitFOV vira "raio on/off", Draw desenha o raio, 360 = raio
-                // infinito. Prediction/Lag seguem vitrine (ciclo futuro).
-                ImGui::Checkbox("Limit Radius", &Config::bLimitFov); Tip("On = mira so dentro do raio (wohax aim_radius). Off = infinito.");
-                ImGui::Checkbox("Sem limite de raio", &Config::b360Mode); Tip("Ignora o raio para alvos projetados a frente da camera.");
-                ImGui::Checkbox("Draw Radius", &Config::bDrawFov); Tip("Desenha o circulo do raio (aim_can_show_radius wohax).");
+                ImGui::Checkbox("Limit Radius", &Config::bLimitFov); Tip("Limita a selecao ao circulo FOV. O modo 360 ignora esse limite de tela, mas respeita Aim Distance.");
+                ImGui::Checkbox("360 Mode", &Config::b360Mode); Tip("Seleciona alvos ao redor, inclusive atras. Respeita obstaculos e distancia. Um alvo por vez; prioridade Crosshair usa o menor angulo 3D.");
+                ImGui::Checkbox("Draw Radius", &Config::bDrawFov); Tip("Mostra o circulo FOV. Oculto em 360, pois a selecao inclui alvos fora da tela.");
                 ImGui::Separator();
                 ImGui::Text("Weapon Mods");
                 ImGui::Checkbox("No Recoil", &Config::bNoRecoil);

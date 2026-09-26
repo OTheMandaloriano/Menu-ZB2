@@ -4,14 +4,20 @@ static Aim::Target s_aimTargets[Aim::MaxTargets];
 static int s_aimCount = 0;
 static Aim::Lock s_aimLock;
 static Aim::Activation s_aimActivation;
+static void ClearAimBridge();
+static Aim::Point s_aimForward = {};
+static bool s_aimForwardValid = false;
+static int s_visibilityCursor = 0;
 
 static bool AimRequested() {
-    return Config::bAimbot || Config::bAutoAim || Config::bAutoFire || Config::bTriggerbot;
+    return Config::bAimbot || Config::bAutoAim || Config::bSilentAim || Config::bAutoFire || Config::bTriggerbot;
 }
 static void ResetAim() {
     s_aimCount = 0;
     s_aimLock.Clear();
     s_aimActivation.Reset();
+    s_visibilityCursor = 0;
+    ClearAimBridge();
 }
 static Aim::Policy AimPolicy() {
     Aim::Policy policy;
@@ -20,9 +26,10 @@ static Aim::Policy AimPolicy() {
     policy.radius = Config::bLimitFov && !Config::b360Mode ? Config::fFovAngle * 4.0f : 0;
     if (!Fin(policy.radius) || policy.radius < 0) policy.radius = 360;
     policy.priority = Config::iAimPriority;
+    policy.fullCircle = Config::b360Mode;
     return policy;
 }
-static bool ReadAimBone(void* zo, Aim::Point& point) {
+static bool ReadAimBone(void* zo, Aim::Point& point, std::uintptr_t& boneIdentity) {
     static const int joints[] = { SK_HEAD, SK_NECK, SK_SP2, SK_HL };
     static const char* names[] = { "head", "neck", "sp2", "hl" };
     const int selection = Config::iAimBone >= 0 && Config::iAimBone < 4 ? Config::iAimBone : 0;
@@ -42,6 +49,7 @@ static bool ReadAimBone(void* zo, Aim::Point& point) {
                 Vec3 world;
                 if (!GetPos(bone, world) || !Fin(world.x) || !Fin(world.y) || !Fin(world.z)) return false;
                 point = { world.x, world.y, world.z };
+                boneIdentity = reinterpret_cast<std::uintptr_t>(bone);
                 return true;
             }
         }
@@ -50,18 +58,22 @@ static bool ReadAimBone(void* zo, Aim::Point& point) {
     return false;
 }
 static void CollectAimTarget(void* entity, void* zo, void* camera, float hp) {
-    if (!AimRequested() || !s_camWok || s_aimCount == Aim::MaxTargets) return;
+    if (!AimRequested() || !s_camWok || !s_aimForwardValid) return;
     Aim::Target target;
-    if (!ReadAimBone(zo, target.position)) return;
+    if (!ReadAimBone(zo, target.position, target.bone)) return;
     Aim::Point direction;
     if (!Aim::Ray({s_camW.x,s_camW.y,s_camW.z}, target.position, direction, target.distance)) return;
     Vec3 projected, world = { target.position.x, target.position.y, target.position.z };
-    if (!W2S(camera, world, projected)) return;
-    const float dx = projected.x - s_vpW * 0.5f, dy = projected.y - s_vpH * 0.5f;
-    target.pixels = sqrtf(dx * dx + dy * dy);
+    target.angle = Aim::Angle(s_aimForward, direction);
+    target.projected = W2S(camera, world, projected);
+    target.pixels = 0;
+    if (target.projected) {
+        const float dx = projected.x - s_vpW * 0.5f, dy = projected.y - s_vpH * 0.5f;
+        target.pixels = sqrtf(dx * dx + dy * dy);
+    }
     target.entity = reinterpret_cast<std::uintptr_t>(entity);
     target.hp = hp;
-    if (Aim::Valid(target, AimPolicy())) s_aimTargets[s_aimCount++] = target;
+    Aim::KeepBest(s_aimTargets, s_aimCount, target, AimPolicy());
 }
 static bool AimTargetAlive(const Aim::Target& target) {
     void* health = ReadP(reinterpret_cast<void*>(target.entity), Off::Z_health);
@@ -223,38 +235,36 @@ static bool AimWindowActive() {
     if (window) GetWindowThreadProcessId(window, &process);
     return process == GetCurrentProcessId() && !Config::bMenuOpen;
 }
-static void AimClick(const Aim::Target& target, Aim::Visibility visibility) {
-    // Never fire merely because a rotation was requested: the next snapshot
-    // must measure alignment, and a real target collider must be confirmed.
-    if (target.pixels > 12 || visibility != Aim::Visibility::TargetHit ||
-        (GetAsyncKeyState(VK_LBUTTON) & 0x8000)) return;
-    static long long lastClick = 0;
-    const long long now = PiNow();
-    if (now - lastClick < 150000) return;
-    lastClick = now;
-    mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
-    mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
-}
+#include "aim_bridge.inl"
 static void WohaxAim(void* local) {
     const bool enabled = local && s_camWok && AimRequested() && AimWindowActive();
     const int key = Config::iAimKey;
     const bool down = key > 0 && key <= 255 && (GetAsyncKeyState(key) & 0x8000);
     const bool automatic = Config::bAutoAim || Config::bAutoFire;
     const bool firing = s_aimActivation.Update(enabled, automatic, key, Config::iAimMode, down);
-    if (!enabled) { s_aimLock.Clear(); return; }
+    if (!enabled) { s_aimLock.Clear(); ClearAimBridge(); return; }
     const auto candidates = Aim::Rank(s_aimTargets, s_aimCount, AimPolicy(), s_aimLock, PiNow());
-    if (!firing && !Config::bTriggerbot) return;
-    for (int index : candidates) {
-        if (index < 0) continue;
+    if (!firing && !Config::bTriggerbot) { ClearAimBridge(); return; }
+    int candidateCount = 0;
+    while (candidateCount < Aim::MaxTargets && candidates[candidateCount] >= 0) ++candidateCount;
+    // Bounded raycast work without starving targets beyond the first three.
+    for (int checked = 0; checked < (std::min)(candidateCount, Aim::VisibilityBudget); ++checked) {
+        const int index = candidates[(s_visibilityCursor + checked) % candidateCount];
         const auto& target = s_aimTargets[index];
         if (!AimTargetAlive(target)) continue;
-        const auto visibility = AimVisibility(target);
+        const auto visibility = (Config::b360Mode || Config::bSilentAim) ?
+            ManagedAimVisibility(local, target) : AimVisibility(target);
         if (!Aim::CanAim(visibility) || !AimTargetAlive(target)) continue;
         s_aimLock.Select(target.entity, PiNow());
+        s_visibilityCursor = 0;
         const bool move = firing && (Config::bAimbot || automatic);
-        if (move && !MoveAimCamera(local, target)) return;
-        if (Config::bAutoFire || Config::bTriggerbot) AimClick(target, visibility);
+        if (move && !Config::bSilentAim && !MoveAimCamera(local, target)) { ClearAimBridge(); return; }
+        const int flags = (Config::bSilentAim && firing ? 1 : 0) |
+            (Config::bAutoFire ? 2 : 0) | (Config::bTriggerbot ? 4 : 0);
+        PublishAimBridge(local, &target, flags);
         return;
     }
     s_aimLock.Clear();
+    s_visibilityCursor = candidateCount ? (s_visibilityCursor + Aim::VisibilityBudget) % candidateCount : 0;
+    PublishAimBridge(local, nullptr, Config::bTriggerbot ? 4 : 0);
 }

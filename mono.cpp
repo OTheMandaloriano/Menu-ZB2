@@ -1246,7 +1246,7 @@ namespace Mono {
     static void BuildEsp() {
         EspEntry tmp[128] = {};
         int n = 0;
-        s_aimCount = 0; s_camWok = false;
+        s_aimCount = 0; s_camWok = false; s_aimForwardValid = false;
         if ((!Config::bZombieEsp && !AimRequested()) || !mGetPos || !mW2S || !mGetTrans) { ClearEntitySnapshot(); return; }
         // MainCamera.instance (static) -> cam@32 (UnityEngine.Camera).
         // Re-resolve aqui (barato, 2Hz) para pegar a Camera viva.
@@ -1283,7 +1283,14 @@ namespace Mono {
             MonoObject* exc = nullptr;
             MonoObject* tr = nullptr;
             __try { tr = pInvoke(mGetTrans, cam, nullptr, &exc); } __except (EXCEPTION_EXECUTE_HANDLER) { tr = nullptr; exc = (MonoObject*)1; }
-            if (tr && !exc) hasCamW = GetPos(tr, camW);
+            if (tr && !exc) {
+                hasCamW = GetPos(tr, camW);
+                MonoMethod* forward = pMethodFrom(cTrans, "get_forward", 0);
+                MonoObject* value = forward ? static_cast<MonoObject*>(InvokeObj(forward, tr, nullptr)) : nullptr;
+                __try {
+                    if (value) { memcpy(&s_aimForward, pUnbox(value), sizeof(s_aimForward)); s_aimForwardValid = true; }
+                } __except (EXCEPTION_EXECUTE_HANDLER) { s_aimForwardValid = false; }
+            }
             PiAdd(s_piTrC, PiNow() - t0c, hasCamW);
         }
         s_camW = camW; s_camWok = hasCamW;
@@ -1300,7 +1307,6 @@ namespace Mono {
         if (!fZL || !StaticInstance(cZLoader, fZL, zl)) { ClearEntitySnapshot(); return; }
         void* list = ReadP(zl, Off::ZL_zombies);
         WalkList(list, 512, [&](void* e, int) {
-            if (n >= 128) return;
             void* h = ReadP(e, Off::Z_health);
             if (!h) return;
             float hp = ReadF(h, Off::ZH_amount);
