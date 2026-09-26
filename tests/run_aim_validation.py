@@ -36,7 +36,7 @@ if not compiler and os.name == 'nt':
 if not compiler:
     raise SystemExit('Install g++ or the Visual Studio C++ build tools.')
 records = []
-names = ['aim_tests', 'snapshot_tests', 'modifier_tests', 'esp_options_tests']
+names = ['aim_tests', 'snapshot_tests', 'modifier_tests', 'esp_options_tests', 'monotonic_time_tests']
 if os.name == 'nt': names += ['runtime_gate_tests','esp_render_tests']
 if args.only: names = [name for name in names if name == args.only]
 if not names: raise SystemExit('Unknown test name')

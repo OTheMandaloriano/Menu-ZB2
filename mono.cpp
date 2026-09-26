@@ -1,4 +1,5 @@
 #include "aim_logic.h"
+#include "monotonic_time.h"
 #include "latest_snapshot.h"
 #include "mono.h"
 #include "modifier_math.h"
@@ -270,7 +271,7 @@ namespace Mono {
     }
     static inline long long PiNow() {
         LARGE_INTEGER t, f; QueryPerformanceCounter(&t); QueryPerformanceFrequency(&f);
-        return t.QuadPart * 1000000LL / f.QuadPart;
+        return MonotonicTime::Microseconds(t.QuadPart, f.QuadPart);
     }
     static void PiFlush(bool force) {
         long long now = PiNow();
