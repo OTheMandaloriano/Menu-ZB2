@@ -354,8 +354,9 @@ namespace Mono {
     static void __cdecl GameUpdate();
     static void RunGameCycle();
     static void ClearWorldEsp();
+    static void ClearDistantEsp();
     static long long s_nextCycle = 0;
-    static void ClearEntitySnapshot() { s_entitySnapshot.Publish(EntitySnapshot{}); ClearWorldEsp(); }
+    static void ClearEntitySnapshot() { s_entitySnapshot.Publish(EntitySnapshot{}); ClearWorldEsp(); ClearDistantEsp(); }
     static std::atomic<bool> s_espRun{false};
     static float s_dbgEyeY = 0, s_dbgFootY = 0; // medida real p/ calibrar a box
 
@@ -1171,12 +1172,12 @@ namespace Mono {
         bool wok[SkJoint::SK_PHYS] = { false };
         // Causa A (item 14b): skeleton longe vira box 2D leve. 18 get_position
         // por zumbi x 96 = ~1700 invokes/ciclo â€” e o LOD mexe nesses mesmos
-        // Transforms. Longe (>50m) nao precisa de osso: pula o loop inteiro.
+        // Transforms. O alcance segue o slider; o orcamento de invokes permanece.
         // A flag bZombieSkeleton continua mandando (respeita o menu).
         // Probe com distancia JA conhecida no ciclo (eye/foot do 2D ou center
         // da AABB do 3D) â€” nunca invoke extra (o probe com GetPos batia justo
         // no objeto mais fragil: armature se formando no spawn).
-        if (s_skDist2 >= 0 && s_skDist2 > 50.0f * 50.0f) {
+        if (s_skDist2 >= 0 && s_skDist2 > Config::fEspDistance * Config::fEspDistance) {
             out.skN = 0; return;
         }
         for (int k = 0; k < SkJoint::SK_PHYS; ++k) {
@@ -1308,6 +1309,7 @@ namespace Mono {
             PiAdd(s_piTrC, PiNow() - t0c, hasCamW);
         }
         s_camW = camW; s_camWok = hasCamW;
+        if(!hasCamW || !Fin(camW.x) || !Fin(camW.y) || !Fin(camW.z)) {ClearEntitySnapshot();return;}
         float maxD = Config::fEspDistance;
         float maxD2 = maxD * maxD;
         LARGE_INTEGER t0, t1;
@@ -1718,6 +1720,7 @@ namespace Mono {
         }
         RefreshSessionDebug();
         BuildWorldEsp();
+        BuildDistantEsp();
         static int s_deadN = 0;
         static int s_defN = 0; // contador p/ defesa rapida (God/Stamina todo ciclo)
         {
@@ -1823,7 +1826,7 @@ namespace Mono {
                     Log::Infof("[PERF] ciclo %.1fms -> intervalo %dms.", (double)s.espMs, want);
                 }
             }
-            else { ClearEntitySnapshot(); ResetAim(); s_camWok = false; }
+            else { s_entitySnapshot.Publish(EntitySnapshot{}); ClearDistantEsp(); ResetAim(); s_camWok = false; }
         }
     }
 

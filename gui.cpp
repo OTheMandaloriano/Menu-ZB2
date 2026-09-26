@@ -825,11 +825,13 @@ namespace GUI {
         Log::Infof("Config carregada: %s", path);
     }
 
+    #include "distant_esp_draw.inl"
     void RenderOverlay() {
         if (!g_bInit) return;
         ImDrawList* dl = ImGui::GetBackgroundDrawList();
         ImGuiIO& io = ImGui::GetIO();
         const EspLayout::Model layout = VisibleLayout();
+        DrawDistantEsp(dl,io);
         if (Config::bWatermark)
             dl->AddText(ImVec2(10, 10), IM_COL32(120, 200, 255, 220), "ZB2 Menu | D3D11 | INSERT");
         // Debug overlay (Fase 2 item 6): dados VIVOS via reflection C++.
@@ -895,6 +897,7 @@ namespace GUI {
             ImU32 colSnap = ImGui::GetColorU32(ImVec4(Config::colZombieSnap[0], Config::colZombieSnap[1], Config::colZombieSnap[2], Config::colZombieSnap[3]));
             ImU32 colDot = ImGui::GetColorU32(ImVec4(Config::colZombieDot[0], Config::colZombieDot[1], Config::colZombieDot[2], Config::colZombieDot[3]));
             for (int i = 0; i < n; ++i) {
+                if(!es[i].onScreen || !std::isfinite(es[i].dist) || es[i].dist>Config::fEspDistance) continue;
                 float h = 0, w = 0, cx = 0, hy = 0, fy = 0;
                 ImVec2 r0, r1;
                 // R4 (spec �1): Box tem flag propria � bZombieEsp e master,
@@ -1119,7 +1122,7 @@ namespace GUI {
                 float radiusPixels = Config::fFovAngle * 4.0f;
                 if (ImGui::SliderFloat("FOV Radius", &radiusPixels, 0, 1440, "%.0f px")) Config::fFovAngle = radiusPixels / 4.0f;
                 Tip("Raio real em pixels. Zero desativa o limite.");
-                ImGui::SliderFloat("Aim Distance", &Config::fAimDistance, 10, 500, "%.0fm"); Tip("Só o AIM obedece (ate onde mira). O ESP tem a propria distancia no VISUAL.");
+                ImGui::SliderFloat("Aim Distance", &Config::fAimDistance, 10, 500, "%.0fm"); Tip("Alcance maximo do AIM. Enquanto ativo, carrega candidatos distantes gradualmente; exige visibilidade. O ESP tem alcance separado.");
                 ImGui::Checkbox("Auto Aim", &Config::bAutoAim); Tip("Mira sozinho, sem tecla (firing sempre 1).");
                 // Automatic actions still require visibility and an active game window.
                 ImGui::Checkbox("Silent Aim", &Config::bSilentAim); Tip("Direciona o tiro ao alvo visivel sem girar a camera; usa a mesma direcao no tiro local e na sincronizacao. Segure Aim Key ou ligue Auto Aim.");
@@ -1192,7 +1195,7 @@ namespace GUI {
                         ImGui::Checkbox("Barra de vida", &Config::bZombieHp);
                         ImGui::SameLine(); ImGui::Checkbox("%", &Config::bZombiePct); Tip("Percentual de vida independente da barra. Desmarque tambem para ocultar todo o texto de vida.");
                         SwatchR("##CorVidaZ", Config::colZombieHp, "Cor do texto de vida (a barra usa HpColor).");
-                        ImGui::Checkbox("Esqueleto", &Config::bZombieSkeleton); Tip("19 segmentos articulados (< 50m).");
+                        ImGui::Checkbox("Esqueleto", &Config::bZombieSkeleton); Tip("Ossos reais dentro da distancia ESP, quando o modelo esta carregado.");
                         SwatchR("##CorSkelZ", Config::colZombieSkel, "Cor do esqueleto.");
                         ImGui::Checkbox("Linha", &Config::bZombieSnap);
                         ImGui::SameLine(); ImGui::SetNextItemWidth(80.0f);
@@ -1201,7 +1204,7 @@ namespace GUI {
                         ImGui::Checkbox("Ponto na cabeca", &Config::bZombieHeadDot); Tip("Head dot projetado na junta HEAD.");
                         SwatchR("##CorDotZ", Config::colZombieDot, "Cor do ponto.");
                         ImGui::SetNextItemWidth(160.0f);
-                        ImGui::SliderFloat("Dist. maxima", &Config::fEspDistance, 10, 500, "%.0fm"); Tip("Só o ESP obedece (ate onde desenha). O AIM tem a propria distancia no PLAYER.");
+                        ImGui::SliderFloat("Dist. maxima", &Config::fEspDistance, 10, 500, "%.0fm"); Tip("Alcance do ESP. Modelos carregados usam box/ossos; distantes conhecidos usam losango e nome/distancia, sem vida inventada. Independente do AIM.");
                         ImGui::Unindent();
                     }
                     ImGui::TextDisabled("Pendente: controles sem implementacao nesta versao.");

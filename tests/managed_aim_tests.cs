@@ -3,7 +3,11 @@ using System;
 using System.Runtime.CompilerServices;
 using Zb2Menu;
 using UnityEngine;
-namespace Zb2Menu { internal static class TestEnvironment { public static bool Focused = true; } }
+namespace Zb2Menu {
+    internal static class TestEnvironment { public static bool Focused = true; }
+    // Range/LOD has its own Harmony integration suite.
+    internal static class RangeBridge { public static void Install(HarmonyLib.Harmony harmony) {} }
+}
 namespace UnityEngine {
     public struct Vector3 {
         public float x,y,z;

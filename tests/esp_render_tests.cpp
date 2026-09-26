@@ -6,6 +6,8 @@ namespace Mono {
     const State& Get(){return state;}
     int GetEsp(EspEntry* out,int count){if(count<=0)return 0;out[0]=entry;return 1;}
     int GetWorldEsp(WorldMarker* out,int count){if(!worldCount || count<=0)return 0;out[0]=marker;return 1;}
+    static DistantMarker distant;static int distantCount=0;
+    int GetDistantEsp(DistantMarker* out,int count){if(!distantCount || count<=0)return 0;out[0]=distant;return 1;}
 }
 bool ImGui_ImplWin32_Init(void*){return true;}
 void ImGui_ImplWin32_Shutdown(){}
@@ -34,5 +36,13 @@ int main(){
     Config::bItemWeapons=true;Config::bItemEsp=false;Check(Frame()==0,"item master off hides stale marker");
     Mono::marker.kind=4;Config::bPoiEsp=Config::bPoiHeli=true;Check(Frame()>0,"POI independent");
     Config::bPoiEsp=false;Check(Frame()==0,"POI master off hides stale marker");
+    Mono::worldCount=0;Mono::entry.onScreen=false;Config::bZombieEsp=true;
+    Mono::distantCount=1;Mono::distant={.5f,.5f,210,0,0};Config::bZombieBoxShow=true;
+    Config::fEspDistance=200;Check(Frame()==0,"distant records excluded beyond slider");
+    Config::fEspDistance=220;Check(Frame()>0,"slider includes dormant record beyond 75m");
+    Config::bZombieBoxShow=false;Check(Frame()==0,"dormant record respects box off");
+    Config::bZombieDist=true;Check(Frame()>0,"dormant distance independent of box");
+    Config::bZombieDist=false;Mono::distantCount=0;Mono::entry.onScreen=true;Mono::entry.dist=210;Config::bZombieBoxShow=true;
+    Config::fEspDistance=200;Check(Frame()==0,"stale active snapshot filtered by new smaller limit");
     ImGui::DestroyContext();std::printf("PASS: %d real ImGui overlay checks\n",checks);
 }

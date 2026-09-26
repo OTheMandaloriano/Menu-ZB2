@@ -9,9 +9,10 @@ namespace UnityEngine {
         public static Vector3 operator +(Vector3 a,Vector3 b){return new Vector3(a.x+b.x,a.y+b.y,a.z+b.z);}
         public static Vector3 operator -(Vector3 a,Vector3 b){return new Vector3(a.x-b.x,a.y-b.y,a.z-b.z);}
         public static float Distance(Vector3 a,Vector3 b){var d=a-b;return (float)Math.Sqrt(d.x*d.x+d.y*d.y+d.z*d.z);}
+        public static float Angle(Vector3 a,Vector3 b){float den=Distance(a,new Vector3())*Distance(b,new Vector3());return den==0?0:(float)(Math.Acos(Math.Max(-1,Math.Min(1,(a.x*b.x+a.y*b.y+a.z*b.z)/den)))*180/Math.PI);}
     }
-    public class Transform {public Vector3 position;}
-    public class Camera {public Vector3 WorldToViewportPoint(Vector3 p){return new Vector3(.5f+p.x/100,.5f+p.y/100,p.z);}}
+    public class Transform {public Vector3 position;public Vector3 forward=new Vector3(0,0,1);}
+    public class Camera {public Transform transform=new Transform();public Vector3 WorldToViewportPoint(Vector3 p){return new Vector3(.5f+p.x/100,.5f+p.y/100,p.z);}}
     public static class Time { public static float unscaledTime; }
 }
 public class PlayerMain {public float healthFast=100;public UnityEngine.Transform transform=new UnityEngine.Transform();}

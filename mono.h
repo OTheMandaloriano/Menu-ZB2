@@ -53,6 +53,9 @@ namespace Mono {
     };
     static_assert(sizeof(WorldMarker)==112, "Managed marker ABI");
     int GetWorldEsp(WorldMarker* output, int capacity);
+    struct DistantMarker { float x,y,distance; int type,state; };
+    static_assert(sizeof(DistantMarker)==20,"Managed distant marker ABI");
+    int GetDistantEsp(DistantMarker* output,int capacity);
 
     struct State {
         bool  ready = false;

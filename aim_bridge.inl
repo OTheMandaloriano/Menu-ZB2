@@ -9,6 +9,10 @@ static MonoMethod* s_modifierReset = nullptr;
 static MonoMethod* s_modifierError = nullptr;
 static MonoMethod* s_worldCollect = nullptr;
 static MonoMethod* s_worldError = nullptr;
+static MonoMethod* s_rangeConfigure = nullptr;
+static MonoMethod* s_rangeCollect = nullptr;
+static MonoMethod* s_rangeError = nullptr;
+static MonoMethod* s_rangeStats = nullptr;
 static long long s_bridgeRetryAt = 0;
 static bool LoadAimBridge() {
     if (s_bridgePublish) return true;
@@ -55,7 +59,13 @@ static bool LoadAimBridge() {
         auto image = static_cast<MonoImage*>(pAssmImage(assembly));
         auto modifiers = pClassFrom(image, "Zb2Menu", "ModifierBridge");
         auto world = pClassFrom(image, "Zb2Menu", "WorldEspBridge");
-        if (!modifiers || !world) return false;
+        auto ranges = pClassFrom(image, "Zb2Menu", "RangeBridge");
+        if (!modifiers || !world || !ranges) return false;
+        s_rangeConfigure = pMethodFrom(ranges, "Configure", 6);
+        s_rangeCollect = pMethodFrom(ranges, "Collect", 3);
+        s_rangeError = pMethodFrom(ranges, "LastError", 0);
+        s_rangeStats = pMethodFrom(ranges, "Statistics", 0);
+        if (!s_rangeConfigure || !s_rangeCollect) return false;
         s_modifierApply = pMethodFrom(modifiers, "Apply", 7);
         s_modifierReset = pMethodFrom(modifiers, "Reset", 0);
         s_modifierError = pMethodFrom(modifiers, "LastError", 0);
@@ -112,3 +122,4 @@ static void PublishAimBridge(void* local, const Aim::Target* target, int flags) 
 }
 
 #include "world_esp.inl"
+#include "distance_runtime.inl"

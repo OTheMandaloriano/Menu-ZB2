@@ -46,6 +46,7 @@ namespace Zb2Menu {
                     candidate.Patch(shoot, transpiler: new HarmonyMethod(typeof(AimBridge), "PatchShotPath"));
                     candidate.Patch(input, postfix: new HarmonyMethod(typeof(AimBridge), "AfterFireInput"));
                     candidate.Patch(update, postfix: new HarmonyMethod(typeof(AimBridge), "AfterGameUpdate"));
+                    RangeBridge.Install(candidate);
                     harmony = candidate;
                     return true;
                 } catch (Exception ex) {

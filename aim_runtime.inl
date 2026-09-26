@@ -5,6 +5,7 @@ static int s_aimCount = 0;
 static Aim::Lock s_aimLock;
 static Aim::Activation s_aimActivation;
 static void ClearAimBridge();
+static void ConfigureAimRange(bool enabled);
 static Aim::Point s_aimForward = {};
 static bool s_aimForwardValid = false;
 static int s_visibilityCursor = 0;
@@ -18,6 +19,7 @@ static void ResetAim() {
     s_aimActivation.Reset();
     s_visibilityCursor = 0;
     ClearAimBridge();
+    ConfigureAimRange(false);
 }
 static Aim::Policy AimPolicy() {
     Aim::Policy policy;
@@ -246,6 +248,7 @@ static void WohaxAim(void* local) {
     const bool down = key > 0 && key <= 255 && (GetAsyncKeyState(key) & 0x8000);
     const bool automatic = Config::bAutoAim || Config::bAutoFire;
     const bool firing = s_aimActivation.Update(enabled, automatic, key, Config::iAimMode, down);
+    ConfigureAimRange(enabled && (firing || Config::bTriggerbot));
     if (!enabled) { s_aimLock.Clear(); ClearAimBridge(); return; }
     const auto candidates = Aim::Rank(s_aimTargets, s_aimCount, AimPolicy(), s_aimLock, PiNow());
     if (!firing && !Config::bTriggerbot) { ClearAimBridge(); return; }
