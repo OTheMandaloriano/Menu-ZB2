@@ -11,3 +11,12 @@ build/
 
 # Autosave vazio gerado pelo Cheat Engine durante diagnosticos
 ExceptionAutoSave_*.ct
+
+# Local credentials, tool settings and editor caches
+.env
+.env.*
+!.env.example
+opencode.json
+.vs/
+__pycache__/
+*.pyc
