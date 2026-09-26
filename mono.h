@@ -52,13 +52,16 @@ namespace Mono {
         float dayLenMin = 0.0f;
         float localHp = 0.0f;
         float localStam = 0.0f;
-        float allyHp = 0.0f;
+        float allyHp = 0.0f;       // HP do primeiro aliado vivo; 0 se nenhum
+        int   allies = 0;          // outros jogadores válidos em PlayersController
+        char  roomHost[64] = {};   // playerName do host do lobby, não Steam nick
+        char  roomId[32] = {};     // MultiplayerController.GetLobbyCode()
         int   players = 0;
         int   zombies = 0;
         float zHp0 = 0.0f;
         float espMs = 0.0f;    // custo do BuildEsp (diagnostico)
         int   espShown = 0;
-        int   coopMode = 0;     // 0=single 1=cliente 2=host (debug overlay)
+        int   coopMode = 0;        // 0=lobby/unknown 1=single 2=client 3=host
         int   ammoWrites = 0;   // escritas no pente (0 = trava nao roda)
         bool  ammoOk = true;    // false = cadeia incompleta (AMMO:OFF)
         bool  slotsOk = true;   // false = campos nao resolveram

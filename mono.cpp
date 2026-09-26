@@ -162,6 +162,12 @@ namespace Mono {
     static MonoMethod* mIsSingle = nullptr;   // MultiplayerController.get_IsSinglePlayer()
     static MonoMethod* mIsMulti = nullptr;    // MultiplayerController.get_IsMultiplayer()
     static MonoMethod* mIsClient = nullptr;   // MultiplayerController.IsClient()
+    static MonoClass* cLobby = nullptr;
+    static MonoClass* cLobbyPlayer = nullptr;
+    static MonoClassField* fLobbyInst = nullptr;
+    static MonoClassField* fLobbyPlayerName = nullptr;
+    static MonoMethod* mLobbyGetHost = nullptr;
+    static MonoMethod* mGetLobbyCode = nullptr;
     // Municao infinita (cadeia via dnlib/dnSpy estatico + IL do ShootGun):
     // PlayerMain.inventory -> PlayerInventory.equippedItems ->
     // PlayerEquippedItems.GetEquipment(selectedItem) -> InventoryItem.ammo.
@@ -637,7 +643,13 @@ namespace Mono {
             ResolveMethod(cMp, "MultiplayerController", "get_IsSinglePlayer", 0, mIsSingle);
             ResolveMethod(cMp, "MultiplayerController", "get_IsMultiplayer", 0, mIsMulti);
             ResolveMethod(cMp, "MultiplayerController", "IsClient", 0, mIsClient);
+            ResolveMethod(cMp, "MultiplayerController", "GetLobbyCode", 0, mGetLobbyCode);
         }
+        ResolveClass("LobbyController", cLobby);
+        ResolveField(cLobby, "LobbyController", "instance", fLobbyInst);
+        if (cLobby) mLobbyGetHost = pMethodFrom(cLobby, "GetHost", 0);
+        ResolveClass("LobbyPlayer", cLobbyPlayer);
+        if (cLobbyPlayer) fLobbyPlayerName = pFieldFrom(cLobbyPlayer, "playerName");
         ResolveField(cDay, "DaytimeController", "instance", fDayInst);
         ResolveField(cZLoader, "ZombieLoader", "Instance", fZLInst);
         ResolveField(cPlayers, "PlayersController", "instance", fPCInst);
@@ -1625,10 +1637,73 @@ namespace Mono {
             return false;
         } __except (EXCEPTION_EXECUTE_HANDLER) { return true; }
     }
+    static void RefreshSessionDebug() {
+        static long long nextRefresh = 0;
+        const long long now = PiNow();
+        if (now < nextRefresh) return;
+        nextRefresh = now + 1000000;
+
+        void* multiplayer = nullptr;
+        if (!StaticInstance(cMp, fMpInst, multiplayer) || !multiplayer) {
+            s.coopMode = 0;
+            strncpy_s(s.roomHost, sizeof(s.roomHost), "---", _TRUNCATE);
+            strncpy_s(s.roomId, sizeof(s.roomId), "---", _TRUNCATE);
+            return;
+        }
+
+        const bool single = mIsSingle && InvokeBool(mIsSingle, multiplayer);
+        const bool online = mIsMulti && InvokeBool(mIsMulti, multiplayer);
+        const bool client = mIsClient && InvokeBool(mIsClient, multiplayer);
+        const bool server = mIsServer && InvokeBool(mIsServer, multiplayer);
+        const int mode = single ? 1 : client ? 2 : (online && server) ? 3 : 0;
+        if (mode != s.coopMode) {
+            s.coopMode = mode;
+            static const char* names[] = { "LOBBY", "SINGLE", "CLIENTE", "HOST" };
+            Log::Infof("[MODE] modo=%s (single=%d multi=%d server=%d client=%d)", names[mode],
+                single ? 1 : 0, online ? 1 : 0, server ? 1 : 0, client ? 1 : 0);
+        }
+
+        if (single) {
+            strncpy_s(s.roomHost, sizeof(s.roomHost), "Solo", _TRUNCATE);
+            strncpy_s(s.roomId, sizeof(s.roomId), "---", _TRUNCATE);
+            return;
+        }
+
+        strncpy_s(s.roomHost, sizeof(s.roomHost), "---", _TRUNCATE);
+        strncpy_s(s.roomId, sizeof(s.roomId), "---", _TRUNCATE);
+        __try {
+            void* lobbyCode = mGetLobbyCode ? InvokeObj(mGetLobbyCode, multiplayer, nullptr) : nullptr;
+            char* code = lobbyCode ? pStrUtf8(static_cast<MonoObject*>(lobbyCode)) : nullptr;
+            if (code) {
+                strncpy_s(s.roomId, sizeof(s.roomId), code, _TRUNCATE);
+                pFree(code);
+            }
+            void* lobby = nullptr;
+            if (mLobbyGetHost && StaticInstance(cLobby, fLobbyInst, lobby)) {
+                void* host = InvokeObj(mLobbyGetHost, lobby, nullptr);
+                MonoObject* nameObject = host && fLobbyPlayerName ?
+                    static_cast<MonoObject*>(ReadP(host, FieldOff(fLobbyPlayerName))) : nullptr;
+                char* hostName = nameObject ? pStrUtf8(nameObject) : nullptr;
+                if (hostName) {
+                    strncpy_s(s.roomHost, sizeof(s.roomHost), hostName, _TRUNCATE);
+                    for (char* ch = s.roomHost; *ch; ++ch)
+                        if (static_cast<unsigned char>(*ch) < 0x20) *ch = ' ';
+                    pFree(hostName);
+                }
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            strncpy_s(s.roomHost, sizeof(s.roomHost), "---", _TRUNCATE);
+            strncpy_s(s.roomId, sizeof(s.roomId), "---", _TRUNCATE);
+        }
+    }
+
     static void RunGameCycle() {
         if (!s.ready || !SceneAlive()) {
             ClearEntitySnapshot(); ResetAim(); AmmoCachesClear();
             s.inMap = false; s_camWok = false;
+            s.coopMode = 0;
+            strncpy_s(s.roomHost, sizeof(s.roomHost), "---", _TRUNCATE);
+            strncpy_s(s.roomId, sizeof(s.roomId), "---", _TRUNCATE);
             s_nextCycle = PiNow() + 500000;
             return;
         }
@@ -1637,6 +1712,7 @@ namespace Mono {
             s_nextCycle = PiNow() + 500000;
             return;
         }
+        RefreshSessionDebug();
         static int s_deadN = 0;
         static int s_defN = 0; // contador p/ defesa rapida (God/Stamina todo ciclo)
         {
@@ -1650,39 +1726,8 @@ namespace Mono {
             // mas o player nao existe ainda. Sem gate = invoke em objeto nulo =
             // hang/crash reportado pelo operador.
             void* aimLocal = nullptr;
-            bool wantDef = s.ready && (HasPendingRestores() || Config::bGodMode || Config::bInfStamina || Config::bInfAmmo || Config::bInfItems || Config::bInfMoney || Config::bUnlockSlots || Config::bUnlockLoadout || Config::bNoRecoil || Config::bNoSpread || Config::bNoSway || Config::bTightAim || Config::bRapidFire || Config::bSpeedHack || Config::bSuperJump || Config::bRollSpeed || Config::bFastKnife || Config::bInstantReload || AimRequested());
+            bool wantDef = s.ready && (Config::bDebugOverlay || HasPendingRestores() || Config::bGodMode || Config::bInfStamina || Config::bInfAmmo || Config::bInfItems || Config::bInfMoney || Config::bUnlockSlots || Config::bUnlockLoadout || Config::bNoRecoil || Config::bNoSpread || Config::bNoSway || Config::bTightAim || Config::bRapidFire || Config::bSpeedHack || Config::bSuperJump || Config::bRollSpeed || Config::bFastKnife || Config::bInstantReload || AimRequested());
             if (wantDef && SceneAlive()) {
-                // Modo real via MultiplayerController (throttle 2s, SEH).
-                // coopMode: 0=LOBBY 1=SINGLE 2=CLIENTE 3=HOST.
-                static long long s_lastModeCheck = 0;
-                {
-                    long long nowM = PiNow();
-                    if (nowM - s_lastModeCheck > 2000000LL) {
-                        s_lastModeCheck = nowM;
-                        __try {
-                            void* mpInst = nullptr;
-                            if (StaticInstance(cMp, fMpInst, mpInst) && mpInst) {
-                                bool isSingle = mIsSingle ? InvokeBool(mIsSingle, mpInst) : false;
-                                bool isMulti = mIsMulti ? InvokeBool(mIsMulti, mpInst) : false;
-                                bool isSrv = mIsServer ? InvokeBool(mIsServer, mpInst) : false;
-                                bool isCli = mIsClient ? InvokeBool(mIsClient, mpInst) : false;
-                                int mode = 0; // LOBBY
-                                if (isSingle) mode = 1;
-                                else if (isMulti && isCli) mode = 2;
-                                else if (isMulti && isSrv) mode = 3;
-                                else if (isMulti) mode = 3; // fallback: multi sem role = host
-                                static int s_lastMode = -1;
-                                if (mode != s_lastMode) {
-                                    s_lastMode = mode;
-                                    static const char* modeNames[4] = { "LOBBY", "SINGLE", "CLIENTE", "HOST" };
-                                    Log::Infof("[MODE] modo=%s (isSingle=%d isMulti=%d isSrv=%d isCli=%d)",
-                                        modeNames[mode], isSingle ? 1 : 0, isMulti ? 1 : 0, isSrv ? 1 : 0, isCli ? 1 : 0);
-                                }
-                                s.coopMode = mode;
-                            }
-                        } __except (EXCEPTION_EXECUTE_HANDLER) {}
-                    }
-                }
                 // Detecta se estamos dentro do mapa: precisa de player local vivo.
                 bool inMap = false;
                 void* pcs = nullptr;
@@ -3636,6 +3681,10 @@ namespace Mono {
         // Players: local via invoke, resto = aliados.
         void* pcs = nullptr;
         s.players = 0;
+        s.allies = 0;
+        s.allyHp = 0.0f;
+        s.localHp = 0.0f;
+        s.localStam = 0.0f;
         bool gotLocal = false, gotAlly = false;
         if (StaticInstance(cPlayers, fPCInst, pcs)) {
             void* list = ReadP(pcs, Off::PCS_players);
@@ -3647,12 +3696,21 @@ namespace Mono {
                     gotLocal = true;
                     s.localHp = hp;
                     s.localStam = ReadF(e, Off::PM_staminaFast);
-                } else if (!local && !gotAlly) {
-                    gotAlly = true;
-                    s.allyHp = hp;
+                } else if (!local) {
+                    ++s.allies;
+                    if (!gotAlly && hp > 0.0f) {
+                        gotAlly = true;
+                        s.allyHp = hp;
+                    }
                 }
             });
-            if (!gotLocal) s.localHp = 0;
+            if (!gotLocal) {
+                s.localHp = 0;
+                s.allies = 0;
+                s.allyHp = 0.0f;
+            } else {
+                s.allies = (std::max)(0, s.players - 1);
+            }
             // Gate no mapa (18/09): escrita removida daqui (ReadAll = leitura
             // pura). God/Stamina rodam no bloco rapido sob s.inMap (local vivo).
             // Auditoria ammo 1x/2s (19/09): diagnostico completo da cadeia

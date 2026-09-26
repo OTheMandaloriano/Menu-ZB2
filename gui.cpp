@@ -834,15 +834,16 @@ namespace GUI {
         // Debug overlay (Fase 2 item 6): dados VIVOS via reflection C++.
         if (Config::bDebugOverlay) {
             const Mono::State& st = Mono::Get();
-            char b[256];
+            char b[384];
             if (st.ready) {
                 const char* modo = st.coopMode == 3 ? "HOST" : st.coopMode == 2 ? "CLIENTE" : st.coopMode == 1 ? "SINGLE" : "LOBBY";
                 const char* ammoSt = Config::bInfAmmo ? (st.ammoOk ? "AMMO:ON" : "AMMO:OFF") : "AMMO:-";
                 const char* slotSt = Config::bUnlockSlots ? (st.slotsOk ? "SLOTS:ON" : "SLOTS:OFF") : "SLOTS:-";
                 const char* loadSt = Config::bUnlockLoadout ? (st.loadoutOn ? "LOAD:ON" : "LOAD:OFF") : "LOAD:-";
-                _snprintf_s(b, _TRUNCATE, "LOCAL HP %.0f | STAM %.0f | ALIADO %.0f | ZUMBIS %d (hp0 %.0f) | DAY %.2fh | ESP %d %.1fms | %s | %s wr=%d | %s | %s | %.0f fps",
-                    (double)st.localHp, (double)st.localStam, (double)st.allyHp,
-                    st.zombies, (double)st.zHp0, (double)st.dayTime, st.espShown, (double)st.espMs, modo, ammoSt, st.ammoWrites, slotSt, loadSt, (double)io.Framerate);
+                _snprintf_s(b, _TRUNCATE, "LOCAL HP %.0f | STAM %.0f | ALIADOS %d | HP1 %.0f | ZUMBIS %d (hp0 %.0f) | DAY %.2fh | ESP %d %.1fms | %s | HOST %s | SALA ID %s | %s wr=%d | %s | %s | %.0f fps",
+                    (double)st.localHp, (double)st.localStam, st.allies, (double)st.allyHp,
+                    st.zombies, (double)st.zHp0, (double)st.dayTime, st.espShown, (double)st.espMs, modo,
+                    st.roomHost, st.roomId, ammoSt, st.ammoWrites, slotSt, loadSt, (double)io.Framerate);
             }
             else
                 _snprintf_s(b, _TRUNCATE, "MONO aguardando cena... | %.0f fps", (double)io.Framerate);
