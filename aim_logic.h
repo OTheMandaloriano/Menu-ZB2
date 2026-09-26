@@ -11,7 +11,9 @@ constexpr int MaxTargets = 128;
 constexpr int VisibilityBudget = 3;
 constexpr float NearPlane = 0.05f;
 enum class GameMode { Lobby = 0, SinglePlayer = 1, Client = 2, Host = 3 };
-inline bool CanRedirectShot(GameMode mode) { return mode == GameMode::SinglePlayer; }
+inline bool CanRedirectShot(GameMode mode) {
+    return mode == GameMode::SinglePlayer || mode == GameMode::Client || mode == GameMode::Host;
+}
 inline bool ShouldMoveVisible(bool firing, bool aimbot, bool automatic, bool silentRequested, bool silentAllowed) {
     return firing && (aimbot || automatic || (silentRequested && !silentAllowed));
 }

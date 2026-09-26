@@ -238,8 +238,8 @@ static bool AimWindowActive() {
 #include "aim_bridge.inl"
 static void WohaxAim(void* local) {
     const bool enabled = local && s_camWok && AimRequested() && AimWindowActive();
-    // Both network roles transmit their final shot vector. Silent stays solo-only;
-    // when requested online, it falls back to visible local camera aim.
+    // The managed adapter updates the ShootGun local consumed by both simulation
+    // and SyncShotOnline. A connected role never silently turns into camera aim.
     const bool allowSilent = Config::bSilentAim &&
         Aim::CanRedirectShot(static_cast<Aim::GameMode>(s.coopMode));
     const int key = Config::iAimKey;
@@ -251,15 +251,24 @@ static void WohaxAim(void* local) {
     if (!firing && !Config::bTriggerbot) { ClearAimBridge(); return; }
     int candidateCount = 0;
     while (candidateCount < Aim::MaxTargets && candidates[candidateCount] >= 0) ++candidateCount;
+    static long long nextDiagnostic = 0;
+    const bool diagnostic = PiNow() >= nextDiagnostic;
+    if (diagnostic) {
+        nextDiagnostic = PiNow() + 5000000;
+        int behind = 0;
+        for (int i=0; i<s_aimCount; ++i) if (s_aimTargets[i].angle > 90) ++behind;
+        Log::Infof("[AIM-SELECT] mode=%d 360=%d silent=%d firing=%d candidates=%d rear=%d",
+            s.coopMode, Config::b360Mode ? 1 : 0, allowSilent ? 1 : 0, firing ? 1 : 0, candidateCount, behind);
+    }
     // Bounded raycast work without starving targets beyond the first three.
     for (int checked = 0; checked < (std::min)(candidateCount, Aim::VisibilityBudget); ++checked) {
         const int index = candidates[(s_visibilityCursor + checked) % candidateCount];
         const auto& target = s_aimTargets[index];
         if (!AimTargetAlive(target)) continue;
-        const auto visibility = (Config::b360Mode || allowSilent) ?
-            ManagedAimVisibility(local, target) : AimVisibility(target);
+        const auto visibility = ManagedAimVisibility(local, target);
         if (!Aim::CanAim(visibility) || !AimTargetAlive(target)) continue;
         s_aimLock.Select(target.entity, PiNow());
+        if (diagnostic) Log::Infof("[AIM-SELECT] escolhido: angulo=%.1f distancia=%.1f", target.angle, target.distance);
         s_visibilityCursor = 0;
         const bool move = Aim::ShouldMoveVisible(firing, Config::bAimbot, automatic,
                                                  Config::bSilentAim, allowSilent);

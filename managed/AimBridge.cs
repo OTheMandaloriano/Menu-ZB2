@@ -1,6 +1,8 @@
 using System;
 using System.Diagnostics;
 using System.Reflection;
+using System.Reflection.Emit;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using HarmonyLib;
 using UnityEngine;
@@ -37,12 +39,11 @@ namespace Zb2Menu {
                 if (harmony != null) return true;
                 var candidate = new Harmony(PatchId);
                 try {
-                    var shoot = AccessTools.Method(typeof(PhysicalGun), "Shoot", new[] {
-                        typeof(PlayerMain), typeof(int), typeof(ShotPath), typeof(bool), typeof(DatabaseGun) });
+                    var shoot = AccessTools.Method(typeof(PlayerArms), "ShootGun", new[] { typeof(InventoryItem) });
                     var input = AccessTools.Method(typeof(PlayerArms), "ReadFireInput", new[] { typeof(InventoryItem) });
                     var update = AccessTools.Method(typeof(ZBMain), "Update", Type.EmptyTypes);
                     if (shoot == null || input == null || update == null) throw new MissingMethodException("Assinatura do jogo mudou.");
-                    candidate.Patch(shoot, prefix: new HarmonyMethod(typeof(AimBridge), "BeforeShoot"));
+                    candidate.Patch(shoot, transpiler: new HarmonyMethod(typeof(AimBridge), "PatchShotPath"));
                     candidate.Patch(input, postfix: new HarmonyMethod(typeof(AimBridge), "AfterFireInput"));
                     candidate.Patch(update, postfix: new HarmonyMethod(typeof(AimBridge), "AfterGameUpdate"));
                     harmony = candidate;
@@ -137,9 +138,7 @@ namespace Zb2Menu {
                 (collider == null || Belongs(collider.transform, state.Target.obj.transform));
         }
         static bool SilentReady(Request state, ref ShotPath path) {
-            // Online synchronization has a separate path: do not claim support for it.
-            if (MultiplayerController.instance == null || !MultiplayerController.instance.IsSinglePlayer ||
-                !Alive(state.Target) || state.Bone == null || !Belongs(state.Bone, state.Target.obj.transform)) return false;
+            if (!Alive(state.Target) || state.Bone == null || !Belongs(state.Bone, state.Target.obj.transform)) return false;
             Vector3 point = state.Bone.position;
             if (!ClearToTarget(state, path.bulletOrigin, point) || !ClearToTarget(state, path.convergingOrigin, point)) return false;
             if (state.Player.cam == null || state.Player.cam.CameraTransform == null ||
@@ -147,13 +146,46 @@ namespace Zb2Menu {
             path.convergingDirection = (point-path.convergingOrigin).normalized;
             return true;
         }
-        static void BeforeShoot(PlayerMain __0, ref ShotPath __2, bool __3) {
+        // Pass the caller's ShotPath by reference. ShootGun later sends this exact
+        // local through SyncShotOnline, including host broadcasts. No extra packet.
+        static void ExecuteShot(PhysicalGun gun, PlayerMain player, int mask,
+                                ref ShotPath path, bool effect, DatabaseGun custom) {
             try {
                 Request state;
-                if (!Current(out state) || (state.Flags & Silent)==0 || !__3 || __0 != state.Player) return;
-                if (SilentReady(state, ref __2)) System.Threading.Interlocked.Increment(ref redirected);
-                else System.Threading.Interlocked.Increment(ref blocked);
+                if (Current(out state) && (state.Flags & Silent)!=0 && effect && player == state.Player) {
+                    if (SilentReady(state, ref path)) System.Threading.Interlocked.Increment(ref redirected);
+                    else System.Threading.Interlocked.Increment(ref blocked);
+                }
             } catch (Exception ex) { RecordFailure(ex); }
+            gun.Shoot(player, mask, path, effect, custom);
+        }
+        static IEnumerable<CodeInstruction> PatchShotPath(IEnumerable<CodeInstruction> instructions) {
+            var code = new List<CodeInstruction>(instructions);
+            var shoot = AccessTools.Method(typeof(PhysicalGun), "Shoot", new[] {
+                typeof(PlayerMain), typeof(int), typeof(ShotPath), typeof(bool), typeof(DatabaseGun) });
+            int replaced = 0;
+            for (int i=3; i<code.Count; ++i) {
+                if (!code[i].Calls(shoot)) continue;
+                if (code[i-1].opcode != OpCodes.Ldnull || code[i-2].opcode != OpCodes.Ldc_I4_1)
+                    throw new InvalidOperationException("ShootGun: argumentos de disparo mudaram.");
+                var load = code[i-3];
+                int slot;
+                if (load.opcode == OpCodes.Ldloc_0) slot=0;
+                else if (load.opcode == OpCodes.Ldloc_1) slot=1;
+                else if (load.opcode == OpCodes.Ldloc_2) slot=2;
+                else if (load.opcode == OpCodes.Ldloc_3) slot=3;
+                else if (load.opcode == OpCodes.Ldloc || load.opcode == OpCodes.Ldloc_S)
+                    slot = load.operand is LocalBuilder ? ((LocalBuilder)load.operand).LocalIndex : Convert.ToInt32(load.operand);
+                else throw new InvalidOperationException("ShootGun: ShotPath nao e uma variavel local.");
+                var address = CodeInstruction.LoadLocal(slot, true);
+                address.labels.AddRange(load.labels); address.blocks.AddRange(load.blocks);
+                code[i-3] = address;
+                code[i].opcode = OpCodes.Call;
+                code[i].operand = AccessTools.Method(typeof(AimBridge), "ExecuteShot");
+                ++replaced;
+            }
+            if (replaced != 1) throw new InvalidOperationException("ShootGun: esperado um unico disparo fisico.");
+            return code;
         }
         static bool CrosshairEnemy(Request state) {
             if (state.Player.cam == null || state.Player.cam.CameraTransform == null) return false;

@@ -516,7 +516,7 @@ namespace Mono {
 
         // Caminha List<T>: valida _size contra o teto e cada ponteiro antes de usar.
     template <typename Fn>
-    static int WalkList(void* list, int expectMax, Fn fn) {
+    static int WalkList(void* list, int expectMax, Fn fn, int start = 0) {
         if (!list) return 0;
         int n = 0;
         __try {
@@ -531,13 +531,14 @@ namespace Mono {
             memcpy(&len, (char*)arr + Off::A_len, sizeof(len));
             if (len < size || len > expectMax) return 0;
             for (int i = 0; i < size; ++i) {
+                const int index = ((start % size) + i) % size;
                 void* e = nullptr;
-                memcpy(&e, (char*)arr + Off::A_data + (size_t)i * 8, 8);
+                memcpy(&e, (char*)arr + Off::A_data + (size_t)index * 8, 8);
                 if (!e) continue;
                 // prova de leitura do elemento
                 volatile char probe = 0;
                 memcpy((void*)&probe, e, 1);
-                fn(e, i);
+                fn(e, index);
                 n++;
             }
         } __except (EXCEPTION_EXECUTE_HANDLER) { return n; }
@@ -1319,9 +1320,12 @@ namespace Mono {
         MonoClassField* fZL = pFieldFrom(cZLoader, "Instance");
         if (!fZL || !StaticInstance(cZLoader, fZL, zl)) { ClearEntitySnapshot(); return; }
         void* list = ReadP(zl, Off::ZL_zombies);
+        static int gatherCursor = 0;
+        const int gatherStart = gatherCursor;
         const long long gatherDeadline = PiNow() + 6000;
-        WalkList(list, 512, [&](void* e, int) {
+        WalkList(list, 512, [&](void* e, int index) {
             if (PiNow() >= gatherDeadline) return;
+            gatherCursor = index + 1;
             void* h = ReadP(e, Off::Z_health);
             if (!h) return;
             float hp = ReadF(h, Off::ZH_amount);
@@ -1539,7 +1543,7 @@ namespace Mono {
             en.ent = e; en.ex = en.ey = en.ez = 0;
             en.hp = hp; en.maxHp = mx;
             en.onScreen = true; en.isAlly = false; en.isBoss = tmpEn.isBoss;
-        });
+        }, gatherStart);
         // Publish only a completed frame; failures publish an empty frame.
         // Telemetria de orcamento (1x/sessao): prova que o teto segura a horda.
         if (!s_budgetLogged) {

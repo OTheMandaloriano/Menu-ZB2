@@ -52,7 +52,7 @@ static bool LoadAimBridge() {
         s_bridgePublish = publish; s_bridgeClear = clear;
         s_bridgeVisible = visible;
         s_bridgeStats = pMethodFrom(bridge, "Statistics", 0);
-        Log::Info("[AIM] adaptador gerenciado pronto: Silent solo / AutoFire / Trigger.");
+        Log::Info("[AIM] adaptador pronto: ShotPath compartilhado com SyncShotOnline; Silent / AutoFire / Trigger.");
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         Log::Warn("[AIM] falha ao carregar adaptador gerenciado."); return false;

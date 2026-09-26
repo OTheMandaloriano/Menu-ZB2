@@ -53,6 +53,19 @@ public class ZBMain {
 }
 public class PlayerArms {
     public PhysicalGun EquippedGun = new PhysicalGun();
+    public PlayerMain Owner;
+    public ShotPath InputPath;
+    public Vector3 Synced;
+    public int SyncCount;
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public void ShootGun(InventoryItem item) {
+        ShotPath path = InputPath;
+        --item.ammo;
+        EquippedGun.Shoot(Owner, -1, path, true, null);
+        SyncShotOnline(path.convergingDirection);
+    }
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    void SyncShotOnline(Vector3 direction) { Synced=direction; ++SyncCount; }
     [MethodImpl(MethodImplOptions.NoInlining)]
     public void ReadFireInput(InventoryItem item) { }
 }
@@ -87,7 +100,7 @@ static class ManagedAimTests {
     static PhysicalGun gun;
     static ShotPath shot;
     static void Publish(int flags) { AimBridge.Publish(player,target,bone,flags,120); }
-    static void Fire() { gun.Shoot(player,-1,shot,true); }
+    static void Fire() { player.arms.Owner=player; player.arms.InputPath=shot; player.arms.ShootGun(new InventoryItem()); }
     static void Main() {
         player=new PlayerMain(); player.arms=new PlayerArms();gun=player.arms.EquippedGun;
         target=new Zombie(); target.obj=new ZombieObject();target.obj.GetZombie=target;
@@ -110,16 +123,22 @@ static class ManagedAimTests {
         Check(player.cam.CameraTransform.forward.z==1,"silent leaves camera orientation intact");
         Check(gun.Last.tracerOrigin.x==1 && gun.Last.bulletOrigin.z==0,"origins preserved");
         Check(gun.Calls==1,"original shot executes exactly once");
+        Check(player.arms.SyncCount==1 && player.arms.Synced.z==gun.Last.convergingDirection.z,
+              "same ShotPath reaches simulation and original synchronization exactly once");
         Physics.Results=new[]{new RaycastHit{collider=enemy,distance=4},new RaycastHit{collider=wall,distance=2}};
         Publish(1);Fire();Check(gun.Last.convergingDirection.z==1,"nearest unsorted obstacle prevents redirect");
         Physics.Saturated=true;Publish(1);Fire();Check(gun.Last.convergingDirection.z==1,"saturated query prevents redirect");Physics.Saturated=false;
         Physics.Fail=true;Publish(1);Fire();Check(gun.Last.convergingDirection.z==1,"physics exception leaves original shot intact");Physics.Fail=false;
         Physics.Results=new[]{new RaycastHit{collider=enemy,distance=4}};
         MultiplayerController.instance.IsSinglePlayer=false;
-        Publish(1);Fire();Check(gun.Last.convergingDirection.z==1,"unvalidated online silent stays disabled");
+        Publish(1);Fire();Check(gun.Last.convergingDirection.z==-1 && player.arms.Synced.z==-1,"online shot and sync share rear direction");
         MultiplayerController.instance.IsSinglePlayer=true;
         target.health.isAlive=false;Publish(1);Fire();Check(gun.Last.convergingDirection.z==1,"dead target not redirected");target.health.isAlive=true;
         Publish(1);gun.Shoot(new PlayerMain(),-1,shot,true);Check(gun.Last.convergingDirection.z==1,"other player shot unmodified");
+        var remote = new PlayerMain {HasLocalControl=false};
+        remote.arms=new PlayerArms {Owner=remote, InputPath=shot};
+        Publish(1);remote.arms.ShootGun(new InventoryItem());
+        Check(remote.arms.EquippedGun.Last.convergingDirection.z==1 && remote.arms.Synced.z==1,"remote player pipeline unmodified");
         Publish(1);TestEnvironment.Focused=false;Fire();Check(gun.Last.convergingDirection.z==1,"focus loss clears effect immediately");TestEnvironment.Focused=true;
         Publish(1);AimBridge.Clear();Fire();Check(gun.Last.convergingDirection.z==1,"disable clears published request");
         Publish(1);System.Threading.Thread.Sleep(170);Fire();Check(gun.Last.convergingDirection.z==1,"stale target expires");

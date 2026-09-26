@@ -1,5 +1,7 @@
 # Contrato das funções de mira — v2
 
+> Revisão posterior: as descrições abaixo de Silent limitado a solo e do Prefix em PhysicalGun foram substituídas por [SILENT_SYNC.md](SILENT_SYNC.md). O adaptador atual mantém um único ShotPath no tiro e na sincronização, habilitado nos três modos, ainda sujeito à validação em partida.
+
 Esta revisão substitui as descrições de Silent/360/Trigger do relatório anterior. A interface descreve comportamento implementado; testes simulados não equivalem à validação em partida.
 
 | Opção | Comportamento |

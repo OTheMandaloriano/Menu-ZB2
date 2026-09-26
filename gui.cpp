@@ -1065,7 +1065,7 @@ namespace GUI {
                 const int gameMode = Mono::Get().coopMode;
                 const bool networkMode = gameMode == 2 || gameMode == 3;
                 if (networkMode)
-                    ImGui::TextColored(ImVec4(1.0f, 0.78f, 0.25f, 1.0f), "MULTIPLAYER: mira/ESP locais; servidor controla tiros, dano e estado persistente.");
+                    ImGui::TextColored(ImVec4(1.0f, 0.78f, 0.25f, 1.0f), "MULTIPLAYER: Silent sincroniza a direcao do tiro; confirmacao de dano depende da partida.");
                 ImGui::Checkbox("Aimbot", &Config::bAimbot); Tip("Igual ao wohax: elege por px, mira vetor 3D. Segure a Aim Key.");
                 // Aim Key + Hold/Toggle + LED vivo (padrao BF/Warface/wohax firing).
                 {
@@ -1097,7 +1097,7 @@ namespace GUI {
                 ImGui::SliderFloat("Aim Distance", &Config::fAimDistance, 10, 500, "%.0fm"); Tip("Só o AIM obedece (ate onde mira). O ESP tem a propria distancia no VISUAL.");
                 ImGui::Checkbox("Auto Aim", &Config::bAutoAim); Tip("Mira sozinho, sem tecla (firing sempre 1).");
                 // Automatic actions still require visibility and an active game window.
-                ImGui::Checkbox("Silent Aim (solo)", &Config::bSilentAim); Tip("So redireciona tiros no modo solo. Em multiplayer (host ou cliente), vira mira visivel; o servidor recebe a direcao da camera.");
+                ImGui::Checkbox("Silent Aim", &Config::bSilentAim); Tip("Direciona o tiro ao alvo visivel sem girar a camera; usa a mesma direcao no tiro local e na sincronizacao. Segure Aim Key ou ligue Auto Aim.");
                 ImGui::Checkbox("Auto Fire", &Config::bAutoFire); Tip("Ativa a mira e solicita disparo quando alinhado. Com Silent, redireciona sem virar. Respeita municao e cooldown.");
                 ImGui::Checkbox("Triggerbot", &Config::bTriggerbot); Tip("Atira quando o raio central acerta um inimigo vivo. Sozinho nao move a camera nem redireciona o tiro.");
                 ImGui::Separator();

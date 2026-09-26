@@ -76,8 +76,9 @@ int main() {
     Check(Rank(crowded, kept, policy, lock, 0)[MaxTargets-1] >= 0,
           "visibility queue retains candidates beyond top three");
     Check(CanRedirectShot(GameMode::SinglePlayer), "silent redirection remains available solo");
-    Check(!CanRedirectShot(GameMode::Client) && !CanRedirectShot(GameMode::Host),
-          "client and host shots keep server-synchronized directions");
+    Check(CanRedirectShot(GameMode::Client) && CanRedirectShot(GameMode::Host),
+          "client and host can use the synchronized shot adapter");
+    Check(!CanRedirectShot(GameMode::Lobby), "unknown or disconnected mode cannot redirect");
     Check(ShouldMoveVisible(true,false,false,true,false),
           "silent requested online falls back to visible camera aim");
     Check(!ShouldMoveVisible(true,false,false,true,true),
