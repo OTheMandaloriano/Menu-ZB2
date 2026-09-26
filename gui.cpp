@@ -1061,6 +1061,9 @@ namespace GUI {
             // Categoria aimbot espelho wohax (mesma logica de funcionamento):
             // enable + radius + bone + mode; mira so com firing (tecla/modo).
             if (ImGui::BeginTabItem("PLAYER")) {
+                const bool clientMode = Mono::Get().coopMode == 2;
+                if (clientMode)
+                    ImGui::TextColored(ImVec4(1.0f, 0.78f, 0.25f, 1.0f), "CLIENTE: mira visivel/ESP locais; tiros e estado persistente dependem do servidor.");
                 ImGui::Checkbox("Aimbot", &Config::bAimbot); Tip("Igual ao wohax: elege por px, mira vetor 3D. Segure a Aim Key.");
                 // Aim Key + Hold/Toggle + LED vivo (padrao BF/Warface/wohax firing).
                 {
@@ -1092,7 +1095,9 @@ namespace GUI {
                 ImGui::SliderFloat("Aim Distance", &Config::fAimDistance, 10, 500, "%.0fm"); Tip("Só o AIM obedece (ate onde mira). O ESP tem a propria distancia no VISUAL.");
                 ImGui::Checkbox("Auto Aim", &Config::bAutoAim); Tip("Mira sozinho, sem tecla (firing sempre 1).");
                 // Automatic actions still require visibility and an active game window.
-                ImGui::Checkbox("Silent Aim (solo)", &Config::bSilentAim); Tip("Redireciona o tiro sem mover a camera. Segure Aim Key ou use Auto Aim. Requer adaptador gerenciado e linha de visao; lancadores e cooperativo nao suportados.");
+                if (clientMode) ImGui::BeginDisabled();
+                ImGui::Checkbox("Silent Aim (solo)", &Config::bSilentAim); Tip("Redireciona o tiro sem mover a camera no modo solo. Em cliente, o aimbot volta para a mira visivel e o servidor decide o disparo.");
+                if (clientMode) ImGui::EndDisabled();
                 ImGui::Checkbox("Auto Fire", &Config::bAutoFire); Tip("Ativa a mira e solicita disparo quando alinhado. Com Silent, redireciona sem virar. Respeita municao e cooldown.");
                 ImGui::Checkbox("Triggerbot", &Config::bTriggerbot); Tip("Atira quando o raio central acerta um inimigo vivo. Sozinho nao move a camera nem redireciona o tiro.");
                 ImGui::Separator();

@@ -1650,7 +1650,7 @@ namespace Mono {
             // mas o player nao existe ainda. Sem gate = invoke em objeto nulo =
             // hang/crash reportado pelo operador.
             void* aimLocal = nullptr;
-            bool wantDef = s.ready && (HasPendingRestores() || Config::bGodMode || Config::bInfStamina || Config::bInfAmmo || Config::bInfItems || Config::bInfMoney || Config::bUnlockSlots || Config::bUnlockLoadout || Config::bNoRecoil || Config::bNoSpread || Config::bNoSway || Config::bTightAim || Config::bRapidFire || Config::bSuperJump || Config::bFastKnife || Config::bInstantReload || AimRequested());
+            bool wantDef = s.ready && (HasPendingRestores() || Config::bGodMode || Config::bInfStamina || Config::bInfAmmo || Config::bInfItems || Config::bInfMoney || Config::bUnlockSlots || Config::bUnlockLoadout || Config::bNoRecoil || Config::bNoSpread || Config::bNoSway || Config::bTightAim || Config::bRapidFire || Config::bSpeedHack || Config::bSuperJump || Config::bRollSpeed || Config::bFastKnife || Config::bInstantReload || AimRequested());
             if (wantDef && SceneAlive()) {
                 // Modo real via MultiplayerController (throttle 2s, SEH).
                 // coopMode: 0=LOBBY 1=SINGLE 2=CLIENTE 3=HOST.
