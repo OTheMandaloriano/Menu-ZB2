@@ -238,10 +238,10 @@ static bool AimWindowActive() {
 #include "aim_bridge.inl"
 static void WohaxAim(void* local) {
     const bool enabled = local && s_camWok && AimRequested() && AimWindowActive();
-    // The client sends its final shot direction to the server. Silent redirection
-    // is deliberately solo-only; in a client match it falls back to the visible
-    // camera aim instead of leaving the user with a dead aimbot.
-    const bool allowSilent = Config::bSilentAim && s.coopMode != 2;
+    // Both network roles transmit their final shot vector. Silent stays solo-only;
+    // when requested online, it falls back to visible local camera aim.
+    const bool allowSilent = Config::bSilentAim &&
+        Aim::CanRedirectShot(static_cast<Aim::GameMode>(s.coopMode));
     const int key = Config::iAimKey;
     const bool down = key > 0 && key <= 255 && (GetAsyncKeyState(key) & 0x8000);
     const bool automatic = Config::bAutoAim || Config::bAutoFire;
@@ -261,7 +261,8 @@ static void WohaxAim(void* local) {
         if (!Aim::CanAim(visibility) || !AimTargetAlive(target)) continue;
         s_aimLock.Select(target.entity, PiNow());
         s_visibilityCursor = 0;
-        const bool move = firing && (Config::bAimbot || automatic);
+        const bool move = Aim::ShouldMoveVisible(firing, Config::bAimbot, automatic,
+                                                 Config::bSilentAim, allowSilent);
         if (move && !allowSilent && !MoveAimCamera(local, target)) { ClearAimBridge(); return; }
         const int flags = (allowSilent && firing ? 1 : 0) |
             (Config::bAutoFire ? 2 : 0) | (Config::bTriggerbot ? 4 : 0);
