@@ -98,6 +98,7 @@
     <ClInclude Include="config.h" />
     <ClInclude Include="log.h" />
     <ClInclude Include="mono.h" />
+    <ClInclude Include="modifier_math.h" />
     <ClInclude Include="runtime_gate.h" />
     <ClInclude Include="aim_logic.h" />
     <ClInclude Include="aim_runtime.inl" />

@@ -1,6 +1,7 @@
 #include "aim_logic.h"
 #include "latest_snapshot.h"
 #include "mono.h"
+#include "modifier_math.h"
 #include "runtime_gate.h"
 #include "config.h"
 #include "log.h"
@@ -2936,7 +2937,7 @@ namespace Mono {
     // (alvo, base); ao desligar escreve a base de volta 1x. Declarado AQUI
     // (antes do ApplyWeapon) p/ valer nos dois Applies.
     struct RestoreSlot { void* key; int off; float base; };
-    static RestoreSlot s_rsJump[4], s_rsRof[16], s_rsDur[64], s_rsAim[4];
+    static RestoreSlot s_rsWalk[2], s_rsJump[2], s_rsRoll[2], s_rsRof[16], s_rsDur[64], s_rsAim[4];
     static RestoreSlot s_rsSway[4]; // gunSway fallback (defeito 8)
     static RestoreSlot s_rsRecoil[16], s_rsSpread[16]; // recoil/spread (GRUDA fix)
     static bool s_swayWas = false;
@@ -2945,15 +2946,21 @@ namespace Mono {
     // Guarda base bool (1 byte) p/ restore nao-destrutivo (defeito 7).
     struct RestoreSlotB { void* key; int off; unsigned char base; };
     static RestoreSlotB s_rsFull[16];
+    struct RestoreSlotI { void* key; int off; int base; };
+    static RestoreSlotI s_rsBurst[16];
     static void ResetRestoreCaches() {
-        memset(s_rsJump,0,sizeof(s_rsJump)); memset(s_rsRof,0,sizeof(s_rsRof));
+        memset(s_rsWalk,0,sizeof(s_rsWalk)); memset(s_rsJump,0,sizeof(s_rsJump)); memset(s_rsRoll,0,sizeof(s_rsRoll));
+        memset(s_rsRof,0,sizeof(s_rsRof));
         memset(s_rsDur,0,sizeof(s_rsDur)); memset(s_rsAim,0,sizeof(s_rsAim));
         memset(s_rsSway,0,sizeof(s_rsSway)); memset(s_rsRecoil,0,sizeof(s_rsRecoil));
         memset(s_rsSpread,0,sizeof(s_rsSpread)); memset(s_rsFull,0,sizeof(s_rsFull));
+        memset(s_rsBurst,0,sizeof(s_rsBurst));
         s_swayWas = false; s_swayBaseOk = false;
     }
     static bool HasPendingRestores() {
+        for (auto& v:s_rsWalk) if(v.key)return true;
         for (auto& v:s_rsJump) if(v.key)return true;
+        for (auto& v:s_rsRoll) if(v.key)return true;
         for (auto& v:s_rsRof) if(v.key)return true;
         for (auto& v:s_rsDur) if(v.key)return true;
         for (auto& v:s_rsAim) if(v.key)return true;
@@ -2961,6 +2968,7 @@ namespace Mono {
         for (auto& v:s_rsRecoil) if(v.key)return true;
         for (auto& v:s_rsSpread) if(v.key)return true;
         for (auto& v:s_rsFull) if(v.key)return true;
+        for (auto& v:s_rsBurst) if(v.key)return true;
         return false;
     }
 
@@ -2993,6 +3001,11 @@ namespace Mono {
             if (!slots[k].key) { slots[k].key = key; slots[k].off = off; slots[k].base = base; return; }
         }
     }
+    static bool RestoreBase(const RestoreSlot* slots, int cap, void* key, int off, float& out) {
+        for (int k = 0; k < cap; ++k)
+            if (slots[k].key == key && slots[k].off == off) { out = slots[k].base; return true; }
+        return false;
+    }
     static void RestoreRun(RestoreSlot* slots, int cap, const char* tag) {
         int n = 0;
         for (int k = 0; k < cap; ++k) {
@@ -3004,6 +3017,37 @@ namespace Mono {
             slots[k].key = nullptr;
         }
         if (n > 0) Log::Infof("[RESTORE] %s: %d valores originais.", tag, n);
+    }
+    static void RestorePushI(RestoreSlotI* slots, int cap, void* key, int off, int base) {
+        if (!key || off < 0) return;
+        for (int k = 0; k < cap; ++k) {
+            if (slots[k].key == key && slots[k].off == off) return;
+            if (!slots[k].key) { slots[k].key = key; slots[k].off = off; slots[k].base = base; return; }
+        }
+    }
+    static void RestoreRunI(RestoreSlotI* slots, int cap, const char* tag) {
+        int restored = 0;
+        for (int k = 0; k < cap; ++k) {
+            if (!slots[k].key) continue;
+            int current = ReadI(slots[k].key, slots[k].off, INT_MIN);
+            if (current != INT_MIN && current != slots[k].base && WriteI(slots[k].key, slots[k].off, slots[k].base)) ++restored;
+            slots[k].key = nullptr;
+        }
+        if (restored) Log::Infof("[RESTORE] %s: %d valores originais.", tag, restored);
+    }
+    static bool ApplyScaled(RestoreSlot* slots, int cap, void* object, int offset,
+                            float multiplier, float low, float high) {
+        if (!object || offset < 0 || !(multiplier >= 1.0f && multiplier <= 10.0f)) return false;
+        float base = 0.0f;
+        if (!RestoreBase(slots, cap, object, offset, base)) {
+            base = ReadF(object, offset, 3.4028235e38f);
+            if (!(base > low && base < high)) return false;
+            RestorePush(slots, cap, object, offset, base);
+        }
+        float wanted = 0.0f;
+        if (!ModifierMath::Scale(base, multiplier, low, high, wanted)) return false;
+        const float current = ReadF(object, offset, 3.4028235e38f);
+        return current == wanted || WriteF(object, offset, wanted);
     }
 
     // Arma (No Recoil/Spread/Sway + Rapid Fire): escreve nos DADOS de TODAS
@@ -3021,13 +3065,16 @@ namespace Mono {
             || Config::bTightAim || Config::bRapidFire;
         // Restore ANTES do early-return (auditoria 21/09: desligar tudo era
         // inalcanÃ§avel). Cada restore roda com sua flag desligada.
-        if (!Config::bRapidFire) { RestoreRun(s_rsRof, 16, "rof"); RestoreRunB(s_rsFull, 16, "fullauto"); }
+        if (!Config::bRapidFire) {
+            RestoreRun(s_rsRof, 16, "rof");
+            RestoreRunB(s_rsFull, 16, "fullauto");
+            RestoreRunI(s_rsBurst, 16, "burst");
+        }
         if (!Config::bTightAim) RestoreRun(s_rsAim, 4, "aim");
         if (!Config::bNoSway) { RestoreRun(s_rsSway, 4, "sway"); SwayBaseOkReset(); }
         if (!Config::bNoRecoil && !Config::bTightAim) RestoreRun(s_rsRecoil, 16, "recoil");
         if (!Config::bNoSpread && !Config::bTightAim) RestoreRun(s_rsSpread, 16, "spread");
         if (!Config::bFastKnife) RestoreRun(s_rsDur, 64, "knife");
-        if (!Config::bSuperJump) RestoreRun(s_rsJump, 4, "jump");
         if (!want) return;
         // Resolve preguiÃ§oso 1x (offsets via API; singleton via vtable).
         static int oAmmoId = -2, oMax = -2, oSpread = -2, oRof = -2;
@@ -3171,7 +3218,10 @@ namespace Mono {
                     }
                     if (oBurst >= 0) {
                         int bc = ReadI(db, oBurst, -1);
-                        if (bc != 0 && bc >= 0 && bc < 100) WriteI(db, oBurst, 0);
+                        if (bc >= 0 && bc < 100) {
+                            RestorePushI(s_rsBurst, 16, db, oBurst, bc);
+                            if (bc != 0) WriteI(db, oBurst, 0);
+                        }
                     }
                 } else {
                     RestoreRunB(s_rsFull, 16, "fullauto");
@@ -3181,60 +3231,10 @@ namespace Mono {
                 // + restore ao desligar (volta ao rof original).
                 if (Config::bRapidFire && oRof >= 0) {
                     float cur = ReadF(db, oRof, -1.0f);
-                    static void* s_rofDb[16] = { nullptr };
-                    static float s_rofBase[16] = { 0 };
-                    int slot = -1, freeSlot = -1;
-                    for (int k = 0; k < 16; ++k) {
-                        if (s_rofDb[k] == db) { slot = k; break; }
-                        if (freeSlot < 0 && !s_rofDb[k]) freeSlot = k;
-                    }
-                    if (slot < 0 && cur > 0.0f && cur < 1000.0f && freeSlot >= 0) {
-                        slot = freeSlot;
-                        s_rofDb[slot] = db;
-                        s_rofBase[slot] = cur;
-                        RestorePush(s_rsRof, 16, db, oRof, cur);
-                    }
-                    if (slot >= 0 && s_rofBase[slot] > 0.0f) {
-                        float want = s_rofBase[slot] * mult;
-                        if (want > 0.0f && want < 5000.0f && cur != want)
-                            WriteF(db, oRof, want);
-                    }
+                    if (cur > 0.0f && cur < 1000.0f)
+                        ApplyScaled(s_rsRof, 16, db, oRof, mult, 0.0f, 5000.0f);
                 }
             });
-            // Rapid Fire universal (parte 2): Cooldown zerado na prop atual.
-            // Defeito 10: resolve 1x (static) â€” antes pFieldFrom+pMethodFrom
-            // todo ciclo a 30Hz (custo + risco de hang).
-            if (Config::bRapidFire && cArms && cPlayer) {
-                static int oCd = -2, oArmsEq = -2;
-                static MonoClassField* fCd = nullptr;
-                static MonoClassField* fArmsEq = nullptr;
-                static MonoMethod* s_mEqG = nullptr;
-                if (oCd == -2) {
-                    oCd = -1; oArmsEq = -1;
-                    MonoClass* cPG = nullptr;
-                    if (ResolveClass("PhysicalGun", cPG) && cPG) {
-                        fCd = pFieldFrom(cPG, "<Cooldown>k__BackingField");
-                        if (!fCd) fCd = pFieldFrom(cPG, "Cooldown");
-                        oCd = FieldOff(fCd);
-                    }
-                    fArmsEq = pFieldFrom(cPlayer, "arms");
-                    oArmsEq = FieldOff(fArmsEq);
-                    s_mEqG = pMethodFrom(cArms, "get_EquippedGun", 0);
-                }
-                if (oCd >= 0 && oArmsEq >= 0 && s_mEqG) {
-                    void* arms = ReadP(local, oArmsEq);
-                    if (arms) {
-                        void* gun = InvokeObj(s_mEqG, arms, nullptr);
-                        if (gun) {
-                            float cd = ReadF(gun, oCd, -99.0f);
-                            // Cooldown>0 = esperando: libera (ResetCooldown
-                            // grava -0.001 no jogo; aqui direto = igual).
-                            if (cd > 0.0f && cd < 100.0f)
-                                WriteF(gun, oCd, -0.001f);
-                        }
-                    }
-                }
-            }
             // Restore central ao desligar: Rapid Fire e Fast Knife voltam ao
             // original assim que a flag cai (o bloco de cada um so roda
             // ligado; aqui roda sempre p/ detectar a borda de descida).
@@ -3341,92 +3341,60 @@ namespace Mono {
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 
-    static bool s_moveOk = true;
     static bool s_moveLogged = false;
     static void ApplyMove(void* local) {
         if (!local) return;
-        bool want = Config::bSuperJump || Config::bFastKnife;
-        if (!want || !s_moveOk) return;
-        static int oMove = -2, oJump = -2, oDur = -2;
+        bool want = Config::bSpeedHack || Config::bSuperJump || Config::bRollSpeed || Config::bFastKnife;
+        if (!Config::bSpeedHack) RestoreRun(s_rsWalk, 2, "walk speed");
+        if (!Config::bSuperJump) RestoreRun(s_rsJump, 2, "jump");
+        if (!Config::bRollSpeed) RestoreRun(s_rsRoll, 2, "roll speed");
+        if (!want) return;
+        static int oMove = -2, oWalk = -2, oJump = -2, oFall = -2, oRoll = -2, oDur = -2;
         static MonoClassField* fMove = nullptr;
         if (oJump == -2) {
-            oJump = -1; oMove = -1; oDur = -1;
+            oMove = oWalk = oJump = oFall = oRoll = oDur = -1;
             if (cPlayer) fMove = pFieldFrom(cPlayer, "movement");
             oMove = FieldOff(fMove);
+            if (cMove) {
+                oWalk = FieldOff(pFieldFrom(cMove, "walkSpeed"));
+                oFall = FieldOff(pFieldFrom(cMove, "fallDamageThreshold"));
+                oRoll = FieldOff(pFieldFrom(cMove, "rollSpeed"));
+            }
             oJump = FieldOff(fMoveJump);
             oDur = FieldOff(fAtkDur);
             if (!s_moveLogged) {
                 s_moveLogged = true;
-                Log::Infof("[MOVE] offs move=%d jump=%d dur=%d", oMove, oJump, oDur);
-            }
-            if ((Config::bSuperJump && (oMove < 0 || oJump < 0)) ||
-                (Config::bFastKnife && oDur < 0)) {
-                Log::Warn("[MOVE] cadeia incompleta â€” movimento desativado (sem crash).");
-                s_moveOk = false;
-                return;
+                Log::Infof("[MOVE] offs move=%d walk=%d jump=%d fall=%d roll=%d dur=%d",
+                    oMove, oWalk, oJump, oFall, oRoll, oDur);
             }
         }
         __try {
-            // Super Pulo: jumpSpeed x fJumpMult (guarda base 1x + restore).
-            // Teto 10x (slider). Altura fisica = vÂ²/2g: jumpSpeed 6â†’60 =
-            // ~10x a altura (nao linear). Anti-podador: LimitVerticalVelocity
-            // corta em -fallDamageThreshold â€” sobe o threshold junto (guarda
-            // base + restore). Sem isso 10x nunca voa (bug 19/09).
-            // FIX 19/09 (pulo fraco mesmo no max): o write FALHAVA silencioso
-            // porque cur==want na comparacao (float ja arredondado) â€” agora
-            // reescreve se |cur-want|>0.01. E loga 1x o estado real.
-            if (Config::bSuperJump && oMove >= 0 && oJump >= 0) {
-                void* mv = ReadP(local, oMove);
-                if (mv) {
-                    float mult = Config::fJumpMult;
-                    if (!(mult >= 1.0f && mult <= 10.0f)) mult = 1.5f;
-                    static float s_jumpBase = -1.0f;
-                    static float s_fallBase = -1.0f;
-                    static int oFall = -2;
-                    if (oFall == -2) {
-                        oFall = -1;
-                        if (cMove) {
-                            MonoClassField* ff = pFieldFrom(cMove, "fallDamageThreshold");
-                            oFall = FieldOff(ff);
-                        }
-                        Log::Infof("[JUMP] offs fall=%d", oFall);
-                    }
-                    float cur = ReadF(mv, oJump, -1.0f);
-                    if (s_jumpBase < 0.0f && cur > 0.0f && cur < 100.0f) {
-                        s_jumpBase = cur;
-                        RestorePush(s_rsJump, 4, mv, oJump, cur);
-                        Log::Infof("[JUMP] base=%.2f mult=%.1f want=%.2f", (double)cur, (double)mult, (double)(cur * mult));
-                    }
-                    if (s_jumpBase > 0.0f) {
-                        float want = s_jumpBase * mult;
-                        float d = cur - want; if (d < 0) d = -d;
-                        if (want > 0.0f && want < 1000.0f && d > 0.01f) {
-                            if (WriteF(mv, oJump, want)) {
-                                static int s_jumpLogged = 0;
-                                if (s_jumpLogged < 2) {
-                                    s_jumpLogged++;
-                                    Log::Infof("[JUMP] aplicado want=%.2f (cur era %.2f).", (double)want, (double)cur);
-                                }
-                            }
-                        }
-                    }
-                    // Anti-podador: threshold acompanha o mult (queda de 100m
-                    // continua sem dano de queda â€” bonus, nao custo).
-                    if (oFall >= 0) {
-                        float fc = ReadF(mv, oFall, -1.0f);
-                        if (s_fallBase < 0.0f && fc > 0.0f && fc < 1000.0f) {
-                            s_fallBase = fc;
-                            RestorePush(s_rsJump, 4, mv, oFall, fc);
-                        }
-                        if (s_fallBase > 0.0f) {
-                            float fw = s_fallBase * mult;
-                            if (fw > 0.0f && fw < 10000.0f && fc != fw)
-                                WriteF(mv, oFall, fw);
-                        }
+            void* mv = oMove >= 0 ? ReadP(local, oMove) : nullptr;
+            if (mv) {
+                float speed = Config::fSpeedMult;
+                if (!(speed >= 1.0f && speed <= 5.0f)) speed = 1.0f;
+                float jump = Config::fJumpMult;
+                if (!(jump >= 1.0f && jump <= 10.0f)) jump = 1.0f;
+                float roll = Config::fRollMult;
+                if (!(roll >= 1.0f && roll <= 5.0f)) roll = 1.0f;
+                if (Config::bSpeedHack && !ApplyScaled(s_rsWalk, 2, mv, oWalk, speed, 0.0f, 100.0f)) {
+                    static bool warned = false;
+                    if (!warned) { warned = true; Log::Warn("[MOVE] walkSpeed nao aplicado."); }
+                }
+                if (Config::bSuperJump) {
+                    bool jumpOk = ApplyScaled(s_rsJump, 2, mv, oJump, jump, 0.0f, 100.0f);
+                    // fallDamageThreshold is negative in this game (-10 live); a larger
+                    // multiplier must make it more negative, preserving the no-fall margin.
+                    bool fallOk = ApplyScaled(s_rsJump, 2, mv, oFall, jump, -1000.0f, 0.0f);
+                    if (!jumpOk || !fallOk) {
+                        static bool warned = false;
+                        if (!warned) { warned = true; Log::Warn("[JUMP] campos nao aplicados."); }
                     }
                 }
-            } else if (!Config::bSuperJump) {
-                RestoreRun(s_rsJump, 4, "jump");
+                if (Config::bRollSpeed && !ApplyScaled(s_rsRoll, 2, mv, oRoll, roll, 0.0f, 100.0f)) {
+                    static bool warned = false;
+                    if (!warned) { warned = true; Log::Warn("[MOVE] rollSpeed nao aplicado."); }
+                }
             }
             // Fast Knife: TODA arma branca via base global (pa, pa, facao,
             // faca, taco, cano). Caminho: MeleeAttackBase.Instance.AllAttacks

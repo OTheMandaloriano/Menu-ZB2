@@ -35,7 +35,7 @@ if not compiler and os.name == 'nt':
 if not compiler:
     raise SystemExit('Install g++ or the Visual Studio C++ build tools.')
 records = []
-names = ['aim_tests', 'snapshot_tests']
+names = ['aim_tests', 'snapshot_tests', 'modifier_tests']
 if os.name == 'nt': names.append('runtime_gate_tests')
 for name in names:
     executable = output/(name + ('.exe' if os.name == 'nt' else ''))

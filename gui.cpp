@@ -1105,8 +1105,8 @@ namespace GUI {
                 ImGui::Checkbox("No Spread", &Config::bNoSpread);
                 ImGui::Checkbox("No Sway", &Config::bNoSway);
                 ImGui::Checkbox("Mira Fechada", &Config::bTightAim); Tip("Crosshair junto: tamanho minimo (visual) + spread zero (tiro).");
-                ImGui::Checkbox("Rapid Fire", &Config::bRapidFire);
-                ImGui::SliderFloat("Rapid Mult", &Config::fRapidMult, 1, 8, "%.1fx"); Tip("8x = minigun (pistola 1-tiro vira rajada).");
+                ImGui::Checkbox("Rapid Fire", &Config::bRapidFire); Tip("Aumenta a cadencia da arma e permite segurar o disparo. Mantem cooldown e municao do jogo.");
+                ImGui::SliderFloat("Rapid Mult", &Config::fRapidMult, 1, 5, "%.1fx"); Tip("Multiplicador de cadencia. Valores maiores exigem mais do jogo e da arma.");
                 ImGui::Checkbox("Fast Knife", &Config::bFastKnife); Tip("Arma branca rapida: pa, pa, facao, faca, taco (Duration curto).");
                 ImGui::SliderFloat("Knife Mult", &Config::fKnifeMult, 1, 5, "%.1fx");
                 ImGui::Checkbox("Instant Reload", &Config::bInstantReload); Tip("Recarga instantanea: completa o pente na hora (sem animacao). Single/host. Como cliente use a recarga normal (R).");
@@ -1127,11 +1127,11 @@ namespace GUI {
                 ImGui::SameLine(); if (ImGui::Button("Add to Inventory")) {}
                 ImGui::Separator();
                 ImGui::Text("Movement");
-                ImGui::Checkbox("Speed Hack", &Config::bSpeedHack);
-                ImGui::SliderFloat("Speed Mult", &Config::fSpeedMult, 1, 5, "%.1fx");
-                ImGui::Checkbox("Super Jump", &Config::bSuperJump);
-                ImGui::SliderFloat("Jump Mult", &Config::fJumpMult, 1, 10, "%.1fx");
-                ImGui::Checkbox("Roll Speed", &Config::bRollSpeed);
+                ImGui::Checkbox("Speed Hack", &Config::bSpeedHack); Tip("Multiplica a velocidade horizontal de caminhada e corrida.");
+                ImGui::SliderFloat("Speed Mult", &Config::fSpeedMult, 1, 5, "%.1fx"); Tip("1x restaura a velocidade normal.");
+                ImGui::Checkbox("Super Jump", &Config::bSuperJump); Tip("Multiplica impulso do salto e ajusta o limite de dano por queda.");
+                ImGui::SliderFloat("Jump Mult", &Config::fJumpMult, 1, 10, "%.1fx"); Tip("Comece em 2x ou 3x; altura cresce mais rápido que a sensação visual.");
+                ImGui::Checkbox("Roll Speed", &Config::bRollSpeed); Tip("Multiplica apenas o deslocamento durante a esquiva.");
                 ImGui::SliderFloat("Roll Mult", &Config::fRollMult, 1, 5, "%.1fx");
                 ImGui::EndTabItem();
             }
