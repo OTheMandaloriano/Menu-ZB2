@@ -69,7 +69,7 @@ static bool LoadAimBridge() {
         s_modifierApply = pMethodFrom(modifiers, "Apply", 7);
         s_modifierReset = pMethodFrom(modifiers, "Reset", 0);
         s_modifierError = pMethodFrom(modifiers, "LastError", 0);
-        s_worldCollect = pMethodFrom(world, "Collect", 4);
+        s_worldCollect = pMethodFrom(world, "Collect", 5);
         s_worldError = pMethodFrom(world, "LastError", 0);
         if (!s_modifierApply || !s_modifierReset || !s_worldCollect) return false;
         s_bridgeStart = pMethodFrom(bridge, "StartLoop", 1);

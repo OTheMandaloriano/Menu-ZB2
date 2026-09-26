@@ -27,7 +27,7 @@ static void BuildWorldEsp() {
     WorldSnapshot snapshot;
     void* buffer=snapshot.entries;
     int capacity=256;
-    void* args[]={&buffer,&capacity,&mask,&s_options.fItemRadius};
+    void* args[]={&buffer,&capacity,&mask,&s_options.fItemRadius,&s_options.fPoiRadius};
     MonoObject* exception=nullptr;
     auto result=pInvoke(s_worldCollect,nullptr,args,&exception);
     if(result && !exception) {

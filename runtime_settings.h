@@ -53,6 +53,7 @@ struct Values {
     decltype(Config::fEspDistance) fEspDistance = {};
     decltype(Config::fFovAngle) fFovAngle = {};
     decltype(Config::fItemRadius) fItemRadius = {};
+    decltype(Config::fPoiRadius) fPoiRadius = {};
     decltype(Config::fJumpMult) fJumpMult = {};
     decltype(Config::fKnifeMult) fKnifeMult = {};
     decltype(Config::fRapidMult) fRapidMult = {};
@@ -115,6 +116,7 @@ inline Values Capture(float width,float height) {
     values.fEspDistance=Config::fEspDistance;
     values.fFovAngle=Config::fFovAngle;
     values.fItemRadius=Config::fItemRadius;
+    values.fPoiRadius=Config::fPoiRadius;
     values.fJumpMult=Config::fJumpMult;
     values.fKnifeMult=Config::fKnifeMult;
     values.fRapidMult=Config::fRapidMult;

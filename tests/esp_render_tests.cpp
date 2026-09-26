@@ -1,5 +1,6 @@
 #include "../gui.cpp"
 #include <cstdlib>
+#include <fstream>
 namespace Log { const char* GetDir(){return ".";} void Infof(const char*,...){} }
 namespace Mono {
     static State state; static EspEntry entry; static WorldMarker marker; static int worldCount=0;
@@ -44,5 +45,15 @@ int main(){
     Config::bZombieDist=true;Check(Frame()>0,"dormant distance independent of box");
     Config::bZombieDist=false;Mono::distantCount=0;Mono::entry.onScreen=true;Mono::entry.dist=210;Config::bZombieBoxShow=true;
     Config::fEspDistance=200;Check(Frame()==0,"stale active snapshot filtered by new smaller limit");
+    Config::fItemRadius=35;Config::fPoiRadius=280;
+    Check(GUI::SaveConfig("independent-ranges-test"),"save separate radii");
+    Config::fItemRadius=80;Config::fPoiRadius=90;GUI::LoadConfig("independent-ranges-test");
+    Check(Config::fItemRadius==35 && Config::fPoiRadius==280,"preset restores distinct radii");
+    Config::fItemRadius=10;Check(Config::fPoiRadius==280,"item slider independent");
+    Config::fPoiRadius=20;Check(Config::fItemRadius==10,"POI slider independent");
+    Config::bZombieEsp=false;Mono::worldCount=1;Mono::marker.kind=10;Mono::marker.distance=100;
+    Config::bPoiEsp=Config::bPoiFire=true;
+    Check(Frame()==0,"reduced POI range filters stale marker immediately");
+    Config::fPoiRadius=150;Check(Frame()>0,"POI independent of short item range");
     ImGui::DestroyContext();std::printf("PASS: %d real ImGui overlay checks\n",checks);
 }

@@ -132,6 +132,7 @@ namespace Config {
     float colItemAmmo[4] = { 0.7f, 0.7f, 0.7f, 1 };
     float colItemSupply[4] = { 0.2f, 1, 0.4f, 1 };
     float fItemRadius = 150.0f;
+    float fPoiRadius = 150.0f;
 
     bool  bPoiEsp = true;
     bool  bPoiHeli = true;
@@ -666,7 +667,7 @@ namespace GUI {
         JB(bAllyEsp); JI(iAllyBox); JB(bAllyName); JB(bAllyDist); JB(bAllyHp);
         JB(bAllySkeleton); JB(bAllySnap); JB(bAllyHeadDot); JV(colAllyVis);
         JB(bChams); JV(colChamsVis); JV(colChamsInv); JB(bItemEsp); JB(bItemWeapons);
-        JB(bItemRare); JB(bItemAmmo); JB(bItemSupply); JV(colItem); JV(colItemRare); JV(colItemAmmo); JV(colItemSupply); JF(fItemRadius);
+        JB(bItemRare); JB(bItemAmmo); JB(bItemSupply); JV(colItem); JV(colItemRare); JV(colItemAmmo); JV(colItemSupply); JF(fItemRadius); JF(fPoiRadius);
         JB(bPoiEsp); JB(bPoiHeli); JB(bPoiBoss); JB(bPoiMission); JB(bPoiWave); JB(bPoiLootFix); JB(bPoiBench); JB(bPoiFire); JB(bPoiShop); JB(bPoiRespawn);
         JV(colPoiHeli); JV(colPoiBoss); JV(colPoiMission); JV(colPoiWave); JV(colPoiLootFix); JV(colPoiBench); JV(colPoiFire); JV(colPoiShop); JV(colPoiRespawn);
         JF(fNameX); JF(fNameY); JF(fDistX); JF(fDistY); JF(fHpX); JF(fHpY);
@@ -753,7 +754,7 @@ namespace GUI {
         LB(bAllyEsp); LI(iAllyBox); LB(bAllyName); LB(bAllyDist); LB(bAllyHp);
         LB(bAllySkeleton); LB(bAllySnap); LB(bAllyHeadDot); LV(colAllyVis);
         LB(bChams); LV(colChamsVis); LV(colChamsInv); LB(bItemEsp); LB(bItemWeapons);
-        LB(bItemRare); LB(bItemAmmo); LB(bItemSupply); LV(colItem); LV(colItemRare); LV(colItemAmmo); LV(colItemSupply); LF(fItemRadius);
+        LB(bItemRare); LB(bItemAmmo); LB(bItemSupply); LV(colItem); LV(colItemRare); LV(colItemAmmo); LV(colItemSupply); LF(fItemRadius); LF(fPoiRadius);
         LB(bPoiEsp); LB(bPoiHeli); LB(bPoiBoss); LB(bPoiMission); LB(bPoiWave); LB(bPoiLootFix); LB(bPoiBench); LB(bPoiFire); LB(bPoiShop); LB(bPoiRespawn);
         LV(colPoiHeli); LV(colPoiBoss); LV(colPoiMission); LV(colPoiWave); LV(colPoiLootFix); LV(colPoiBench); LV(colPoiFire); LV(colPoiShop); LV(colPoiRespawn);
         LF(fNameX); LF(fNameY); LF(fDistX); LF(fDistY); LF(fHpX); LF(fHpY);
@@ -868,6 +869,8 @@ namespace GUI {
             for(int i=0;i<count;++i) {
                 const auto& marker=markers[i];
                 if(marker.kind<0 || marker.kind>=13 || !enabled[marker.kind]) continue;
+                if(marker.kind<4 && marker.distance>Config::fItemRadius) continue;
+                if(marker.kind>=8 && marker.kind<=11 && marker.distance>Config::fPoiRadius) continue;
                 const float* color=colors[marker.kind];
                 ImU32 tint=ImGui::GetColorU32(ImVec4(color[0],color[1],color[2],color[3]));
                 ImVec2 position(marker.x*io.DisplaySize.x,marker.y*io.DisplaySize.y);
@@ -1272,7 +1275,7 @@ namespace GUI {
                         SwatchR("##PShop", Config::colPoiShop, "Dentro do raio (estatico).");
                         ImGui::Checkbox("Respawn", &Config::bPoiRespawn);
                         SwatchR("##PResp", Config::colPoiRespawn, "Respawn conhecido nesta partida.");
-                        ImGui::SliderFloat("Raio itens/pontos fixos", &Config::fItemRadius, 10, 500, "%.0fm");
+                        ImGui::SliderFloat("Raio pontos fixos", &Config::fPoiRadius, 10, 500, "%.0fm");
                         ImGui::Unindent();
                     }
                     ImGui::EndTable();

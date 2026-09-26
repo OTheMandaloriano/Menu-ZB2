@@ -34,7 +34,7 @@ class WorldTests {
     static int checks;
     static IntPtr buffer;
     static void Check(bool v,string label){if(!v)throw new Exception(label+" "+WorldEspBridge.LastError());++checks;}
-    static int Collect(int mask,float range=150,int cap=256){return WorldEspBridge.Collect(buffer,cap,mask,range);}
+    static int Collect(int mask,float range=150,int cap=256,float poiRange=150){return WorldEspBridge.Collect(buffer,cap,mask,range,poiRange);}
     static DroppedLoot Loot(float x,float z,DatabaseItem db,InventoryItem.ID id=InventoryItem.ID.Gun){var l=new DroppedLoot();l.item.db=db;l.item.id=id;l.transform.position=new UnityEngine.Vector3(x,0,z);return l;}
     static void Main(){
         buffer=Marshal.AllocHGlobal(112*256+16);
@@ -58,6 +58,12 @@ class WorldTests {
             Check(Collect(15,150,1)==1,"caller capacity honored");
             for(int i=0;i<300;++i)InterestPointController.instance.points.Add(new InterestPoint{type=InterestPoint.Type.Helicopter});
             Marshal.WriteInt32(buffer,112*256,1234567);Check(Collect(16)==256,"capacity bound");Check(Marshal.ReadInt32(buffer,112*256)==1234567,"no buffer overrun");
+            InterestPointController.instance.points.Clear();
+            InterestPointController.instance.points.Add(new InterestPoint{type=InterestPoint.Type.ZumbiePyre,pos3D=new UnityEngine.Vector3(0,0,100)});
+            Check(Collect(15|1024,11,256,150)==2,"short item radius keeps distant POI");
+            Check(Collect(15|1024,150,256,20)==4,"short POI radius keeps all items");
+            Check(Collect(15|1024,11,256,20)==1,"both radii independent");
+            Check(Collect(15|1024,150,256,150)==5,"both radii expanded");
             Check(WorldEspBridge.LastError()=="","no adapter error");
             Console.WriteLine(checks+" world ESP checks passed");
         } finally {Marshal.FreeHGlobal(buffer);}

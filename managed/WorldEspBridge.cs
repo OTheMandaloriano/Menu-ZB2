@@ -22,7 +22,7 @@ namespace Zb2Menu {
         static Camera camera;
         static Vector3 origin;
         static int mask;
-        static float radius;
+        static float radius, poiRadius;
         static string error="";
         public static string LastError() { return error; }
         // Kind bits: weapons, rare, ammo, supply, heli, boss, mission, wave,
@@ -30,7 +30,7 @@ namespace Zb2Menu {
         static void Add(int kind, string name, Vector3 position, bool limited) {
             if (kind < 0 || (mask & (1 << kind))==0) return;
             float distance=Vector3.Distance(origin,position);
-            if (float.IsNaN(distance) || float.IsInfinity(distance) || (limited && distance>radius)) return;
+            if (float.IsNaN(distance) || float.IsInfinity(distance) || (limited && distance>(kind<4 ? radius : poiRadius))) return;
             var screen=camera.WorldToViewportPoint(position);
             if (!(screen.z > .01f && screen.x>=0 && screen.x<=1 && screen.y>=0 && screen.y<=1)) return;
             var entry=new Marker {Kind=kind, X=screen.x, Y=1-screen.y, Distance=distance};
@@ -47,14 +47,15 @@ namespace Zb2Menu {
                 if(distance<result[farthest].Distance) result[farthest]=entry;
             }
         }
-        public static int Collect(IntPtr buffer, int capacity, int enabled, float range) {
+        public static int Collect(IntPtr buffer, int capacity, int enabled, float range, float pointRange) {
             result.Clear(); error="";
             if (buffer==IntPtr.Zero || capacity<=0 || enabled==0 || MainCamera.instance==null) return 0;
             camera=MainCamera.instance.cam;
             var player=PlayersController.instance == null ? null : PlayersController.instance.MyPlayer();
             if (camera==null || player==null || player.healthFast<=0) return 0;
             origin=player.transform.position; mask=enabled;
-            radius=float.IsNaN(range) || float.IsInfinity(range) ? 150 : Math.Max(10,Math.Min(500,range));
+            radius=ClampRadius(range);
+            poiRadius=ClampRadius(pointRange);
             try {
                 if ((mask & 15)!=0) Items();
                 if ((mask & 8176)!=0) Points();
@@ -62,6 +63,9 @@ namespace Zb2Menu {
             int count=Math.Min(capacity,result.Count), stride=Marshal.SizeOf(typeof(Marker));
             for(int i=0;i<count;++i) Marshal.StructureToPtr(result[i],IntPtr.Add(buffer,i*stride),false);
             return count;
+        }
+        static float ClampRadius(float value) {
+            return float.IsNaN(value) || float.IsInfinity(value) ? 150 : Math.Max(10,Math.Min(500,value));
         }
         static void Items() {
             var map=MapHash.instance;
