@@ -8,3 +8,6 @@ build/
 *.dll.old
 *.iobj
 *.pdb
+
+# Autosave vazio gerado pelo Cheat Engine durante diagnosticos
+ExceptionAutoSave_*.ct
