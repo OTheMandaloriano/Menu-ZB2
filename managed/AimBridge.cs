@@ -11,6 +11,10 @@ namespace Zb2Menu {
         const string PatchId = "zb2.menu.aim.v2";
         const int Silent = 1, AutoFire = 2, Trigger = 4;
         static readonly object Gate = new object();
+        static readonly object InstallationGate = new object();
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate void NativeUpdate();
+        static NativeUpdate nativeUpdate;
         [ThreadStatic] static RaycastHit[] hits;
         static Harmony harmony;
         static Request request;
@@ -29,16 +33,18 @@ namespace Zb2Menu {
         [DllImport("kernel32.dll")] static extern uint GetCurrentProcessId();
 
         public static bool Install() {
-            lock (Gate) {
+            lock (InstallationGate) {
                 if (harmony != null) return true;
                 var candidate = new Harmony(PatchId);
                 try {
                     var shoot = AccessTools.Method(typeof(PhysicalGun), "Shoot", new[] {
                         typeof(PlayerMain), typeof(int), typeof(ShotPath), typeof(bool), typeof(DatabaseGun) });
                     var input = AccessTools.Method(typeof(PlayerArms), "ReadFireInput", new[] { typeof(InventoryItem) });
-                    if (shoot == null || input == null) throw new MissingMethodException("Assinatura de disparo mudou.");
+                    var update = AccessTools.Method(typeof(ZBMain), "Update", Type.EmptyTypes);
+                    if (shoot == null || input == null || update == null) throw new MissingMethodException("Assinatura do jogo mudou.");
                     candidate.Patch(shoot, prefix: new HarmonyMethod(typeof(AimBridge), "BeforeShoot"));
                     candidate.Patch(input, postfix: new HarmonyMethod(typeof(AimBridge), "AfterFireInput"));
+                    candidate.Patch(update, postfix: new HarmonyMethod(typeof(AimBridge), "AfterGameUpdate"));
                     harmony = candidate;
                     return true;
                 } catch (Exception ex) {
@@ -61,7 +67,21 @@ namespace Zb2Menu {
         public static void Clear() { lock (Gate) request = new Request(); }
         public static void Shutdown() {
             Clear();
-            lock (Gate) { if (harmony != null) harmony.UnpatchAll(PatchId); harmony = null; }
+            lock (Gate) nativeUpdate = null;
+            lock (InstallationGate) { if (harmony != null) harmony.UnpatchAll(PatchId); harmony = null; }
+        }
+        public static bool StartLoop(IntPtr callback) {
+            if (callback == IntPtr.Zero || !Install()) return false;
+            var action = (NativeUpdate)Marshal.GetDelegateForFunctionPointer(callback, typeof(NativeUpdate));
+            lock (Gate) nativeUpdate = action;
+            return true;
+        }
+        static void AfterGameUpdate() {
+            NativeUpdate action;
+            lock (Gate) action = nativeUpdate;
+            if (action == null || Time.timeScale <= 0) return;
+            try { action(); }
+            catch (Exception ex) { lock (Gate) nativeUpdate = null; RecordFailure(ex); }
         }
         static bool Current(out Request state) {
             lock (Gate) state = request;

@@ -2,6 +2,7 @@
 static MonoMethod* s_bridgePublish = nullptr;
 static MonoMethod* s_bridgeClear = nullptr;
 static MonoMethod* s_bridgeStats = nullptr;
+static MonoMethod* s_bridgeStart = nullptr;
 static MonoMethod* s_bridgeVisible = nullptr;
 static long long s_bridgeRetryAt = 0;
 static bool LoadAimBridge() {
@@ -46,6 +47,8 @@ static bool LoadAimBridge() {
             }
             return false;
         }
+        s_bridgeStart = pMethodFrom(bridge, "StartLoop", 1);
+        if (!s_bridgeStart) return false;
         s_bridgePublish = publish; s_bridgeClear = clear;
         s_bridgeVisible = visible;
         s_bridgeStats = pMethodFrom(bridge, "Statistics", 0);

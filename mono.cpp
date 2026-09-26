@@ -1,6 +1,7 @@
 #include "aim_logic.h"
 #include "latest_snapshot.h"
 #include "mono.h"
+#include "runtime_gate.h"
 #include "config.h"
 #include "log.h"
 #include <Windows.h>
@@ -144,7 +145,6 @@ namespace Mono {
     static float s_vpW = 1920.0f, s_vpH = 1080.0f;
     static int s_ghostDead = 0;   // HP>0 mas isAlive=false (animacao de morte)
     static int s_ghostBad = 0;    // centro/pos nao-finito, absurdo ou origem
-    static void* s_lastEnts[128]; // snapshot anterior (log de transicoes P1)
     static int s_lastN = 0;
 
     static MonoDomain* s_dom = nullptr;
@@ -306,7 +306,7 @@ namespace Mono {
     static bool s_skelLogged = false; // diagnostico SKEL (1x: mascara + tela dos bracos)
     static bool s_handLogged = false; // diagnostico HAND (1x: ponta da mao em mundo)
     static bool s_handLogged2 = false; // diagnostico HAND2 (1x: maos vivas pos-fix)
-    static DWORD WINAPI EspThread(LPVOID); // forward (definida apos BuildEsp)
+    static DWORD WINAPI BootstrapThread(LPVOID); // forward (definida apos BuildEsp)
     static MonoClass* FindUnityClass(const char* name, MonoImage** image = nullptr);
     static MonoImage* UnityImageWithTransform(void); // imagem com UnityEngine.Transform
     static void ApplyMoney(); // forward (dinheiro infinito, worker)
@@ -324,6 +324,8 @@ namespace Mono {
     static void ItemsReport(void* local, int oInv, int oStorage, int oItems,
         int oStack, int oDbStack, int oId); // forward (relatorio Items, apos TopStacks)
     static void ItemsReportReset(); // forward (reset do relatorio ao desligar)
+    static void ResetRestoreCaches();
+    static bool HasPendingRestores();
     static void AmmoCachesClear(); // forward (limpa caches na troca de cena)
     static void ReadAll(); // forward (chamada na worker, fora do Present)
     static void AuditBones(); // forward (chamada na worker, fora do Present)
@@ -340,9 +342,13 @@ namespace Mono {
     // Each thread owns its buffer; publication never overwrites the reader.
     struct EntitySnapshot { EspEntry entries[128] = {}; int count = 0; };
     static LatestSnapshot<EntitySnapshot> s_entitySnapshot;
-    static bool s_csInit = false; // worker initialization state
+    static std::atomic<bool> s_bootstrapStarted{false};
+    static MonoThread* s_bootstrapMonoThread = nullptr;
+    static LatestSnapshot<State> s_stateSnapshot;
+    static void __cdecl GameUpdate();
+    static void RunGameCycle();
+    static long long s_nextCycle = 0;
     static void ClearEntitySnapshot() { s_entitySnapshot.Publish(EntitySnapshot{}); }
-    static HANDLE s_espThread = nullptr;
     static std::atomic<bool> s_espRun{false};
     static float s_dbgEyeY = 0, s_dbgFootY = 0; // medida real p/ calibrar a box
 
@@ -608,7 +614,7 @@ namespace Mono {
             if (!ok) { Log::Error("Mono bind incompleto."); return false; }
             s_dom = pGetRoot();
             if (!s_dom) return false;
-            pAttach(s_dom);
+            s_bootstrapMonoThread = pAttach(s_dom);
             s_bound = true;
             Log::Info("Mono bind OK (10 funcoes), thread anexada.");
         }
@@ -777,12 +783,6 @@ namespace Mono {
 
         s.ready = (cDay && cPlayer && cZombie && cZLoader && cPlayers
             && fDayInst && fZLInst && fPCInst && mHasLocal);
-        if (s.ready && !s_csInit) {
-            s_csInit = true;
-            s_espRun = true;
-            s_espThread = CreateThread(nullptr, 0, EspThread, nullptr, 0, nullptr);
-            Log::Infof("Worker ESP %s.", s_espThread ? "criada" : "FALHOU");
-        }
         if (s.ready && !s_logged) {
             s_logged = true;
             Log::Infof("Mono resolve OK: %d classes, %d campos, %d metodos.",
@@ -1306,7 +1306,9 @@ namespace Mono {
         MonoClassField* fZL = pFieldFrom(cZLoader, "Instance");
         if (!fZL || !StaticInstance(cZLoader, fZL, zl)) { ClearEntitySnapshot(); return; }
         void* list = ReadP(zl, Off::ZL_zombies);
+        const long long gatherDeadline = PiNow() + 6000;
         WalkList(list, 512, [&](void* e, int) {
+            if (PiNow() >= gatherDeadline) return;
             void* h = ReadP(e, Off::Z_health);
             if (!h) return;
             float hp = ReadF(h, Off::ZH_amount);
@@ -1534,24 +1536,7 @@ namespace Mono {
             Log::Infof("[BUDGET] ciclo invocacoes=%s entidades=%d.", bb, n);
         }
         {
-            int logged = 0;
-            for (int i = 0; i < n && logged < 6; ++i) {
-                bool known = false;
-                for (int j = 0; j < s_lastN; ++j) if (s_lastEnts[j] == tmp[i].ent) { known = true; break; }
-                if (!known) {
-                    Log::Infof("[ESP+] ent=0x%p nome=%s hp=%.0f/%.0f dist=%.1f ext=(%.2f,%.2f,%.2f)",
-                        tmp[i].ent, tmp[i].name, (double)tmp[i].hp, (double)tmp[i].maxHp,
-                        (double)tmp[i].dist, (double)tmp[i].ex, (double)tmp[i].ey, (double)tmp[i].ez);
-                    logged++;
-                }
-            }
-            for (int j = 0; j < s_lastN && logged < 8; ++j) {
-                bool gone = true;
-                for (int i = 0; i < n; ++i) if (tmp[i].ent == s_lastEnts[j]) { gone = false; break; }
-                if (gone) { Log::Infof("[ESP-] ent=0x%p", s_lastEnts[j]); logged++; }
-            }
             s_lastN = n > 128 ? 128 : n;
-            for (int i = 0; i < s_lastN; ++i) s_lastEnts[i] = tmp[i].ent;
             EntitySnapshot snapshot;
             snapshot.count = s_lastN;
             s.espShown = snapshot.count;
@@ -1639,12 +1624,21 @@ namespace Mono {
             return false;
         } __except (EXCEPTION_EXECUTE_HANDLER) { return true; }
     }
-    static DWORD WINAPI EspThread(LPVOID) {
-        pAttach(s_dom); // worker precisa do proprio attach no Mono
-        Log::Info("Thread ESP iniciada (30Hz, fora do Present).");
+    static void RunGameCycle() {
+        if (!s.ready || !SceneAlive()) {
+            ClearEntitySnapshot(); ResetAim(); AmmoCachesClear();
+            s.inMap = false; s_camWok = false;
+            s_nextCycle = PiNow() + 500000;
+            return;
+        }
+        if (MapSettling()) {
+            ClearEntitySnapshot(); ResetAim();
+            s_nextCycle = PiNow() + 500000;
+            return;
+        }
         static int s_deadN = 0;
         static int s_defN = 0; // contador p/ defesa rapida (God/Stamina todo ciclo)
-        while (s_espRun) {
+        {
             // Defesa rapida: God/Stamina rodam TODO ciclo (~33ms), com ou sem
             // ESP ligado. Leitura barata (1 lista curta + 2 floats); escrita so
             // se a flag ligada E o valor caiu (custo zero no estado estavel).
@@ -1655,7 +1649,7 @@ namespace Mono {
             // mas o player nao existe ainda. Sem gate = invoke em objeto nulo =
             // hang/crash reportado pelo operador.
             void* aimLocal = nullptr;
-            bool wantDef = s.ready && (Config::bGodMode || Config::bInfStamina || Config::bInfAmmo || Config::bInfItems || Config::bInfMoney || Config::bUnlockSlots || Config::bUnlockLoadout || Config::bNoRecoil || Config::bNoSpread || Config::bNoSway || Config::bTightAim || Config::bRapidFire || Config::bSuperJump || Config::bFastKnife || Config::bInstantReload || AimRequested());
+            bool wantDef = s.ready && (HasPendingRestores() || Config::bGodMode || Config::bInfStamina || Config::bInfAmmo || Config::bInfItems || Config::bInfMoney || Config::bUnlockSlots || Config::bUnlockLoadout || Config::bNoRecoil || Config::bNoSpread || Config::bNoSway || Config::bTightAim || Config::bRapidFire || Config::bSuperJump || Config::bFastKnife || Config::bInstantReload || AimRequested());
             if (wantDef && SceneAlive()) {
                 // Modo real via MultiplayerController (throttle 2s, SEH).
                 // coopMode: 0=LOBBY 1=SINGLE 2=CLIENTE 3=HOST.
@@ -1709,21 +1703,21 @@ namespace Mono {
                     if (nPl != s_lastNPl) {
                         if (s_lastNPl >= 0) {
                             Log::Infof("[COOP] transicao %d->%d players: aguardando cena.", s_lastNPl, nPl);
-                            for (int w = 0; w < 20; ++w) {
-                                Sleep(100);
-                                if (SceneAlive()) break;
-                            }
-                            // TROCA DE CENA (19/09): ponteiros de item morrem no
-                            // GC/remontagem. Limpa caches p/ nao ler/escrever
-                            // lixo (era o crash ao trocar de arma/equipar).
-                            // Via setter (declarados depois; forward abaixo).
+                            s_nextCycle = PiNow() + 500000;
                             AmmoCachesClear();
-                            Log::Info("[AMMO] caches limpos (troca de cena).");
+                            ClearEntitySnapshot(); ResetAim();
+                            s_lastNPl = nPl;
+                            return;
                         }
                         s_lastNPl = nPl;
                     }
                 }
                 s.inMap = inMap;
+                static void* previousLocal = nullptr;
+                if (previousLocal != localEnt) {
+                    AmmoCachesClear();
+                    previousLocal = localEnt;
+                }
                 // Funcoes de escrita SO dentro do mapa (gate).
                 if (inMap && localEnt) {
                     bool coop = (s.coopMode == 2); // CLIENTE
@@ -1746,21 +1740,13 @@ namespace Mono {
                 if (!SceneAlive()) {
                     // Cena morta/trocando (respawn): zera o snapshot e espera.
                     // TryEnter: se o Present estiver lendo, pula em vez de travar.
-                    ClearEntitySnapshot(); s_lastN = 0;
+                    ClearEntitySnapshot(); s_lastN = 0; AmmoCachesClear();
                     if (++s_deadN == 1) Log::Warn("[SCENE] loader morto â€” worker em espera (respawn?).");
                     ResetAim(); s_camWok = false;
-                    Sleep(500);
-                    continue;
+                    s_nextCycle = PiNow() + 500000;
+                    return;
                 }
                 if (s_deadN > 0) { s_deadN = 0; Log::Info("[SCENE] loader vivo â€” worker retomada."); }
-                if (MapSettling()) {
-                    // Mapa gerando celulas: zero invoke neste ciclo.
-                    ClearEntitySnapshot();
-                    Log::Warn("[SCENE] mapa assentando â€” ciclo pulado (LOD gerando).");
-                    ResetAim(); s_camWok = false;
-                    Sleep(500);
-                    continue;
-                }
                 // AUDITORIA 16/09 (hang 02:44, PERF 1438ms): BuildEsp inteiro
                 // rodava no MESMO ciclo. Com 86 zumbis, o ciclo estourava 1.4s
                 // e o ritmo adaptativo so reagia DEPOIS.
@@ -1788,9 +1774,7 @@ namespace Mono {
                 }
             }
             else { ClearEntitySnapshot(); ResetAim(); s_camWok = false; }
-            Sleep(s_sleepMs);
         }
-        return 0;
     }
 
     // ========================================================================
@@ -1837,6 +1821,7 @@ namespace Mono {
     static int s_pileTries[8] = { 0,0,0,0,0,0,0,0 };
     // Limpa caches de item/db/ammoID (troca de cena: ponteiros morrem no GC).
     static void AmmoCachesClear() {
+        ResetRestoreCaches();
         for (int k = 0; k < 64; ++k) {
             s_dbCache[k].item = nullptr;
             s_dbCache[k].db = nullptr;
@@ -2960,6 +2945,25 @@ namespace Mono {
     // Guarda base bool (1 byte) p/ restore nao-destrutivo (defeito 7).
     struct RestoreSlotB { void* key; int off; unsigned char base; };
     static RestoreSlotB s_rsFull[16];
+    static void ResetRestoreCaches() {
+        memset(s_rsJump,0,sizeof(s_rsJump)); memset(s_rsRof,0,sizeof(s_rsRof));
+        memset(s_rsDur,0,sizeof(s_rsDur)); memset(s_rsAim,0,sizeof(s_rsAim));
+        memset(s_rsSway,0,sizeof(s_rsSway)); memset(s_rsRecoil,0,sizeof(s_rsRecoil));
+        memset(s_rsSpread,0,sizeof(s_rsSpread)); memset(s_rsFull,0,sizeof(s_rsFull));
+        s_swayWas = false; s_swayBaseOk = false;
+    }
+    static bool HasPendingRestores() {
+        for (auto& v:s_rsJump) if(v.key)return true;
+        for (auto& v:s_rsRof) if(v.key)return true;
+        for (auto& v:s_rsDur) if(v.key)return true;
+        for (auto& v:s_rsAim) if(v.key)return true;
+        for (auto& v:s_rsSway) if(v.key)return true;
+        for (auto& v:s_rsRecoil) if(v.key)return true;
+        for (auto& v:s_rsSpread) if(v.key)return true;
+        for (auto& v:s_rsFull) if(v.key)return true;
+        return false;
+    }
+
     static void RestorePushB(RestoreSlotB* slots, int cap, void* key, int off, unsigned char base) {
         if (!key || off < 0) return;
         for (int k = 0; k < cap; ++k) {
@@ -3696,7 +3700,9 @@ namespace Mono {
             int total = ReadI(zl, Off::ZL_totalReal, -1);
             void* list = ReadP(zl, Off::ZL_zombies);
             int alive = 0;
-            WalkList(list, 512, [&](void* e, int) {
+            const long long gatherDeadline = PiNow() + 6000;
+        WalkList(list, 512, [&](void* e, int) {
+            if (PiNow() >= gatherDeadline) return;
                 void* h = ReadP(e, Off::Z_health);
                 if (!h) return;
                 float hp = ReadF(h, Off::ZH_amount);
@@ -3858,7 +3864,9 @@ namespace Mono {
         void* list = ReadP(zl, Off::ZL_zombies);
         if (!list) return;
         bool done = false;
+        const long long gatherDeadline = PiNow() + 6000;
         WalkList(list, 512, [&](void* e, int) {
+            if (PiNow() >= gatherDeadline) return;
             if (done) return;
             void* h = ReadP(e, Off::Z_health);
             if (!h) return;
@@ -3895,14 +3903,58 @@ namespace Mono {
         if (done) { s_boneLogged = true; Log::Info("[BONE] auditoria concluida."); }
     }
 
-    void Tick() {
-        // Present NUNCA invoca â€” so copia snapshot (Get/GetEsp).
-        // ReadAll/AuditBones migraram p/ worker (EspThread, 1x/2s).
-        ++s_tick;
-        if (!s.ready && !Init()) return;
+    static void __cdecl GameUpdate() {
+        if (!s_espRun.load(std::memory_order_acquire)) return;
+        const long long now = PiNow();
+        if (now < s_nextCycle) return;
+        RuntimeGate::TryScope guard;
+        if (!guard) return;
+        s_nextCycle = now + 33000;
+        RunGameCycle();
+        s_stateSnapshot.Publish(s);
+        static long long nextHeartbeat = 0;
+        if (now >= nextHeartbeat) {
+            nextHeartbeat = now + 5000000;
+            Log::Infof("[RUNTIME] Unity Update tid=%lu ciclo=%.1fms entidades=%d", GetCurrentThreadId(), (PiNow()-now)/1000.0, s.espShown);
+        }
+        const long long elapsed = PiNow() - now;
+        if (elapsed > 25000) {
+            s_nextCycle = PiNow() + 100000;
+            static long long nextLog = 0;
+            if (now >= nextLog) { nextLog = now + 5000000; Log::Warnf("[RUNTIME] ciclo lento: %.1fms", elapsed/1000.0); }
+        }
     }
-
-    const State& Get() { return s; }
+    static DWORD WINAPI BootstrapThread(LPVOID) {
+        for (int attempt=0; attempt<100 && !Init(); ++attempt) Sleep(100);
+        bool installed = false;
+        if (s.ready && LoadAimBridge() && s_bridgeStart) {
+            HMODULE pinned = nullptr;
+            // Managed callbacks outlive FreeLibrary. Keep code mapped until process exit.
+            if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
+                reinterpret_cast<LPCWSTR>(&GameUpdate), &pinned)) {
+                void* callback = reinterpret_cast<void*>(&GameUpdate);
+                void* args[] = { &callback };
+                s_espRun.store(true, std::memory_order_release);
+                installed = InvokeAimBool(s_bridgeStart, nullptr, args, installed) && installed;
+            }
+        }
+        if (!installed) s_espRun.store(false, std::memory_order_release);
+        Log::Info(installed ? "[RUNTIME] callback Unity Update pronto; nenhuma worker acessa objetos do jogo."
+                            : "[RUNTIME] inicializacao falhou; funcionalidades suspensas.");
+        using Detach = void (__cdecl*)(MonoThread*);
+        auto detach = reinterpret_cast<Detach>(GetProcAddress(GetModuleHandleW(L"mono-2.0-bdwgc.dll"), "mono_thread_detach"));
+        if (detach && s_bootstrapMonoThread) detach(s_bootstrapMonoThread);
+        return 0;
+    }
+    void Tick() {
+        // Present only starts bootstrap; it never attaches to Mono or invokes Unity.
+        bool expected = false;
+        if (!s_bootstrapStarted.compare_exchange_strong(expected, true)) return;
+        HANDLE thread = CreateThread(nullptr, 0, BootstrapThread, nullptr, 0, nullptr);
+        if (thread) CloseHandle(thread);
+        else { s_bootstrapStarted = false; Log::Error("[RUNTIME] nao foi possivel iniciar bootstrap."); }
+    }
+    const State& Get() { return s_stateSnapshot.Read(); }
     int GetEsp(EspEntry* out, int max) {
         if (!out || max <= 0) return 0;
         const auto& snapshot = s_entitySnapshot.Read();
@@ -3911,12 +3963,9 @@ namespace Mono {
         return n;
     }
     void Shutdown() {
-        s_espRun = false;
-        if (s_espThread) { WaitForSingleObject(s_espThread, 1000); CloseHandle(s_espThread); s_espThread = nullptr; }
-        s_csInit = false;
-        s = State();
-        s_bound = false; s_logged = false;
-        s_dom = nullptr; s_img = nullptr;
+        // No waits and no synchronization object destruction under loader lock.
+        s_espRun.store(false, std::memory_order_release);
+
     }
 }
 

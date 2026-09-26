@@ -48,6 +48,9 @@ public class PlayerMain {
     public PlayerArms arms;
 }
 public class PlayerCamera { public Transform CameraTransform=new Transform(); }
+public class ZBMain {
+    [MethodImpl(MethodImplOptions.NoInlining)] public void Update() { }
+}
 public class PlayerArms {
     public PhysicalGun EquippedGun = new PhysicalGun();
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -95,6 +98,12 @@ static class ManagedAimTests {
         shot=new ShotPath(new Vector3(0,0,0),new Vector3(1,0,0),new Vector3(0,0,0),new Vector3(0,0,1));
         Check(AimBridge.Install(),"Harmony install: "+AimBridge.LastError());
         Check(AimBridge.Install(),"install is idempotent");
+        int callbacks = 0, callbackThread = 0;
+        AimBridge.NativeUpdate update = delegate { ++callbacks; callbackThread=System.Threading.Thread.CurrentThread.ManagedThreadId; };
+        Check(AimBridge.StartLoop(System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(update)),"register update callback");
+        var game = new ZBMain(); game.Update();
+        Check(callbacks==1 && callbackThread==System.Threading.Thread.CurrentThread.ManagedThreadId,"runtime callback executes on game update thread");
+        Time.timeScale=0;game.Update();Check(callbacks==1,"paused update does no game memory work");Time.timeScale=1;
         Physics.Results=new[]{new RaycastHit{collider=enemy,distance=4},new RaycastHit{collider=self,distance=.2f}};
         Publish(1);Fire();
         Check(gun.Last.convergingDirection.z == -1,"silent redirects real patched Shoot argument to rear enemy");
@@ -123,6 +132,8 @@ static class ManagedAimTests {
         gun.DbReference.gunClass=DatabaseGun.GunClass.ExplosivesLauncher;Publish(3);player.arms.ReadFireInput(new InventoryItem());Check(!gun.Signal,"explosives excluded");gun.DbReference.gunClass=DatabaseGun.GunClass.Normal;
         Publish(3);player.arms.ReadFireInput(new InventoryItem());Check(gun.Signal,"silent autofire can request shot without camera alignment");
         AimBridge.Shutdown();Publish(1);Fire();Check(gun.Last.convergingDirection.z==1,"shutdown removes owned patches");
+        game.Update();Check(callbacks==1,"shutdown disables native update callback");
+        GC.KeepAlive(update);
         Console.WriteLine("PASS: "+checks+" managed/Harmony regression checks; "+AimBridge.Statistics());
     }
 }

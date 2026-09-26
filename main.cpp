@@ -1,4 +1,5 @@
 #include "includes.h"
+#include "runtime_gate.h"
 
 // ============================================================================
 // MAIN.CPP - Ponto de entrada + hook D3D11 Present/ResizeBuffers (ZB2 Menu)
@@ -49,8 +50,8 @@ static void CleanupRenderTarget() {
 // ResizeBuffers: recria RTV (Alt+Tab / resize). Sem isso, tela preta/crash.
 static long __stdcall hkResizeBuffers(IDXGISwapChain* pSwapChain, UINT BufferCount,
     UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags) {
-    if (!g_bInit)
-        return oResizeBuffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
+    RuntimeGate::TryScope guard;
+    if (!guard || !g_bInit) { guard.Release(); return oResizeBuffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags); }
     CleanupRenderTarget();
     ImGui_ImplDX11_InvalidateDeviceObjects();
     long hr = oResizeBuffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
@@ -62,7 +63,10 @@ static long __stdcall hkResizeBuffers(IDXGISwapChain* pSwapChain, UINT BufferCou
 }
 
 static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Flags) {
-    if (Flags & DXGI_PRESENT_TEST) return oPresent(pSwapChain, SyncInterval, Flags); // teste oculto: nao desenha
+    RuntimeGate::TryScope guard;
+    auto forward = [&]() { guard.Release(); return oPresent(pSwapChain, SyncInterval, Flags); };
+    if (!guard) return forward();
+    if (Flags & DXGI_PRESENT_TEST) return forward(); // teste oculto: nao desenha
     // FIX crash-no-loading 21/09: durante o loading o Unity apresenta com
     // swapchain incompleta (backbuffer em transicao). Qualquer toque em D3D
     // aqui (GetDevice/CreateRenderTarget) = AV dentro do Present (stack:
@@ -79,12 +83,12 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
         if (SUCCEEDED(pSwapChain->GetDesc(&desc)) && desc.OutputWindow)
             hwnd = desc.OutputWindow;
         if (!hwnd) hwnd = GetProcessWindow();
-        if (!hwnd) return oPresent(pSwapChain, SyncInterval, Flags);
+        if (!hwnd) return forward();
         // Janela sem area = loading (splash Unity 6000.3.21f1): nao toca.
         {
             RECT cr = { 0 };
             if (!GetClientRect(hwnd, &cr) || (cr.right - cr.left) < 200 || (cr.bottom - cr.top) < 200)
-                return oPresent(pSwapChain, SyncInterval, Flags);
+                return forward();
         }
         // Troca de janela (loading -> partida recria swapchain): re-hook WndProc.
         if (hwnd != g_hWindow) {
@@ -102,7 +106,7 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
             oWndProc = (WNDPROC)SetWindowLongPtr(g_hWindow, GWL_WNDPROC_INDEX, (LONG_PTR)hkWndProc);
             Log::Info("WndProc hookado, menu operacional (INSERT/DELETE).");
         } else {
-            return oPresent(pSwapChain, SyncInterval, Flags);
+            return forward();
         }
     }
 
@@ -121,10 +125,16 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
     ImGui::Render();
 
     if (g_pContext && g_pRTV) {
+        ID3D11RenderTargetView* previous[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
+        ID3D11DepthStencilView* depth = nullptr;
+        g_pContext->OMGetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, previous, &depth);
         g_pContext->OMSetRenderTargets(1, &g_pRTV, nullptr);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+        g_pContext->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, previous, depth);
+        for (auto* target : previous) if (target) target->Release();
+        if (depth) depth->Release();
     }
-    return oPresent(pSwapChain, SyncInterval, Flags);
+    return forward();
 }
 
 // WndProc: INSERT/DELETE alterna; cursor fix devolve controle ao jogo fechado.
@@ -145,10 +155,13 @@ static void ApplyGameClip() {
 }
 
 static LRESULT CALLBACK hkWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    RuntimeGate::TryScope guard;
+    auto forward = [&]() { guard.Release(); return CallWindowProc(oWndProc, hWnd, uMsg, wParam, lParam); };
+    if (!guard) return forward();
     // Volta de ALT+TAB/foco: re-prende o cursor se o menu estiver fechado.
     if (uMsg == WM_ACTIVATE && LOWORD(wParam) != WA_INACTIVE && !Config::bMenuOpen && g_bInit) {
         ApplyGameClip();
-        return CallWindowProc(oWndProc, hWnd, uMsg, wParam, lParam);
+        return forward();
     }
     if (uMsg == WM_KEYDOWN && ((int)wParam == Config::iMenuKey || wParam == VK_DELETE)) {
         if (lParam & (1LL << 30)) return TRUE; // one toggle per physical press
@@ -177,7 +190,7 @@ static LRESULT CALLBACK hkWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
     }
     // Menu fechado (ou GUI ainda nao init): jogo processa tudo, sem tocar.
     if (!Config::bMenuOpen || !g_bInit)
-        return CallWindowProc(oWndProc, hWnd, uMsg, wParam, lParam);
+        return forward();
     if (ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam))
         return TRUE;
     {
@@ -187,7 +200,7 @@ static LRESULT CALLBACK hkWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         if (io.WantCaptureKeyboard && (uMsg == WM_KEYDOWN || uMsg == WM_KEYUP || uMsg == WM_CHAR))
             return TRUE;
     }
-    return CallWindowProc(oWndProc, hWnd, uMsg, wParam, lParam);
+    return forward();
 }
 
 static BOOL CALLBACK EnumWindowsCallback(HWND handle, LPARAM lParam) {
@@ -216,7 +229,7 @@ static HWND GetProcessWindow() {
 }
 
 static DWORD WINAPI MainThread(LPVOID lpReserved) {
-    (void)lpReserved;
+    Log::SetModule(static_cast<HMODULE>(lpReserved));
     Log::Info("==================================================");
     Log::Infof("Log ativo em: %s", Log::GetPath());
     Log::Info("MainThread iniciada.");
@@ -254,21 +267,14 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved) {
     (void)lpReserved;
     if (dwReason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hModule);
-        Log::SetModule(hModule);
-        CreateThread(nullptr, 0, MainThread, hModule, 0, nullptr);
+        HANDLE thread = CreateThread(nullptr, 0, MainThread, hModule, 0, nullptr);
+        if (thread) CloseHandle(thread);
     } else if (dwReason == DLL_PROCESS_DETACH) {
-        Log::Info("DLL_PROCESS_DETACH, liberando hooks...");
-        ClipCursor(nullptr);
-        if (oWndProc && g_hWindow)
-            SetWindowLongPtr(g_hWindow, GWL_WNDPROC_INDEX, (LONG_PTR)oWndProc);
-        CleanupRenderTarget();
-        if (g_pContext) { g_pContext->Release(); g_pContext = nullptr; }
-        if (g_pDevice) { g_pDevice->Release(); g_pDevice = nullptr; }
-        GUI::Shutdown();
-        kiero::shutdown();
-        Log::Info("Hooks liberados.");
-        Log::Shutdown();
+        Mono::Shutdown();
+        // Process termination owns reclamation. Do not wait, log or destroy GUI
+        // resources under the loader lock while callbacks may still be active.
     }
+
     return TRUE;
 }
 
