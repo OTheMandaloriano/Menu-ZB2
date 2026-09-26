@@ -3,7 +3,7 @@ static LatestSnapshot<DistantSnapshot> s_distantSnapshot;
 static void ClearDistantEsp() { s_distantSnapshot.Publish(DistantSnapshot{}); }
 static void ConfigureAimRange(bool enabled) {
     if (!s_rangeConfigure) return;
-    int active=enabled ? 1 : 0, circle=Config::b360Mode ? 1 : 0;
+    int active=enabled ? 1 : 0, circle=s_options.b360Mode ? 1 : 0;
     float distance=AimPolicy().distance, radius=AimPolicy().radius;
     void* args[]={&active,&distance,&circle,&radius,&s_vpW,&s_vpH};
     MonoObject* exception=nullptr;
@@ -16,10 +16,10 @@ static void ConfigureAimRange(bool enabled) {
     }
 }
 static void BuildDistantEsp() {
-    if(!Config::bZombieEsp || !s_rangeCollect) {ClearDistantEsp();return;}
+    if(!s_options.bZombieEsp || !s_rangeCollect) {ClearDistantEsp();return;}
     DistantSnapshot snapshot;
     void* buffer=snapshot.entries; int capacity=256;
-    float distance=Config::fEspDistance;
+    float distance=s_options.fEspDistance;
     void* args[]={&buffer,&capacity,&distance};
     MonoObject* exception=nullptr;
     auto result=pInvoke(s_rangeCollect,nullptr,args,&exception);
@@ -33,7 +33,7 @@ static void BuildDistantEsp() {
     if(PiNow()>=nextLog) {
         nextLog=PiNow()+5000000;
         Log::Infof("[DISTANCE] ESP=%.0fm AIM=%.0fm registros-distantes-visiveis=%d",
-            Config::fEspDistance,Config::fAimDistance,snapshot.count);
+            s_options.fEspDistance,s_options.fAimDistance,snapshot.count);
         MonoObject* error=nullptr;
         auto message=s_rangeError ? pInvoke(s_rangeError,nullptr,nullptr,&error) : nullptr;
         if(message && !error) {char* text=pStrUtf8(message);if(text){if(*text)Log::Warnf("[RANGE] %s",text);pFree(text);}}

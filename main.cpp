@@ -113,12 +113,14 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
     ImGui_ImplDX11_NewFrame();
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
-    Mono::SetViewport(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y);
 
-    Mono::Tick();          // reflection (Fase 2 item 5: bind + leitura viva)
+
+
     { static int s_clipTick = 0;
       if (!Config::bMenuOpen && g_bInit && (++s_clipTick % 120 == 0)) ApplyGameClip(); }
     GUI::Render();         // janela do menu (4 abas)
+    Mono::SetViewport(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y);
+    Mono::Tick(); // bootstrap only; never invokes Unity
     GUI::RenderOverlay();  // watermark/debug/FOV fora da janela
 
     ImGui::EndFrame();

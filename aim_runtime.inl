@@ -11,7 +11,7 @@ static bool s_aimForwardValid = false;
 static int s_visibilityCursor = 0;
 
 static bool AimRequested() {
-    return Config::bAimbot || Config::bAutoAim || Config::bSilentAim || Config::bAutoFire || Config::bTriggerbot;
+    return s_options.bAimbot || s_options.bAutoAim || s_options.bSilentAim || s_options.bAutoFire || s_options.bTriggerbot;
 }
 static void ResetAim() {
     s_aimCount = 0;
@@ -23,18 +23,18 @@ static void ResetAim() {
 }
 static Aim::Policy AimPolicy() {
     Aim::Policy policy;
-    policy.distance = Fin(Config::fAimDistance) ? Config::fAimDistance : 120.0f;
+    policy.distance = Fin(s_options.fAimDistance) ? s_options.fAimDistance : 120.0f;
     policy.distance = (std::max)(10.0f, (std::min)(500.0f, policy.distance));
-    policy.radius = Config::bLimitFov && !Config::b360Mode ? Config::fFovAngle * 4.0f : 0;
+    policy.radius = s_options.bLimitFov && !s_options.b360Mode ? s_options.fFovAngle * 4.0f : 0;
     if (!Fin(policy.radius) || policy.radius < 0) policy.radius = 360;
-    policy.priority = Config::iAimPriority;
-    policy.fullCircle = Config::b360Mode;
+    policy.priority = s_options.iAimPriority;
+    policy.fullCircle = s_options.b360Mode;
     return policy;
 }
 static bool ReadAimBone(void* zo, Aim::Point& point, std::uintptr_t& boneIdentity) {
     static const int joints[] = { SK_HEAD, SK_NECK, SK_SP2, SK_HL };
     static const char* names[] = { "head", "neck", "sp2", "hl" };
-    const int selection = Config::iAimBone >= 0 && Config::iAimBone < 4 ? Config::iAimBone : 0;
+    const int selection = s_options.iAimBone >= 0 && s_options.iAimBone < 4 ? s_options.iAimBone : 0;
     void* array = ReadP(zo, Off::ZO_armature);
     if (!array) return false;
     long long count = 0;
@@ -218,7 +218,7 @@ static bool MoveAimCamera(void* local, const Aim::Target& target) {
         void* transform = InvokeObj(mGetTrans, camera, nullptr);
         Vec3 euler;
         if (!transform || !GetEulerY(transform, euler) || !Fin(current) || !Fin(euler.y)) return false;
-        float smoothing = Config::fSmoothing;
+        float smoothing = s_options.fSmoothing;
         if (!(smoothing >= 1 && smoothing <= 8)) smoothing = 1;
         float pitch = asinf((std::max)(-1.0f, (std::min)(1.0f, direction.y))) * 57.29577951f;
         pitch = current + (pitch - current) / smoothing;
@@ -235,23 +235,23 @@ static bool MoveAimCamera(void* local, const Aim::Target& target) {
 static bool AimWindowActive() {
     HWND window = GetForegroundWindow(); DWORD process = 0;
     if (window) GetWindowThreadProcessId(window, &process);
-    return process == GetCurrentProcessId() && !Config::bMenuOpen;
+    return process == GetCurrentProcessId() && !s_options.bMenuOpen;
 }
 #include "aim_bridge.inl"
 static void WohaxAim(void* local) {
     const bool enabled = local && s_camWok && AimRequested() && AimWindowActive();
     // The managed adapter updates the ShootGun local consumed by both simulation
     // and SyncShotOnline. A connected role never silently turns into camera aim.
-    const bool allowSilent = Config::bSilentAim &&
+    const bool allowSilent = s_options.bSilentAim &&
         Aim::CanRedirectShot(static_cast<Aim::GameMode>(s.coopMode));
-    const int key = Config::iAimKey;
+    const int key = s_options.iAimKey;
     const bool down = key > 0 && key <= 255 && (GetAsyncKeyState(key) & 0x8000);
-    const bool automatic = Config::bAutoAim || Config::bAutoFire;
-    const bool firing = s_aimActivation.Update(enabled, automatic, key, Config::iAimMode, down);
-    ConfigureAimRange(enabled && (firing || Config::bTriggerbot));
+    const bool automatic = s_options.bAutoAim || s_options.bAutoFire;
+    const bool firing = s_aimActivation.Update(enabled, automatic, key, s_options.iAimMode, down);
+    ConfigureAimRange(enabled && (firing || s_options.bTriggerbot));
     if (!enabled) { s_aimLock.Clear(); ClearAimBridge(); return; }
     const auto candidates = Aim::Rank(s_aimTargets, s_aimCount, AimPolicy(), s_aimLock, PiNow());
-    if (!firing && !Config::bTriggerbot) { ClearAimBridge(); return; }
+    if (!firing && !s_options.bTriggerbot) { ClearAimBridge(); return; }
     int candidateCount = 0;
     while (candidateCount < Aim::MaxTargets && candidates[candidateCount] >= 0) ++candidateCount;
     static long long nextDiagnostic = 0;
@@ -261,7 +261,7 @@ static void WohaxAim(void* local) {
         int behind = 0;
         for (int i=0; i<s_aimCount; ++i) if (s_aimTargets[i].angle > 90) ++behind;
         Log::Infof("[AIM-SELECT] mode=%d 360=%d silent=%d firing=%d candidates=%d rear=%d",
-            s.coopMode, Config::b360Mode ? 1 : 0, allowSilent ? 1 : 0, firing ? 1 : 0, candidateCount, behind);
+            s.coopMode, s_options.b360Mode ? 1 : 0, allowSilent ? 1 : 0, firing ? 1 : 0, candidateCount, behind);
     }
     // Bounded raycast work without starving targets beyond the first three.
     for (int checked = 0; checked < (std::min)(candidateCount, Aim::VisibilityBudget); ++checked) {
@@ -273,15 +273,15 @@ static void WohaxAim(void* local) {
         s_aimLock.Select(target.entity, PiNow());
         if (diagnostic) Log::Infof("[AIM-SELECT] escolhido: angulo=%.1f distancia=%.1f", target.angle, target.distance);
         s_visibilityCursor = 0;
-        const bool move = Aim::ShouldMoveVisible(firing, Config::bAimbot, automatic,
-                                                 Config::bSilentAim, allowSilent);
+        const bool move = Aim::ShouldMoveVisible(firing, s_options.bAimbot, automatic,
+                                                 s_options.bSilentAim, allowSilent);
         if (move && !allowSilent && !MoveAimCamera(local, target)) { ClearAimBridge(); return; }
         const int flags = (allowSilent && firing ? 1 : 0) |
-            (Config::bAutoFire ? 2 : 0) | (Config::bTriggerbot ? 4 : 0);
+            (s_options.bAutoFire ? 2 : 0) | (s_options.bTriggerbot ? 4 : 0);
         PublishAimBridge(local, &target, flags);
         return;
     }
     s_aimLock.Clear();
     s_visibilityCursor = candidateCount ? (s_visibilityCursor + Aim::VisibilityBudget) % candidateCount : 0;
-    PublishAimBridge(local, nullptr, Config::bTriggerbot ? 4 : 0);
+    PublishAimBridge(local, nullptr, s_options.bTriggerbot ? 4 : 0);
 }

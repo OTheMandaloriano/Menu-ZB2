@@ -15,19 +15,19 @@ static void BridgeError(MonoMethod* method, const char* tag) {
 }
 static void BuildWorldEsp() {
     int mask=0;
-    const bool enabled[] = {Config::bItemEsp && Config::bItemWeapons, Config::bItemEsp && Config::bItemRare,
-        Config::bItemEsp && Config::bItemAmmo, Config::bItemEsp && Config::bItemSupply,
-        Config::bPoiEsp && Config::bPoiHeli, Config::bPoiEsp && Config::bPoiBoss,
-        Config::bPoiEsp && Config::bPoiMission, false,
-        Config::bPoiEsp && Config::bPoiLootFix, Config::bPoiEsp && Config::bPoiBench,
-        Config::bPoiEsp && Config::bPoiFire, Config::bPoiEsp && Config::bPoiShop,
-        Config::bPoiEsp && Config::bPoiRespawn};
+    const bool enabled[] = {s_options.bItemEsp && s_options.bItemWeapons, s_options.bItemEsp && s_options.bItemRare,
+        s_options.bItemEsp && s_options.bItemAmmo, s_options.bItemEsp && s_options.bItemSupply,
+        s_options.bPoiEsp && s_options.bPoiHeli, s_options.bPoiEsp && s_options.bPoiBoss,
+        s_options.bPoiEsp && s_options.bPoiMission, false,
+        s_options.bPoiEsp && s_options.bPoiLootFix, s_options.bPoiEsp && s_options.bPoiBench,
+        s_options.bPoiEsp && s_options.bPoiFire, s_options.bPoiEsp && s_options.bPoiShop,
+        s_options.bPoiEsp && s_options.bPoiRespawn};
     for(int i=0;i<13;++i) if(enabled[i]) mask |= 1<<i;
     if (!mask || !s_worldCollect) { ClearWorldEsp(); return; }
     WorldSnapshot snapshot;
     void* buffer=snapshot.entries;
     int capacity=256;
-    void* args[]={&buffer,&capacity,&mask,&Config::fItemRadius};
+    void* args[]={&buffer,&capacity,&mask,&s_options.fItemRadius};
     MonoObject* exception=nullptr;
     auto result=pInvoke(s_worldCollect,nullptr,args,&exception);
     if(result && !exception) {

@@ -1,7 +1,8 @@
 #pragma once
 #include <Windows.h>
 
-// Never wait for the game/render thread: skip the update or frame on contention.
+// UI-only serialization (Present, ResizeBuffers, WndProc).
+// Unity updates exchange snapshots and must never acquire this gate.
 namespace RuntimeGate {
 inline SRWLOCK mutex = SRWLOCK_INIT;
 class TryScope {

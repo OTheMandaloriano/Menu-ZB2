@@ -3,7 +3,7 @@
 #include "latest_snapshot.h"
 #include "mono.h"
 #include "modifier_math.h"
-#include "runtime_gate.h"
+#include "runtime_settings.h"
 #include "config.h"
 #include "log.h"
 #include <Windows.h>
@@ -144,6 +144,8 @@ namespace Mono {
     static MonoMethod* mGetProjMat = nullptr; // Camera.get_projectionMatrix (VP proprio)
     static float s_vp[16];       // VP = P*V (column-major, padrao Unity)
     static bool  s_vpOk = false;
+    static RuntimeSettings::Channel s_settings;
+    static RuntimeSettings::Values s_options;
     static float s_vpW = 1920.0f, s_vpH = 1080.0f;
     static int s_ghostDead = 0;   // HP>0 mas isAlive=false (animacao de morte)
     static int s_ghostBad = 0;    // centro/pos nao-finito, absurdo ou origem
@@ -843,7 +845,7 @@ namespace Mono {
     }
 
     void SetViewport(float w, float h) {
-        if (w > 100 && h > 100) { s_vpW = w; s_vpH = h; }
+        if (w > 100 && h > 100) s_settings.Publish(RuntimeSettings::Capture(w,h));
     }
 
     // Le matriz 4x4 da camera (64 bytes, column-major Unity).
@@ -1075,10 +1077,10 @@ namespace Mono {
     static void CollectJoints(void* zo, void* cam, EspEntry& out) {
         out.skN = SkJoint::SK_COUNT;
         for (int k = 0; k < SkJoint::SK_COUNT; ++k) { out.skV[k] = false; out.skX[k] = out.skY[k] = 0; }
-        // Ciclo 2 (spec VISUAL Â§4.2): worker respeita Config::bZombieSkeleton
+        // Ciclo 2 (spec VISUAL Â§4.2): worker respeita s_options.bZombieSkeleton
         // (menu VISUAL manda; ReadLayout nao decide mais sozinho). Aliados usam
         // a mesma flag por enquanto (item 15 define a separacao).
-        if (!Config::bZombieSkeleton) { out.skN = 0; return; }
+        if (!s_options.bZombieSkeleton) { out.skN = 0; return; }
         void* arr = ReadP(zo, Off::ZO_armature);
         if (!arr) { out.skN = 0; return; }
         long long len = 0;
@@ -1178,7 +1180,7 @@ namespace Mono {
         // Probe com distancia JA conhecida no ciclo (eye/foot do 2D ou center
         // da AABB do 3D) â€” nunca invoke extra (o probe com GetPos batia justo
         // no objeto mais fragil: armature se formando no spawn).
-        if (s_skDist2 >= 0 && s_skDist2 > Config::fEspDistance * Config::fEspDistance) {
+        if (s_skDist2 >= 0 && s_skDist2 > s_options.fEspDistance * s_options.fEspDistance) {
             out.skN = 0; return;
         }
         for (int k = 0; k < SkJoint::SK_PHYS; ++k) {
@@ -1263,7 +1265,7 @@ namespace Mono {
         EspEntry tmp[128] = {};
         int n = 0;
         s_aimCount = 0; s_camWok = false; s_aimForwardValid = false;
-        if ((!Config::bZombieEsp && !AimRequested()) || !mGetPos || !mW2S || !mGetTrans) { ClearEntitySnapshot(); return; }
+        if ((!s_options.bZombieEsp && !AimRequested()) || !mGetPos || !mW2S || !mGetTrans) { ClearEntitySnapshot(); return; }
         // MainCamera.instance (static) -> cam@32 (UnityEngine.Camera).
         // Re-resolve aqui (barato, 2Hz) para pegar a Camera viva.
         MonoClass* cMC = pClassFrom(s_img, "", "MainCamera");
@@ -1311,7 +1313,7 @@ namespace Mono {
         }
         s_camW = camW; s_camWok = hasCamW;
         if(!hasCamW || !Fin(camW.x) || !Fin(camW.y) || !Fin(camW.z)) {ClearEntitySnapshot();return;}
-        float maxD = Config::fEspDistance;
+        float maxD = s_options.fEspDistance;
         float maxD2 = maxD * maxD;
         LARGE_INTEGER t0, t1;
         QueryPerformanceCounter(&t0);
@@ -1351,7 +1353,7 @@ namespace Mono {
             void* zo = ReadP(e, Off::Z_obj);
             if (!zo) return;
             CollectAimTarget(e, zo, cam, hp);
-            if (!Config::bZombieEsp) return;
+            if (!s_options.bZombieEsp) return;
             // Anti-horda: teto de 96 entidades por ciclo. O resto fica p/ o
             // proximo ciclo (o snapshot segura as cores). Sem isso, horda de
             // 200+ entidades x ~8 invokes = corrida com o LOD (crash 15/09).
@@ -1407,7 +1409,7 @@ namespace Mono {
             for (int k = 0; k < 8; ++k) { tmpEn.pv[k] = false; tmpEn.px[k] = tmpEn.py[k] = 0; }
             tmpEn.has3d = false;
             // Box 3D real: AABB de mundo do corpo (sem hardcode de tamanho).
-            if (Config::iZombieBox == 1 && mGetBounds) {
+            if (s_options.iZombieBox == 1 && mGetBounds) {
                 void* mesh = ReadP(zo, Off::ZO_mesh);
                 // NOTA: sem filtro Renderer.enabled aqui - o LOD desliga renderers
                 // longe e filtrar sumiria com zumbis distantes. Spawn sem mesh cai
@@ -1735,7 +1737,7 @@ namespace Mono {
             // mas o player nao existe ainda. Sem gate = invoke em objeto nulo =
             // hang/crash reportado pelo operador.
             void* aimLocal = nullptr;
-            bool wantDef = s.ready && (Config::bDebugOverlay || HasPendingRestores() || Config::bGodMode || Config::bInfStamina || Config::bInfAmmo || Config::bInfItems || Config::bInfMoney || Config::bUnlockSlots || Config::bUnlockLoadout || Config::bNoRecoil || Config::bNoSpread || Config::bNoSway || Config::bTightAim || Config::bRapidFire || Config::bFullAuto || Config::bSpeedHack || Config::bSuperJump || Config::bRollSpeed || Config::bFastKnife || Config::bInstantReload || AimRequested());
+            bool wantDef = s.ready && (s_options.bDebugOverlay || HasPendingRestores() || s_options.bGodMode || s_options.bInfStamina || s_options.bInfAmmo || s_options.bInfItems || s_options.bInfMoney || s_options.bUnlockSlots || s_options.bUnlockLoadout || s_options.bNoRecoil || s_options.bNoSpread || s_options.bNoSway || s_options.bTightAim || s_options.bRapidFire || s_options.bFullAuto || s_options.bSpeedHack || s_options.bSuperJump || s_options.bRollSpeed || s_options.bFastKnife || s_options.bInstantReload || AimRequested());
             if (wantDef && SceneAlive()) {
                 // Detecta se estamos dentro do mapa: precisa de player local vivo.
                 bool inMap = false;
@@ -1777,11 +1779,11 @@ namespace Mono {
                 ApplyWeapon(inMap ? localEnt : nullptr);
                 if (inMap && localEnt) {
                     bool coop = (s.coopMode == 2); // CLIENTE
-                    if (Config::bInfMoney) ApplyMoney();
+                    if (s_options.bInfMoney) ApplyMoney();
                     ApplyDefense(localEnt);
-                    if (Config::bUnlockSlots) ApplySlots(localEnt);
-                    if (Config::bUnlockLoadout) ApplyLoadout();
-                    if (Config::bInfAmmo || Config::bInfItems || Config::bInstantReload) ApplyAmmo(localEnt, coop);
+                    if (s_options.bUnlockSlots) ApplySlots(localEnt);
+                    if (s_options.bUnlockLoadout) ApplyLoadout();
+                    if (s_options.bInfAmmo || s_options.bInfItems || s_options.bInstantReload) ApplyAmmo(localEnt, coop);
                     aimLocal = localEnt;
                 }
                 if (++s_defN >= 60) {
@@ -1790,7 +1792,7 @@ namespace Mono {
                     AuditBones();
                 }
             }
-            if (s.ready && (Config::bZombieEsp || AimRequested())) {
+            if (s.ready && (s_options.bZombieEsp || AimRequested())) {
                 if (!SceneAlive()) {
                     // Cena morta/trocando (respawn): zera o snapshot e espera.
                     // TryEnter: se o Present estiver lendo, pula em vez de travar.
@@ -1923,10 +1925,10 @@ namespace Mono {
     // com backoff de ~2s por slot e limite de 3 tentativas.
     static void AmmoEnsurePile(void* pinv, int id, int smax) {
         if (!pinv || id <= 0) return;
-        if (Config::bUnlockSlots && !s_slotsWasOn) {
+        if (s_options.bUnlockSlots && !s_slotsWasOn) {
             s_slotsWasOn = true;
             PileTriesReset("slots ligados");
-        } else if (!Config::bUnlockSlots) {
+        } else if (!s_options.bUnlockSlots) {
             s_slotsWasOn = false;
         }
         int slot = -1;
@@ -2076,14 +2078,14 @@ namespace Mono {
             // jogo: PullStoredItems da reserva cheia; host aceita, dano conta).
             // Pente extra ao ativar: ao ligar bInfAmmo (borda de subida),
             // garante 1 pilha cheia p/ CADA arma em weapons (nao espera zerar).
-            bool lockMag = !coop && Config::bInfAmmo;
+            bool lockMag = !coop && s_options.bInfAmmo;
             static bool s_ammoWasOn = false;
-            if (Config::bInfAmmo && !s_ammoWasOn) {
+            if (s_options.bInfAmmo && !s_ammoWasOn) {
                 s_ammoWasOn = true;
                 // Reset 1x: permite recriar pilhas gastas na sessao anterior.
                 for (int k = 0; k < 8; ++k) s_pileMade[k] = false;
                 Log::Info("[AMMO] ativado: garantindo 1 pilha por arma.");
-            } else if (!Config::bInfAmmo) {
+            } else if (!s_options.bInfAmmo) {
                 s_ammoWasOn = false;
             }
             // selectedItem REAL (auditoria CE MCP 19/09, corrigida 19/09):
@@ -2156,7 +2158,7 @@ namespace Mono {
             static long long s_lastReload = 0;
             static int s_reloadN = 0;
             static bool s_wasZero = false;
-            if (coop && Config::bInfAmmo && armsC && oAmmo >= 0) {
+            if (coop && s_options.bInfAmmo && armsC && oAmmo >= 0) {
                 // Coop cliente: pente vazio na equipada REAL -> TryStartReload.
                 void* itemC = EquippedReal(armsC, peq);
                 int ammoC = itemC ? ReadI(itemC, oAmmo, -1) : -1;
@@ -2316,14 +2318,14 @@ namespace Mono {
             // DIAG 23/09: loga 1x o estado das condicoes p/ achar gate que barra.
             {
                 static bool s_irDiag = false;
-                if (Config::bInstantReload && !s_irDiag) {
+                if (s_options.bInstantReload && !s_irDiag) {
                     s_irDiag = true;
                     Log::Infof("[INSTANT] on: coop=%d armsC=0x%p primed=%d oWep=%d oMax=%d bInfAmmo=%d",
-                        coop ? 1 : 0, armsC, s_dbPrimed ? 1 : 0, oWeapons, oMax, Config::bInfAmmo ? 1 : 0);
+                        coop ? 1 : 0, armsC, s_dbPrimed ? 1 : 0, oWeapons, oMax, s_options.bInfAmmo ? 1 : 0);
                 }
-                if (!Config::bInstantReload) s_irDiag = false;
+                if (!s_options.bInstantReload) s_irDiag = false;
             }
-            if (Config::bInstantReload && oWeapons >= 0 && oMax >= 0) {
+            if (s_options.bInstantReload && oWeapons >= 0 && oMax >= 0) {
                 void* wlist = ReadP(peq, oWeapons);
                 if (wlist) WalkList(wlist, 16, [&](void* it, int) {
                     int cur = ReadI(it, oAmmo, -1);
@@ -2384,7 +2386,7 @@ namespace Mono {
             }
             // Reserva (bInfAmmo) + pilhas gerais (bInfItems). Offsets resolvidos
             // acima (antes do Instant Reload). HUD = StoredItemCount(local).
-            if (Config::bInfAmmo) {
+            if (s_options.bInfAmmo) {
                 TopStacks(local, oInv, oStorage, oItems, oStack, oDbStack, oId, false);
                 // Seed: 1 pilha cheia POR TIPO REGISTRADO (todas as armas de
                 // weapons[], nao so a ativa). Cada tipo sem pilha no storage
@@ -2414,7 +2416,7 @@ namespace Mono {
                     }
                 }
             }
-            if (Config::bInfItems) {
+            if (s_options.bInfItems) {
                 // RELATORIO 25/09 (pedido do operador): ao ativar, lista 1x no
                 // log cada pilha travada (id + stack atual/teto). So na borda.
                 TopStacks(local, oInv, oStorage, oItems, oStack, oDbStack, oId, true);
@@ -2956,7 +2958,7 @@ namespace Mono {
     static void ApplyDefense(void* local) {
         if (!local) return;
         // God Mode: trava healthFast + healthSlow em 100.
-        if (Config::bGodMode) {
+        if (s_options.bGodMode) {
             float hp = ReadF(local, Off::PM_healthFast);
             if (hp > 0.0f && hp < 100.0f) { // morto (<=0) nao ressuscita
                 WriteF(local, Off::PM_healthFast, 100.0f);
@@ -2964,7 +2966,7 @@ namespace Mono {
             }
         }
         // Stamina: trava fast+slow no maxStamina (correr sem cansar).
-        if (Config::bInfStamina) {
+        if (s_options.bInfStamina) {
             float mx = ReadF(local, Off::PM_maxStamina, 100.0f);
             if (!(mx > 0.0f && mx <= 1000.0f)) mx = 100.0f;
             if (ReadF(local, Off::PM_staminaFast) < mx)
@@ -2982,13 +2984,13 @@ namespace Mono {
     }
     static void ApplyWeapon(void* local) {
         if (!s_modifierApply) return;
-        int flags = (Config::bNoRecoil ? 1 : 0) | (Config::bNoSpread ? 2 : 0) |
-            (Config::bNoSway ? 4 : 0) | (Config::bTightAim ? 8 : 0) |
-            (Config::bRapidFire ? 16 : 0) | (Config::bSpeedHack ? 32 : 0) |
-            (Config::bSuperJump ? 64 : 0) | (Config::bRollSpeed ? 128 : 0) |
-            (Config::bFastKnife ? 256 : 0) | (Config::bFullAuto ? 512 : 0);
-        void* args[] = {local, &flags, &Config::fRapidMult, &Config::fSpeedMult,
-            &Config::fJumpMult, &Config::fRollMult, &Config::fKnifeMult};
+        int flags = (s_options.bNoRecoil ? 1 : 0) | (s_options.bNoSpread ? 2 : 0) |
+            (s_options.bNoSway ? 4 : 0) | (s_options.bTightAim ? 8 : 0) |
+            (s_options.bRapidFire ? 16 : 0) | (s_options.bSpeedHack ? 32 : 0) |
+            (s_options.bSuperJump ? 64 : 0) | (s_options.bRollSpeed ? 128 : 0) |
+            (s_options.bFastKnife ? 256 : 0) | (s_options.bFullAuto ? 512 : 0);
+        void* args[] = {local, &flags, &s_options.fRapidMult, &s_options.fSpeedMult,
+            &s_options.fJumpMult, &s_options.fRollMult, &s_options.fKnifeMult};
         InvokeAimBool(s_modifierApply, nullptr, args, s_modifiersPending);
         BridgeError(s_modifierError, "MODIFIERS");
     }
@@ -3267,8 +3269,8 @@ namespace Mono {
         if (!s_espRun.load(std::memory_order_acquire)) return;
         const long long now = PiNow();
         if (now < s_nextCycle) return;
-        RuntimeGate::TryScope guard;
-        if (!guard) return;
+        s_options = s_settings.Read();
+        s_vpW = s_options.viewportWidth; s_vpH = s_options.viewportHeight;
         s_nextCycle = now + 33000;
         RunGameCycle();
         s_stateSnapshot.Publish(s);

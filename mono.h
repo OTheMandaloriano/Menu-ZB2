@@ -87,7 +87,7 @@ namespace Mono {
     bool Init();
     void Tick();
     const State& Get();
-    void SetViewport(float w, float h); // tela atual (p/ W2S proprio)
+    void SetViewport(float w, float h); // publish viewport + Config snapshot from Present
 
     // Snapshot do ESP (preenchido no Tick; ler no Render).
     // N <0 = todos; retorna quantidade escrita.

@@ -1,0 +1,137 @@
+#pragma once
+#include "config.h"
+#include "latest_snapshot.h"
+
+// Render owns Config. Unity owns its copy; no game call holds the UI gate.
+namespace RuntimeSettings {
+struct Values {
+    float viewportWidth=1920, viewportHeight=1080;
+    decltype(Config::b360Mode) b360Mode = {};
+    decltype(Config::bAimbot) bAimbot = {};
+    decltype(Config::bAutoAim) bAutoAim = {};
+    decltype(Config::bAutoFire) bAutoFire = {};
+    decltype(Config::bDebugOverlay) bDebugOverlay = {};
+    decltype(Config::bFastKnife) bFastKnife = {};
+    decltype(Config::bFullAuto) bFullAuto = {};
+    decltype(Config::bGodMode) bGodMode = {};
+    decltype(Config::bInfAmmo) bInfAmmo = {};
+    decltype(Config::bInfItems) bInfItems = {};
+    decltype(Config::bInfMoney) bInfMoney = {};
+    decltype(Config::bInfStamina) bInfStamina = {};
+    decltype(Config::bInstantReload) bInstantReload = {};
+    decltype(Config::bItemAmmo) bItemAmmo = {};
+    decltype(Config::bItemEsp) bItemEsp = {};
+    decltype(Config::bItemRare) bItemRare = {};
+    decltype(Config::bItemSupply) bItemSupply = {};
+    decltype(Config::bItemWeapons) bItemWeapons = {};
+    decltype(Config::bLimitFov) bLimitFov = {};
+    decltype(Config::bMenuOpen) bMenuOpen = {};
+    decltype(Config::bNoRecoil) bNoRecoil = {};
+    decltype(Config::bNoSpread) bNoSpread = {};
+    decltype(Config::bNoSway) bNoSway = {};
+    decltype(Config::bPoiBench) bPoiBench = {};
+    decltype(Config::bPoiBoss) bPoiBoss = {};
+    decltype(Config::bPoiEsp) bPoiEsp = {};
+    decltype(Config::bPoiFire) bPoiFire = {};
+    decltype(Config::bPoiHeli) bPoiHeli = {};
+    decltype(Config::bPoiLootFix) bPoiLootFix = {};
+    decltype(Config::bPoiMission) bPoiMission = {};
+    decltype(Config::bPoiRespawn) bPoiRespawn = {};
+    decltype(Config::bPoiShop) bPoiShop = {};
+    decltype(Config::bRapidFire) bRapidFire = {};
+    decltype(Config::bRollSpeed) bRollSpeed = {};
+    decltype(Config::bSilentAim) bSilentAim = {};
+    decltype(Config::bSpeedHack) bSpeedHack = {};
+    decltype(Config::bSuperJump) bSuperJump = {};
+    decltype(Config::bTightAim) bTightAim = {};
+    decltype(Config::bTriggerbot) bTriggerbot = {};
+    decltype(Config::bUnlockLoadout) bUnlockLoadout = {};
+    decltype(Config::bUnlockSlots) bUnlockSlots = {};
+    decltype(Config::bZombieEsp) bZombieEsp = {};
+    decltype(Config::bZombieSkeleton) bZombieSkeleton = {};
+    decltype(Config::fAimDistance) fAimDistance = {};
+    decltype(Config::fEspDistance) fEspDistance = {};
+    decltype(Config::fFovAngle) fFovAngle = {};
+    decltype(Config::fItemRadius) fItemRadius = {};
+    decltype(Config::fJumpMult) fJumpMult = {};
+    decltype(Config::fKnifeMult) fKnifeMult = {};
+    decltype(Config::fRapidMult) fRapidMult = {};
+    decltype(Config::fRollMult) fRollMult = {};
+    decltype(Config::fSmoothing) fSmoothing = {};
+    decltype(Config::fSpeedMult) fSpeedMult = {};
+    decltype(Config::iAimBone) iAimBone = {};
+    decltype(Config::iAimKey) iAimKey = {};
+    decltype(Config::iAimMode) iAimMode = {};
+    decltype(Config::iAimPriority) iAimPriority = {};
+    decltype(Config::iZombieBox) iZombieBox = {};
+};
+inline Values Capture(float width,float height) {
+    Values values;
+    values.viewportWidth=width; values.viewportHeight=height;
+    values.b360Mode=Config::b360Mode;
+    values.bAimbot=Config::bAimbot;
+    values.bAutoAim=Config::bAutoAim;
+    values.bAutoFire=Config::bAutoFire;
+    values.bDebugOverlay=Config::bDebugOverlay;
+    values.bFastKnife=Config::bFastKnife;
+    values.bFullAuto=Config::bFullAuto;
+    values.bGodMode=Config::bGodMode;
+    values.bInfAmmo=Config::bInfAmmo;
+    values.bInfItems=Config::bInfItems;
+    values.bInfMoney=Config::bInfMoney;
+    values.bInfStamina=Config::bInfStamina;
+    values.bInstantReload=Config::bInstantReload;
+    values.bItemAmmo=Config::bItemAmmo;
+    values.bItemEsp=Config::bItemEsp;
+    values.bItemRare=Config::bItemRare;
+    values.bItemSupply=Config::bItemSupply;
+    values.bItemWeapons=Config::bItemWeapons;
+    values.bLimitFov=Config::bLimitFov;
+    values.bMenuOpen=Config::bMenuOpen;
+    values.bNoRecoil=Config::bNoRecoil;
+    values.bNoSpread=Config::bNoSpread;
+    values.bNoSway=Config::bNoSway;
+    values.bPoiBench=Config::bPoiBench;
+    values.bPoiBoss=Config::bPoiBoss;
+    values.bPoiEsp=Config::bPoiEsp;
+    values.bPoiFire=Config::bPoiFire;
+    values.bPoiHeli=Config::bPoiHeli;
+    values.bPoiLootFix=Config::bPoiLootFix;
+    values.bPoiMission=Config::bPoiMission;
+    values.bPoiRespawn=Config::bPoiRespawn;
+    values.bPoiShop=Config::bPoiShop;
+    values.bRapidFire=Config::bRapidFire;
+    values.bRollSpeed=Config::bRollSpeed;
+    values.bSilentAim=Config::bSilentAim;
+    values.bSpeedHack=Config::bSpeedHack;
+    values.bSuperJump=Config::bSuperJump;
+    values.bTightAim=Config::bTightAim;
+    values.bTriggerbot=Config::bTriggerbot;
+    values.bUnlockLoadout=Config::bUnlockLoadout;
+    values.bUnlockSlots=Config::bUnlockSlots;
+    values.bZombieEsp=Config::bZombieEsp;
+    values.bZombieSkeleton=Config::bZombieSkeleton;
+    values.fAimDistance=Config::fAimDistance;
+    values.fEspDistance=Config::fEspDistance;
+    values.fFovAngle=Config::fFovAngle;
+    values.fItemRadius=Config::fItemRadius;
+    values.fJumpMult=Config::fJumpMult;
+    values.fKnifeMult=Config::fKnifeMult;
+    values.fRapidMult=Config::fRapidMult;
+    values.fRollMult=Config::fRollMult;
+    values.fSmoothing=Config::fSmoothing;
+    values.fSpeedMult=Config::fSpeedMult;
+    values.iAimBone=Config::iAimBone;
+    values.iAimKey=Config::iAimKey;
+    values.iAimMode=Config::iAimMode;
+    values.iAimPriority=Config::iAimPriority;
+    values.iZombieBox=Config::iZombieBox;
+    return values;
+}
+class Channel {
+    LatestSnapshot<Values> snapshot;
+public:
+    void Publish(const Values& values) { snapshot.Publish(values); }
+    Values Read() { return snapshot.Read(); }
+};
+}
