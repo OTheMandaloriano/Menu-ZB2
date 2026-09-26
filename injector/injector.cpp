@@ -287,7 +287,9 @@ static bool FindDll(const Cfg& cfg, std::wstring& out, ULONGLONG& size, FILETIME
         cand.push_back(dir + L"\\" + want);                       // lado a lado
         cand.push_back(dir + L"\\build\\Release_x64\\" + want);   // raiz do projeto
         cand.push_back(dir + L"\\..\\build\\Release_x64\\" + want);// injector\..
-        cand.push_back(L"D:\\Projeto\\ZB2 Menu\\build\\Release_x64\\" + want); // fixo dev
+        // (REMOVIDO 25/09: caminho fixo D:\Projeto\... quebrava em outro PC —
+        // o injetor tentava a pasta do dev antes de falhar. Portatil: so os
+        // 3 relativos acima + config.ini.)
     }
 
     for (size_t i = 0; i < cand.size(); ++i) {
