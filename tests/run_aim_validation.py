@@ -9,6 +9,7 @@ from tempfile import TemporaryDirectory
 
 parser = ArgumentParser()
 parser.add_argument('--output', type=Path)
+parser.add_argument('--only', help='Run one named test after a focused change')
 args = parser.parse_args()
 source = Path(__file__).resolve().parents[1]
 output = (args.output or source/'build'/'aim-validation').resolve()
@@ -35,14 +36,21 @@ if not compiler and os.name == 'nt':
 if not compiler:
     raise SystemExit('Install g++ or the Visual Studio C++ build tools.')
 records = []
-names = ['aim_tests', 'snapshot_tests', 'modifier_tests']
-if os.name == 'nt': names.append('runtime_gate_tests')
+names = ['aim_tests', 'snapshot_tests', 'modifier_tests', 'esp_options_tests']
+if os.name == 'nt': names += ['runtime_gate_tests','esp_render_tests']
+if args.only: names = [name for name in names if name == args.only]
+if not names: raise SystemExit('Unknown test name')
 for name in names:
     executable = output/(name + ('.exe' if os.name == 'nt' else ''))
     unit = source/'tests'/(name+'.cpp')
     command = ([compiler, '/nologo', '/std:c++17', '/EHsc', '/W4', '/WX', '/O2', str(unit),
                 '/Fe:'+str(executable), '/Fo:'+str(output/(name+'.obj'))] if msvc else
                [compiler, '-std=c++17', '-O2', '-Wall', '-Wextra', '-Werror', '-pthread', str(unit), '-o', str(executable)])
+    if name == 'esp_render_tests':
+        command += [str(source/'esp_layout.cpp')]
+        command += [str(source/'imgui'/(name+'.cpp')) for name in ['imgui','imgui_draw','imgui_tables','imgui_widgets']]
+        command += ['user32.lib','/link','/IGNORE:4099']
+        command = [item for item in command if not item.startswith('/Fo:')]
     for invocation in (command, [str(executable)]):
         result = run(invocation, cwd=output, env=env, capture_output=True, text=True)
         text = result.stdout + result.stderr

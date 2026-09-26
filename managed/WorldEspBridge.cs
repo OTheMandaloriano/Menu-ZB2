@@ -1,0 +1,138 @@
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Text;
+using UnityEngine;
+
+namespace Zb2Menu {
+    public static class WorldEspBridge {
+        [StructLayout(LayoutKind.Sequential, Pack=4)]
+        struct Marker {
+            public int Kind;
+            public float X, Y, Distance;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst=96)] public byte[] Name;
+        }
+        static readonly List<Marker> result = new List<Marker>(256);
+        sealed class LootEntry { public DroppedLoot Loot; public string Name; public int Kind; public float Distance; }
+        static readonly List<LootEntry> lootCache = new List<LootEntry>(512);
+        static MapHash previousMap;
+        static float nextLootScan;
+        static int lastLootMask;
+        static float lastLootRadius;
+        static Camera camera;
+        static Vector3 origin;
+        static int mask;
+        static float radius;
+        static string error="";
+        public static string LastError() { return error; }
+        // Kind bits: weapons, rare, ammo, supply, heli, boss, mission, wave,
+        // fixed loot, bench, fire, shop, respawn, allies.
+        static void Add(int kind, string name, Vector3 position, bool limited) {
+            if (kind < 0 || (mask & (1 << kind))==0) return;
+            float distance=Vector3.Distance(origin,position);
+            if (float.IsNaN(distance) || float.IsInfinity(distance) || (limited && distance>radius)) return;
+            var screen=camera.WorldToViewportPoint(position);
+            if (!(screen.z > .01f && screen.x>=0 && screen.x<=1 && screen.y>=0 && screen.y<=1)) return;
+            var entry=new Marker {Kind=kind, X=screen.x, Y=1-screen.y, Distance=distance};
+            entry.Name=new byte[96];
+            string label=name ?? "?";
+            // Truncate characters before UTF8 encoding, avoiding partial sequences.
+            if (label.Length>28) label=label.Substring(0,28);
+            byte[] bytes=Encoding.UTF8.GetBytes(label);
+            Array.Copy(bytes,entry.Name,Math.Min(bytes.Length,95));
+            if (result.Count<256) result.Add(entry);
+            else {
+                int farthest=0;
+                for (int i=1;i<result.Count;++i) if(result[i].Distance>result[farthest].Distance) farthest=i;
+                if(distance<result[farthest].Distance) result[farthest]=entry;
+            }
+        }
+        public static int Collect(IntPtr buffer, int capacity, int enabled, float range) {
+            result.Clear(); error="";
+            if (buffer==IntPtr.Zero || capacity<=0 || enabled==0 || MainCamera.instance==null) return 0;
+            camera=MainCamera.instance.cam;
+            var player=PlayersController.instance == null ? null : PlayersController.instance.MyPlayer();
+            if (camera==null || player==null || player.healthFast<=0) return 0;
+            origin=player.transform.position; mask=enabled;
+            radius=float.IsNaN(range) || float.IsInfinity(range) ? 150 : Math.Max(10,Math.Min(500,range));
+            try {
+                if ((mask & 15)!=0) Items();
+                if ((mask & 8176)!=0) Points();
+            } catch(Exception ex) { error=ex.ToString(); }
+            int count=Math.Min(capacity,result.Count), stride=Marshal.SizeOf(typeof(Marker));
+            for(int i=0;i<count;++i) Marshal.StructureToPtr(result[i],IntPtr.Add(buffer,i*stride),false);
+            return count;
+        }
+        static void Items() {
+            var map=MapHash.instance;
+            if(map==null || !map.IsCreated || !(map.cellSize>0)) { lootCache.Clear(); return; }
+            if(map!=previousMap || (mask&15)!=lastLootMask || radius!=lastLootRadius || Time.unscaledTime>=nextLootScan) {
+                lastLootMask=mask&15; lastLootRadius=radius;
+                previousMap=map; nextLootScan=Time.unscaledTime+.5f;
+                RefreshItems(map);
+            }
+            foreach(var entry in lootCache)
+                if(entry.Loot!=null) Add(entry.Kind,entry.Name,entry.Loot.transform.position,true);
+        }
+        static void RefreshItems(MapHash map) {
+            lootCache.Clear();
+            var first=map.GetHashCoord(origin-new Vector3(radius,0,radius));
+            var last=map.GetHashCoord(origin+new Vector3(radius,0,radius));
+            for(int x=first.x;x<=last.x;++x) for(int y=first.y;y<=last.y;++y) {
+                var cell=map.GetCell(x,y);
+                if(cell==null || cell.loot==null) continue;
+                foreach(var loot in cell.loot) {
+                    if(loot==null || loot.item==null) continue;
+                    float distance=Vector3.Distance(origin,loot.transform.position);
+                    if(!(distance<=radius)) continue;
+                    var db=loot.item.GetDataBaseItem();
+                    if(db==null) continue;
+                    var id=loot.item.id;
+                    bool ammo=id==InventoryItem.ID.RifleAmmo || id==InventoryItem.ID.SniperAmmo ||
+                        id==InventoryItem.ID.ShotgunAmmo || id.ToString().IndexOf("Ammo",StringComparison.Ordinal)>=0;
+                    var subtype=db.GetSubType();
+                    bool weapon=db is DatabaseGun || subtype==DatabaseItem.SubType.Melee;
+                    int kind=ammo ? 2 : weapon ? 0 : 3;
+                    // Rare is an additional filter, not a reason to hide an enabled category.
+                    if((int)db.tier>=2 && (mask & 2)!=0) kind=1;
+                    if((mask & (1<<kind))==0) continue;
+                    var entry=new LootEntry {Loot=loot,Name=db.GetName,Kind=kind,Distance=distance};
+                    if(lootCache.Count<512) lootCache.Add(entry);
+                    else {
+                        int farthest=0;
+                        for(int i=1;i<lootCache.Count;++i) if(lootCache[i].Distance>lootCache[farthest].Distance) farthest=i;
+                        if(distance<lootCache[farthest].Distance) lootCache[farthest]=entry;
+                    }
+                }
+            }
+        }
+        static void Points() {
+            var owner=InterestPointController.instance;
+            if(owner==null || owner.points==null) return;
+            foreach(var point in owner.points) {
+                if(point==null) continue;
+                int kind; string name;
+                switch(point.type) {
+                    case InterestPoint.Type.Helicopter: kind=4; name="Helicoptero"; break;
+                    case InterestPoint.Type.Bossfight: kind=5; name="Chefao"; break;
+                    case InterestPoint.Type.QuestionMark: kind=6; name="Ponto desconhecido"; break;
+                    case InterestPoint.Type.Bomb: kind=6; name="Bomba"; break;
+                    case InterestPoint.Type.Ammo: kind=8; name="Municao"; break;
+                    case InterestPoint.Type.Gun: kind=8; name="Armas"; break;
+                    case InterestPoint.Type.Melee: kind=8; name="Armas brancas"; break;
+                    case InterestPoint.Type.HealingItem: kind=8; name="Cura"; break;
+                    case InterestPoint.Type.CraftingMaterial: kind=8; name="Materiais"; break;
+                    case InterestPoint.Type.Food: kind=8; name="Comida"; break;
+                    case InterestPoint.Type.ReloadingBench: kind=9; name="Bancada de recarga"; break;
+                    case InterestPoint.Type.GunUpgradeTable: kind=9; name="Bancada de melhoria"; break;
+                    case InterestPoint.Type.ZumbiePyre: kind=10; name="Fogueira"; break;
+                    case InterestPoint.Type.VendorVan: kind=11; name="Mercador"; break;
+                    case InterestPoint.Type.StartingHouse: kind=12; name="Respawn"; break;
+                    default: continue;
+                }
+                var position=point.objTransform!=null ? point.objTransform.position : point.pos3D;
+                Add(kind,name,position,kind>=8 && kind<=11);
+            }
+        }
+    }
+}

@@ -36,7 +36,7 @@ refs = ['mscorlib.dll','System.dll','System.Core.dll','netstandard.dll',
 command = [str(csc), '/nologo','/noconfig','/target:library','/optimize+','/warnaserror+','/nostdlib+',
            '/out:'+str(args.output/'Zb2.AimBridge.dll'),'/reference:'+str(args.output/'0Harmony.dll')]
 command += ['/reference:'+str(args.managed/name) for name in refs]
-command += [str(root/'managed/AimBridge.cs')]
+command += [str(path) for path in sorted((root/'managed').glob('*.cs'))]
 result = run(command, capture_output=True, text=True)
 print(result.stdout+result.stderr)
 (args.output/'managed-build.log').write_text(result.stdout+result.stderr, encoding='utf-8')

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 // ============================================================================
 // MONO.H - Reflection Unity Mono via binding dinamico (ZB2 Menu)
@@ -45,6 +45,14 @@ namespace Mono {
         bool  isBoss;        // ZombieIdentity.type+20 (Riot/Queen/Reaper). Sem
                              // type validado via CE MCP = false (nunca chutar).
     };
+
+    struct WorldMarker {
+        int kind;
+        float x, y, distance; // normalized screen coordinates, y down
+        char name[96];
+    };
+    static_assert(sizeof(WorldMarker)==112, "Managed marker ABI");
+    int GetWorldEsp(WorldMarker* output, int capacity);
 
     struct State {
         bool  ready = false;

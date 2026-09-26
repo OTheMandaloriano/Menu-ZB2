@@ -4,6 +4,11 @@ static MonoMethod* s_bridgeClear = nullptr;
 static MonoMethod* s_bridgeStats = nullptr;
 static MonoMethod* s_bridgeStart = nullptr;
 static MonoMethod* s_bridgeVisible = nullptr;
+static MonoMethod* s_modifierApply = nullptr;
+static MonoMethod* s_modifierReset = nullptr;
+static MonoMethod* s_modifierError = nullptr;
+static MonoMethod* s_worldCollect = nullptr;
+static MonoMethod* s_worldError = nullptr;
 static long long s_bridgeRetryAt = 0;
 static bool LoadAimBridge() {
     if (s_bridgePublish) return true;
@@ -47,6 +52,16 @@ static bool LoadAimBridge() {
             }
             return false;
         }
+        auto image = static_cast<MonoImage*>(pAssmImage(assembly));
+        auto modifiers = pClassFrom(image, "Zb2Menu", "ModifierBridge");
+        auto world = pClassFrom(image, "Zb2Menu", "WorldEspBridge");
+        if (!modifiers || !world) return false;
+        s_modifierApply = pMethodFrom(modifiers, "Apply", 7);
+        s_modifierReset = pMethodFrom(modifiers, "Reset", 0);
+        s_modifierError = pMethodFrom(modifiers, "LastError", 0);
+        s_worldCollect = pMethodFrom(world, "Collect", 4);
+        s_worldError = pMethodFrom(world, "LastError", 0);
+        if (!s_modifierApply || !s_modifierReset || !s_worldCollect) return false;
         s_bridgeStart = pMethodFrom(bridge, "StartLoop", 1);
         if (!s_bridgeStart) return false;
         s_bridgePublish = publish; s_bridgeClear = clear;
@@ -95,3 +110,5 @@ static void PublishAimBridge(void* local, const Aim::Target* target, int flags) 
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) { ClearAimBridge(); }
 }
+
+#include "world_esp.inl"

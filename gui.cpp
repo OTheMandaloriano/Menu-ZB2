@@ -1,3 +1,4 @@
+#include "esp_options.h"
 #include "esp_layout.h"
 #include "config_json.h"
 #include <cmath>
@@ -849,6 +850,30 @@ namespace GUI {
                 _snprintf_s(b, _TRUNCATE, "MONO aguardando cena... | %.0f fps", (double)io.Framerate);
             dl->AddText(ImVec2(10, 26), IM_COL32(160, 255, 160, 200), b);
         }
+        {
+            static Mono::WorldMarker markers[256];
+            int count=Mono::GetWorldEsp(markers,256);
+            bool enabled[] = {Config::bItemEsp && Config::bItemWeapons, Config::bItemEsp && Config::bItemRare,
+                Config::bItemEsp && Config::bItemAmmo, Config::bItemEsp && Config::bItemSupply,
+                Config::bPoiEsp && Config::bPoiHeli, Config::bPoiEsp && Config::bPoiBoss,
+                Config::bPoiEsp && Config::bPoiMission, Config::bPoiEsp && Config::bPoiWave,
+                Config::bPoiEsp && Config::bPoiLootFix, Config::bPoiEsp && Config::bPoiBench,
+                Config::bPoiEsp && Config::bPoiFire, Config::bPoiEsp && Config::bPoiShop,
+                Config::bPoiEsp && Config::bPoiRespawn};
+            const float* colors[] = {Config::colItem,Config::colItemRare,Config::colItemAmmo,Config::colItemSupply,
+                Config::colPoiHeli,Config::colPoiBoss,Config::colPoiMission,Config::colPoiWave,Config::colPoiLootFix,
+                Config::colPoiBench,Config::colPoiFire,Config::colPoiShop,Config::colPoiRespawn};
+            for(int i=0;i<count;++i) {
+                const auto& marker=markers[i];
+                if(marker.kind<0 || marker.kind>=13 || !enabled[marker.kind]) continue;
+                const float* color=colors[marker.kind];
+                ImU32 tint=ImGui::GetColorU32(ImVec4(color[0],color[1],color[2],color[3]));
+                ImVec2 position(marker.x*io.DisplaySize.x,marker.y*io.DisplaySize.y);
+                char label[128]; _snprintf_s(label,_TRUNCATE,"%s [%.0fm]",marker.name,marker.distance);
+                dl->AddCircleFilled(position,3.0f,tint);
+                dl->AddText(ImVec2(position.x+5,position.y),tint,label);
+            }
+        }
         // ESP Zumbis Box (Fase 3 itens 7/11): head/pes ja em pixels Unity; inverte Y.
         // Ciclo 2 (spec VISUAL §1+§3.13): toggles do menu mandam junto com o
         // layout (OR). Editor drag-drop continua valendo p/ posicao.
@@ -899,7 +924,7 @@ namespace GUI {
                         if (r1.x - r0.x < 4 || r1.y - r0.y < 4) continue;
                     }
                 } else {
-                    float hx = es[i].headX, hy2 = H - es[i].headY;
+                    float hy2 = H - es[i].headY;
                     float fx = es[i].footX, fy2 = H - es[i].footY;
                     h = fy2 - hy2; // altura head->pes
                     if (h < 4.0f) continue;
@@ -948,7 +973,7 @@ namespace GUI {
                         if (pb2.x < -10000 || pb2.x > 10000 || pb2.y < -10000 || pb2.y > 10000) continue;
                         dl->AddLine(pa, pb2, colBox, 1.2f);
                     }
-                } else {
+                } else if (EspOptions::BoxFallback(showBox, layout.boxStyle, es[i].has3d)) {
                     // 3D fallback (bounds indisponivel): face traseira deslocada + arestas.
                     ImVec2 d = ImVec2(w * 0.28f, -h * 0.10f);
                     ImVec2 b0 = ImVec2(r0.x + d.x, r0.y + d.y), b1 = ImVec2(r1.x + d.x, r1.y + d.y);
@@ -1007,7 +1032,7 @@ namespace GUI {
                 }
                 // Item 13 Snapline: base da tela -> centro do pe da box (padrao grandes cheats).
                 if (showSnap && w > 2.0f && h > 2.0f) {
-                    ImVec2 base = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y);
+                    ImVec2 base = ImVec2(io.DisplaySize.x * 0.5f, EspOptions::SnapOriginY(Config::iSnapFrom, io.DisplaySize.y));
                     ImVec2 tgt = ImVec2((r0.x + r1.x) * 0.5f, r1.y);
                     if (tgt.x > -10000 && tgt.x < 10000 && tgt.y > -10000 && tgt.y < 10000)
                         dl->AddLine(base, tgt, colSnap, 1.0f);
@@ -1022,7 +1047,7 @@ namespace GUI {
                     }
                 }
                 EspLayout::Rect envelope = { r0, r1 };
-                if (layout.boxStyle == 1 && !es[i].has3d) {
+                if (EspOptions::BoxFallback(showBox, layout.boxStyle, es[i].has3d)) {
                     envelope.min.y -= h * 0.10f;
                     envelope.max.x += w * 0.28f;
                 }
@@ -1115,7 +1140,9 @@ namespace GUI {
                 ImGui::Checkbox("Fast Knife", &Config::bFastKnife); Tip("Arma branca rapida: pa, pa, facao, faca, taco (Duration curto).");
                 ImGui::SliderFloat("Knife Mult", &Config::fKnifeMult, 1, 5, "%.1fx");
                 ImGui::Checkbox("Instant Reload", &Config::bInstantReload); Tip("Recarga instantanea: completa o pente na hora (sem animacao). Single/host. Como cliente use a recarga normal (R).");
-                ImGui::Checkbox("Full Auto for All", &Config::bFullAuto);
+                ImGui::Checkbox("Full Auto for All", &Config::bFullAuto); Tip("Automatico independente do Rapid Fire; desativar restaura o modo original da arma.");
+                ImGui::TextDisabled("Pendente: controles sem implementacao nesta versao.");
+                ImGui::BeginDisabled();
                 ImGui::Checkbox("Saitama Mode (4M dano)", &Config::bSaitama);
                 ImGui::SliderFloat("Nade Time", &Config::fNadeTime, 0, 10, "%.1fs");
                 ImGui::SliderFloat("Explosion Radius (HOST)", &Config::fExplRadius, 1, 50, "%.0f");
@@ -1131,6 +1158,7 @@ namespace GUI {
                 ImGui::SameLine(); if (ImGui::Button("Melee")) {}
                 ImGui::SameLine(); if (ImGui::Button("Add to Inventory")) {}
                 ImGui::Separator();
+                ImGui::EndDisabled();
                 ImGui::Text("Movement");
                 ImGui::Checkbox("Speed Hack", &Config::bSpeedHack); Tip("Multiplica a velocidade horizontal de caminhada e corrida.");
                 ImGui::SliderFloat("Speed Mult", &Config::fSpeedMult, 1, 5, "%.1fx"); Tip("1x restaura a velocidade normal.");
@@ -1162,7 +1190,7 @@ namespace GUI {
                         ImGui::Checkbox("Distancia", &Config::bZombieDist); Tip("Distancia em metros ate a camera.");
                         SwatchR("##CorDistZ", Config::colZombieDist, "Cor da distancia.");
                         ImGui::Checkbox("Barra de vida", &Config::bZombieHp);
-                        ImGui::SameLine(); ImGui::Checkbox("%", &Config::bZombiePct); Tip("Numero arrastavel no Avancado.");
+                        ImGui::SameLine(); ImGui::Checkbox("%", &Config::bZombiePct); Tip("Percentual de vida independente da barra. Desmarque tambem para ocultar todo o texto de vida.");
                         SwatchR("##CorVidaZ", Config::colZombieHp, "Cor do texto de vida (a barra usa HpColor).");
                         ImGui::Checkbox("Esqueleto", &Config::bZombieSkeleton); Tip("19 segmentos articulados (< 50m).");
                         SwatchR("##CorSkelZ", Config::colZombieSkel, "Cor do esqueleto.");
@@ -1176,7 +1204,9 @@ namespace GUI {
                         ImGui::SliderFloat("Dist. maxima", &Config::fEspDistance, 10, 500, "%.0fm"); Tip("Só o ESP obedece (ate onde desenha). O AIM tem a propria distancia no PLAYER.");
                         ImGui::Unindent();
                     }
-                    Section("Aliados");
+                    ImGui::TextDisabled("Pendente: controles sem implementacao nesta versao.");
+                ImGui::BeginDisabled();
+                Section("Aliados");
                     ImGui::Checkbox("Ativo##A", &Config::bAllyEsp); Tip("ESP dos jogadores (sempre azul).");
                     if (Config::bAllyEsp) {
                         ImGui::Indent();
@@ -1199,7 +1229,8 @@ namespace GUI {
                         ImGui::TextDisabled("Oculto"); SwatchR("##ChInv", Config::colChamsInv, "Cor atras de parede.");
                         ImGui::Unindent();
                     }
-                    ImGui::TableNextColumn();
+                    ImGui::EndDisabled();
+                ImGui::TableNextColumn();
                     Section("Itens");
                     ImGui::Checkbox("Ativo##I", &Config::bItemEsp); Tip("Master do ESP de itens no chao.");
                     if (Config::bItemEsp) {
@@ -1226,7 +1257,7 @@ namespace GUI {
                         SwatchR("##PBoss", Config::colPoiBoss, "Sempre visivel (dinamico).");
                         ImGui::Checkbox("Missao", &Config::bPoiMission);
                         SwatchR("##PMiss", Config::colPoiMission, "Sempre visivel (dinamico).");
-                        ImGui::SameLine(); ImGui::Checkbox("Onda", &Config::bPoiWave);
+                        ImGui::SameLine(); ImGui::BeginDisabled(); ImGui::Checkbox("Onda (pendente)", &Config::bPoiWave); ImGui::EndDisabled();
                         SwatchR("##PWave", Config::colPoiWave, "Mostra a direcao da onda.");
                         ImGui::Checkbox("Loot fixo", &Config::bPoiLootFix);
                         SwatchR("##PLoot", Config::colPoiLootFix, "Dentro do raio (estatico).");
@@ -1237,7 +1268,8 @@ namespace GUI {
                         ImGui::SameLine(); ImGui::Checkbox("Mercador", &Config::bPoiShop);
                         SwatchR("##PShop", Config::colPoiShop, "Dentro do raio (estatico).");
                         ImGui::Checkbox("Respawn", &Config::bPoiRespawn);
-                        SwatchR("##PResp", Config::colPoiRespawn, "Sempre visivel (dinamico).");
+                        SwatchR("##PResp", Config::colPoiRespawn, "Respawn conhecido nesta partida.");
+                        ImGui::SliderFloat("Raio itens/pontos fixos", &Config::fItemRadius, 10, 500, "%.0fm");
                         ImGui::Unindent();
                     }
                     ImGui::EndTable();
@@ -1261,6 +1293,8 @@ namespace GUI {
                 ImGui::Checkbox("Desbloquear Loadout", &Config::bUnlockLoadout); Tip("Kits do loadout livres (a loja compra com Money: use Infinite Money).");
                 ImGui::Separator();
                 // REMOVIDO 17/09: Spawn de Itens (nao util; IDs ficam no historico p/ fase futura).
+                ImGui::TextDisabled("Pendente: controles sem implementacao nesta versao.");
+                ImGui::BeginDisabled();
                 ImGui::Checkbox("Enemy Magnet (H)", &Config::bEnemyMagnet);
                 ImGui::SliderFloat("Raio Magnet", &Config::fMagnetRadius, 10, 300, "%.0fm");
                 ImGui::Checkbox("Freeze Attracted", &Config::bMagnetFreeze);
@@ -1299,6 +1333,7 @@ namespace GUI {
                 ImGui::SliderFloat("NoClip Vel", &Config::fNoClipSpeed, 0.5f, 5.0f, "%.1fx");
                 ImGui::Checkbox("No Fall Damage", &Config::bNoFall);
                 if (ImGui::Button("Revive Yourself")) {}
+                ImGui::EndDisabled();
                 ImGui::EndTabItem();
             }
             // ---- 4 SETTINGS ----
