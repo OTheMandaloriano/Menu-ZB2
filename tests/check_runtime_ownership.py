@@ -10,7 +10,7 @@ for name in files:
     assert 'RuntimeGate::' not in text, name+': game code must never lock the UI'
     used.update(re.findall(r's_options\.(\w+)',text))
 header=(root/'runtime_settings.h').read_text()
-for name in used-{'viewportWidth','viewportHeight'}:
+for name in used-{'viewportWidth','viewportHeight','chamsVisible','chamsHidden'}:
     assert 'values.'+name+'=Config::'+name+';' in header, 'Unpublished setting: '+name
 main=(root/'main.cpp').read_text(encoding='utf-8-sig')
 assert main.index('GUI::Render();')<main.index('Mono::SetViewport(')<main.index('Mono::Tick();')

@@ -46,13 +46,20 @@ namespace Mono {
                              // type validado via CE MCP = false (nunca chutar).
     };
 
+    struct CatalogEntry {int id;char name[96];};
+    struct IconPixels {int id=-1;bool valid=false;unsigned char rgba[48*48*4]={};};
+    int GetCatalog(CatalogEntry* output,int capacity);
+    void RequestIcon(int id);
+    bool GetIcon(IconPixels& output);
     struct WorldMarker {
         int kind;
         float x, y, distance; // normalized screen coordinates, y down
         char name[96];
         float left,top,right,bottom,health;
+        float maxHealth;
+        float corners[24],bones[51];
     };
-    static_assert(sizeof(WorldMarker)==132, "Managed marker ABI");
+    static_assert(sizeof(WorldMarker)==436, "Managed marker ABI");
     int GetWorldEsp(WorldMarker* output, int capacity);
     struct DistantMarker { float x,y,distance; int type,state; };
     static_assert(sizeof(DistantMarker)==20,"Managed distant marker ABI");
@@ -61,6 +68,7 @@ namespace Mono {
     struct State {
         bool featureKeysAllowed = false;
         char modifierStatus[192] = {};
+        char visualStatus[128] = {};
         bool  ready = false;
         float dayTime = 0.0f;
         float dayLenMin = 0.0f;

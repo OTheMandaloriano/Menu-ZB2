@@ -4,7 +4,7 @@
 #include "../gui.cpp"
 #include "software_renderer.h"
 namespace Log { const char* GetDir(){return TestPlatform::directory.c_str();}void Infof(const char*,...){} }
-namespace Mono { static State state;static std::vector<EspEntry> entries;const State& Get(){return state;}int GetEsp(EspEntry* out,int count){int total=std::min(count,static_cast<int>(entries.size()));std::copy_n(entries.data(),total,out);return total;} int GetWorldEsp(WorldMarker*,int){return 0;} int GetDistantEsp(DistantMarker*,int){return 0;} }
+namespace Mono { int GetCatalog(CatalogEntry*,int){return 0;} void RequestIcon(int){} bool GetIcon(IconPixels&){return false;}  static State state;static std::vector<EspEntry> entries;const State& Get(){return state;}int GetEsp(EspEntry* out,int count){int total=std::min(count,static_cast<int>(entries.size()));std::copy_n(entries.data(),total,out);return total;} int GetWorldEsp(WorldMarker*,int){return 0;} int GetDistantEsp(DistantMarker*,int){return 0;} }
 bool ImGui_ImplWin32_Init(void*){return true;}void ImGui_ImplWin32_Shutdown(){}
 bool ImGui_ImplDX11_Init(ID3D11Device*,ID3D11DeviceContext*){return true;}void ImGui_ImplDX11_Shutdown(){}
 

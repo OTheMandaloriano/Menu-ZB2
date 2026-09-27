@@ -1,3 +1,6 @@
+#include "item_search.h"
+#include <sstream>
+#include <locale>
 #include "hotkey_toggle.h"
 #include "item_catalog.h"
 #include "esp_options.h"
@@ -111,7 +114,18 @@ namespace Config {
     float colZombieHp[4] = { 0, 1, 0, 1 };
 
     bool bAllyBoxShow=true;
+    bool bAllyPct=false;
+    char szAllyLayout[512]={};
+    int iAllySnapFrom=0,iAllyLayout=1;
+    float colAllyName[4]={.25f,.8f,1,1};
+    float colAllyDist[4]={.25f,.8f,1,1};
+    float colAllyHp[4]={.25f,.8f,1,1};
+    float colAllySkel[4]={.25f,.8f,1,1};
+    float colAllyLine[4]={.25f,.8f,1,1};
+    float colAllyDot[4]={.25f,.8f,1,1};
+
     float fAllyDistance=200;
+    float fMagnetFront=2.5f,fMagnetBoss=8.0f;
     int iMagnetTargets=0; // 0 todos 1 zumbis 2 bosses
     bool  bAllyEsp = false;
     int   iAllyBox = 0;
@@ -512,6 +526,7 @@ namespace GUI {
     }
 
 
+    #include "catalog_ui.inl"
     void Initialize(HWND hWindow, ID3D11Device* pDevice, ID3D11DeviceContext* pContext) {
         if (g_bInit) return;
         s_hWnd = hWindow;
@@ -528,11 +543,13 @@ namespace GUI {
         ImGui::StyleColorsDark();
         ImGui_ImplWin32_Init(hWindow);
         ImGui_ImplDX11_Init(pDevice, pContext);
+        s_iconDevice=pDevice;if(s_iconDevice)s_iconDevice->AddRef();
         LoadConfig("default");
         g_bInit = true;
     }
 
     void Shutdown() {
+        ClearItemIcons();
         if (!g_bInit) return;
         CloseLayoutEditor();
         ImGui_ImplDX11_Shutdown();
@@ -677,7 +694,7 @@ namespace GUI {
         JB(bZombieSkeleton); JB(bZombieSnap); JB(bZombieHeadDot); JV(colZombieSkel); JV(colZombieSnap); JV(colZombieDot);
         JI(iSnapFrom);
         JV(colZombieBox); JV(colZombieName); JV(colZombieDist); JV(colZombieHp); JB(bBossColor); JV(colBossBox);
-        JB(bAllyEsp); JB(bAllyBoxShow); JF(fAllyDistance); JI(iMagnetTargets); JI(iAllyBox); JB(bAllyName); JB(bAllyDist); JB(bAllyHp);
+        JB(bAllyEsp); JB(bAllyBoxShow); JB(bAllyPct); JS(szAllyLayout); JI(iAllySnapFrom); JI(iAllyLayout); JV(colAllyName); JV(colAllyDist); JV(colAllyHp); JV(colAllySkel); JV(colAllyLine); JV(colAllyDot);  JF(fAllyDistance); JI(iMagnetTargets); JF(fMagnetFront); JF(fMagnetBoss); JI(iAllyBox); JB(bAllyName); JB(bAllyDist); JB(bAllyHp);
         JB(bAllySkeleton); JB(bAllySnap); JB(bAllyHeadDot); JV(colAllyVis);
         JB(bChams); JV(colChamsVis); JV(colChamsInv); JB(bItemEsp); JB(bItemWeapons);
         JB(bItemRare); JB(bItemAmmo); JB(bItemSupply); JV(colItem); JV(colItemRare); JV(colItemAmmo); JV(colItemSupply); JF(fItemRadius); JF(fPoiRadius); JI(iItemFilter0); JI(iItemFilter1); JI(iItemFilter2); JI(iItemFilter3); JI(iPoiFilter); JB(bPoiGraves); JB(bPoiPlayers);
@@ -764,7 +781,7 @@ namespace GUI {
         LB(bZombieSkeleton); LB(bZombieSnap); LB(bZombieHeadDot); LV(colZombieSkel); LV(colZombieSnap); LV(colZombieDot);
         LI(iSnapFrom);
         LV(colZombieBox); LV(colZombieName); LV(colZombieDist); LV(colZombieHp); LB(bBossColor); LV(colBossBox);
-        LB(bAllyEsp); LB(bAllyBoxShow); LF(fAllyDistance); LI(iMagnetTargets); LI(iAllyBox); LB(bAllyName); LB(bAllyDist); LB(bAllyHp);
+        LB(bAllyEsp); LB(bAllyBoxShow); LB(bAllyPct); LS(szAllyLayout); LI(iAllySnapFrom); LI(iAllyLayout); LV(colAllyName); LV(colAllyDist); LV(colAllyHp); LV(colAllySkel); LV(colAllyLine); LV(colAllyDot);  LF(fAllyDistance); LI(iMagnetTargets); LF(fMagnetFront); LF(fMagnetBoss); LI(iAllyBox); LB(bAllyName); LB(bAllyDist); LB(bAllyHp);
         LB(bAllySkeleton); LB(bAllySnap); LB(bAllyHeadDot); LV(colAllyVis);
         LB(bChams); LV(colChamsVis); LV(colChamsInv); LB(bItemEsp); LB(bItemWeapons);
         LB(bItemRare); LB(bItemAmmo); LB(bItemSupply); LV(colItem); LV(colItemRare); LV(colItemAmmo); LV(colItemSupply); LF(fItemRadius); LF(fPoiRadius); LI(iItemFilter0); LI(iItemFilter1); LI(iItemFilter2); LI(iItemFilter3); LI(iPoiFilter); LB(bPoiGraves); LB(bPoiPlayers);
@@ -839,6 +856,8 @@ namespace GUI {
         Log::Infof("Config carregada: %s", path);
     }
 
+    #include "team_layout_ui.inl"
+    #include "team_draw.inl"
     #include "esp_filter_ui.inl"
     #include "distant_esp_draw.inl"
     void ProcessFeatureHotkeys() {
@@ -895,19 +914,7 @@ namespace GUI {
                 if(marker.kind<0 || marker.kind>=15 || !enabled[marker.kind]) continue;
                 if(marker.kind<4 && marker.distance>Config::fItemRadius) continue;
                 if(marker.kind>=8 && marker.kind<=11 && marker.distance>Config::fPoiRadius) continue;
-                if(marker.kind==14) {
-                    if(marker.distance>Config::fAllyDistance)continue;
-                    ImVec2 a(marker.left*io.DisplaySize.x,marker.top*io.DisplaySize.y),b(marker.right*io.DisplaySize.x,marker.bottom*io.DisplaySize.y);
-                    const auto* c=Config::colAllyVis;ImU32 tint=ImGui::GetColorU32(ImVec4(c[0],c[1],c[2],c[3]));
-                    if(Config::bAllyBoxShow)dl->AddRect(a,b,tint,0,0,1.5f);
-                    if(Config::bAllySnap)dl->AddLine(ImVec2(io.DisplaySize.x*.5f,EspOptions::SnapOriginY(Config::iSnapFrom,io.DisplaySize.y)),ImVec2((a.x+b.x)*.5f,b.y),tint);
-                    char label[160]={};
-                    if(Config::bAllyName)_snprintf_s(label,_TRUNCATE,"%s",marker.name);
-                    if(Config::bAllyDist){char distance[32];_snprintf_s(distance,_TRUNCATE," %.0fm",marker.distance);strcat_s(label,distance);}
-                    if(Config::bAllyHp){char health[32];_snprintf_s(health,_TRUNCATE," HP %.0f",marker.health);strcat_s(label,health);}
-                    if(*label){auto size=ImGui::CalcTextSize(label);dl->AddText(ImVec2((a.x+b.x-size.x)*.5f,(std::max)(0.0f,a.y-size.y-3)),tint,label);}
-                    continue;
-                }
+                if(marker.kind==14){DrawTeamMarker(dl,marker,io);continue;}
                 const float* color=colors[marker.kind];
                 ImU32 tint=ImGui::GetColorU32(ImVec4(color[0],color[1],color[2],color[3]));
                 ImVec2 position(marker.x*io.DisplaySize.x,marker.y*io.DisplaySize.y);
@@ -1252,17 +1259,22 @@ namespace GUI {
                     Section("Equipe");
                     ImGui::Checkbox("Ativo##A", &Config::bAllyEsp);
                     if(Config::bAllyEsp) {
-                        ImGui::Checkbox("Box 2D##A", &Config::bAllyBoxShow);
-                        ImGui::Checkbox("Nome##A", &Config::bAllyName);
-                        ImGui::Checkbox("Distancia##A", &Config::bAllyDist);
-                        ImGui::Checkbox("HP##A", &Config::bAllyHp);
-                        ImGui::Checkbox("Linha##A", &Config::bAllySnap);
-                        SwatchR("##CorEquipe", Config::colAllyVis,"Cor da equipe");
+                        ImGui::Checkbox("Box##A", &Config::bAllyBoxShow);ImGui::SameLine();ImGui::SetNextItemWidth(110);ImGui::Combo("Tipo##A",&Config::iAllyBox,kBoxType,3);
+                        SwatchR("##ABox",Config::colAllyVis,"Cor do box");
+                        ImGui::Checkbox("Nome##A", &Config::bAllyName);SwatchR("##AName",Config::colAllyName,"Cor do nome");
+                        ImGui::Checkbox("Distancia##A", &Config::bAllyDist);SwatchR("##ADist",Config::colAllyDist,"Cor da distancia");
+                        ImGui::Checkbox("Barra de vida##A", &Config::bAllyHp);ImGui::SameLine();ImGui::Checkbox("%##A",&Config::bAllyPct);SwatchR("##AHp",Config::colAllyHp,"Cor do percentual");
+                        ImGui::Checkbox("Esqueleto##A", &Config::bAllySkeleton);SwatchR("##ASkel",Config::colAllySkel,"Ossos reais do rig humano");
+                        ImGui::Checkbox("Linha##A", &Config::bAllySnap);ImGui::SameLine();ImGui::SetNextItemWidth(90);ImGui::Combo("Origem##A",&Config::iAllySnapFrom,kSnapFrom,3);SwatchR("##ALine",Config::colAllyLine,"Cor da linha");
+                        ImGui::Checkbox("Ponto na cabeca##A", &Config::bAllyHeadDot);SwatchR("##ADot",Config::colAllyDot,"Cor do ponto");
+                        const char* layouts[]={"Personalizado","Classico esquerda","Classico direita","Vida acima","Vida abaixo","Tudo a esquerda","Tudo a direita","Tudo acima","Tudo abaixo","Cantos esquerda","Cantos direita"};
+                        if(ImGui::Combo("Layout equipe",&Config::iAllyLayout,layouts,11))Config::szAllyLayout[0]=0;
+                        DrawTeamLayoutEditor();
                         ImGui::SliderFloat("Raio equipe", &Config::fAllyDistance,10,500,"%.0fm");
                     }
-                    ImGui::TextDisabled("Chams pendente");
-                    ImGui::BeginDisabled();
+
                     Section("Chams");
+                    if(Mono::Get().visualStatus[0])ImGui::TextWrapped("%s",Mono::Get().visualStatus);
                     ImGui::Checkbox("Corpo (XQZ)", &Config::bChams); Tip("Atravessa parede. O proprio checkbox e o enable.");
                     if (Config::bChams) {
                         ImGui::Indent();
@@ -1270,8 +1282,7 @@ namespace GUI {
                         ImGui::TextDisabled("Oculto"); SwatchR("##ChInv", Config::colChamsInv, "Cor atras de parede.");
                         ImGui::Unindent();
                     }
-                    ImGui::EndDisabled();
-                ImGui::TableNextColumn();
+                    ImGui::TableNextColumn();
                     Section("Itens");
                     ImGui::Checkbox("Ativo##I", &Config::bItemEsp); Tip("Master do ESP de itens no chao.");
                     if (Config::bItemEsp) {
@@ -1299,8 +1310,8 @@ namespace GUI {
                         SwatchR("##PBoss", Config::colPoiBoss, "Sempre visivel (dinamico).");
                         ImGui::Checkbox("Missao", &Config::bPoiMission);
                         SwatchR("##PMiss", Config::colPoiMission, "Sempre visivel (dinamico).");
-                        ImGui::BeginDisabled(); ImGui::Checkbox("Onda (pendente)", &Config::bPoiWave); ImGui::EndDisabled();
-                        SwatchR("##PWave", Config::colPoiWave, "Mostra a direcao da onda.");
+                        ImGui::Checkbox("Horda ativa", &Config::bPoiWave);
+                        SwatchR("##PWave", Config::colPoiWave, "Centro dos zumbis de onda carregados, nao o ponto de spawn futuro.");
                         ImGui::Checkbox("Areas de loot", &Config::bPoiLootFix);
                         SwatchR("##PLoot", Config::colPoiLootFix, "Dentro do raio (estatico).");
                         ImGui::Checkbox("Bancadas", &Config::bPoiBench);
@@ -1346,7 +1357,9 @@ namespace GUI {
                 HotkeyButton("Tecla Magnet", &Config::iMagnetKey, "Alterna o Magnet. Reune zumbis carregados dentro do raio, em lotes. Padrao H.");
                 const char* targets[]={"Zumbis e bosses","Somente zumbis","Somente bosses"};
                 ImGui::Combo("Alvos Magnet", &Config::iMagnetTargets,targets,3);
-                ImGui::TextDisabled("Bosses existentes ignoram o raio.");
+                ImGui::TextDisabled("Bosses existentes ignoram o raio de busca.");
+                ImGui::SliderFloat("Distancia frontal",&Config::fMagnetFront,1.5f,10,"%.1fm");
+                ImGui::SliderFloat("Distancia bosses",&Config::fMagnetBoss,6,20,"%.1fm");
                 ImGui::SliderFloat("Raio Magnet", &Config::fMagnetRadius, 10, 300, "%.0fm");
                 ImGui::TextDisabled("Pendente: controles sem implementacao nesta versao.");
                 ImGui::BeginDisabled();

@@ -4,6 +4,17 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+### Catálogo, equipe e estabilidade
+
+- Catálogo de itens em modal com nomes do banco e ícones locais sob demanda; busca normalizada.
+- Entrada do Windows encaminhada por fila para evitar descarte durante renderização.
+- Chams com camada separada de profundidade e liberação ao desligar; requer shader compatível.
+- Equipe com tipos de box, ossos reais, percentual, cores e editor de arraste independente.
+- Horda ativa exibe centro de entidades carregadas; não promete spawn futuro.
+- Magnet usa posições estáveis por ponto de reunião, distância de bosses separada e limite de carregamento por identidade.
+- Especificação ampliada analisada; escolta de aliados, loot e avatares Steam permanecem em planejamento.
+
+
 - ESP de equipe usa jogadores reais, nome, HP, box 2D e raio próprios.
 - Itens ancoram no centro visual; áreas de loot são identificadas explicitamente.
 - Magnet permite filtrar zumbis/bosses; bosses existentes ignoram o raio de origem.

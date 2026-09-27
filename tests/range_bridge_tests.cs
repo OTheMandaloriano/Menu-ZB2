@@ -10,7 +10,7 @@ public struct ZombieTransform {public Vector3 position;}
 public class UnloadedZombie {public ZombieIdentity identity;public ZombieTransform transform;public bool isWaveZombie;}
 public class ZombieProp {public ZombieIdentity identity;public Transform transform=new Transform();public bool isWaveZombie;}
 public class ZombieObject {public Transform transform=new Transform();}
-public class Zombie {public ZombieIdentity identity;public ZombieObject obj=new ZombieObject();public bool isWaveZombie;}
+public class Zombie {public ZombieHealth health=new ZombieHealth();public ZombieIdentity identity;public ZombieObject obj=new ZombieObject();public bool isWaveZombie;}
 public class ZombieLoader {
     public enum ZombieLoadState {Unloaded,Prop,Real}
     public static ZombieLoader Instance;

@@ -32,7 +32,7 @@ with ZipFile(package) as archive:
     (args.output/'Harmony.LICENSE').write_bytes(archive.read('LICENSE'))
 csc = Path(os.environ['WINDIR'])/'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
 refs = ['mscorlib.dll','System.dll','System.Core.dll','netstandard.dll',
-        'Assembly-CSharp.dll','UnityEngine.CoreModule.dll','UnityEngine.PhysicsModule.dll','UnityEngine.InputLegacyModule.dll']
+        'Assembly-CSharp.dll','UnityEngine.CoreModule.dll','UnityEngine.PhysicsModule.dll','UnityEngine.InputLegacyModule.dll','UnityEngine.AnimationModule.dll']
 command = [str(csc), '/nologo','/noconfig','/target:library','/optimize+','/warnaserror+','/nostdlib+',
            '/out:'+str(args.output/'Zb2.AimBridge.dll'),'/reference:'+str(args.output/'0Harmony.dll')]
 command += ['/reference:'+str(args.managed/name) for name in refs]

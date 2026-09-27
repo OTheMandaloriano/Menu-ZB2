@@ -19,6 +19,7 @@ class MagnetTests {
         MagnetBridge.Apply(p,true,true,50);Check(Calls()==4,"four moves per batch");MagnetBridge.Apply(p,true,true,50);Check(Calls()==4,"throttle");
         Time.unscaledTime=1;MagnetBridge.Apply(p,true,true,50);Check(Calls()==8,"next batch");Time.unscaledTime=2;MagnetBridge.Apply(p,true,true,50);Check(Calls()==10,"loaded eligible enemies gathered");
         Time.unscaledTime=3;MagnetBridge.Apply(p,true,true,50);Check(Calls()==10,"no repeated teleports");
+        ZombieLoader.Instance.zombies[0].obj.transform.position=new Vector3(0,0,40);Time.unscaledTime=3.2f;MagnetBridge.Apply(p,true,true,50);Check(Calls()==10,"AI movement does not cause repeated teleport loop");
         p.transform.position=new Vector3(0,0,10);Time.unscaledTime=3.5f;MagnetBridge.Apply(p,true,true,50);Check(Calls()==14,"anchor follows moving player continuously");
         MagnetBridge.Apply(p,false,true,50);Check(!MagnetBridge.Active,"disable clears activation");
         Physics.ground=false;Time.unscaledTime=4;MagnetBridge.Apply(p,true,true,50);Check(Calls()==14,"no unsafe destination without ground");Physics.ground=true;
@@ -27,6 +28,7 @@ class MagnetTests {
         p.healthFast=100;ZombieLoader.Instance=new ZombieLoader();var boss=new Zombie{identity=new ZombieIdentity{id=100,IsBoss=true}};boss.obj.transform.position=new Vector3(0,0,900);ZombieLoader.Instance.unloadedZombies.Add(boss);
         var normal=new Zombie{identity=new ZombieIdentity{id=101}};normal.obj.transform.position=new Vector3(0,0,900);ZombieLoader.Instance.zombies.Add(normal);
         Time.unscaledTime=7;MagnetBridge.Apply(p,true,true,10,2);Check(boss.calls==1 && normal.calls==0,"boss only loads distant existing boss and ignores source radius");
+        Check(boss.obj.transform.position.z>=p.transform.position.z+8,"boss landing is separated from normal anchor");
         MagnetBridge.Reset();boss.obj.transform.position=new Vector3(0,0,900);normal.obj.transform.position=new Vector3(0,0,15);Time.unscaledTime=8;MagnetBridge.Apply(p,true,true,50,1);Check(boss.calls==1 && normal.calls==1,"zombies only excludes boss");
         Console.WriteLine(checks+" magnet checks passed");
     }

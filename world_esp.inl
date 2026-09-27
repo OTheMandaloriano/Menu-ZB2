@@ -18,7 +18,7 @@ static void BuildWorldEsp() {
     const bool enabled[] = {s_options.bItemEsp && s_options.bItemWeapons, s_options.bItemEsp && s_options.bItemRare,
         s_options.bItemEsp && s_options.bItemAmmo, s_options.bItemEsp && s_options.bItemSupply,
         s_options.bPoiEsp && s_options.bPoiHeli, s_options.bPoiEsp && s_options.bPoiBoss,
-        s_options.bPoiEsp && s_options.bPoiMission, false,
+        s_options.bPoiEsp && s_options.bPoiMission, s_options.bPoiEsp && s_options.bPoiWave,
         s_options.bPoiEsp && s_options.bPoiLootFix, s_options.bPoiEsp && s_options.bPoiBench,
         s_options.bPoiEsp && s_options.bPoiFire, s_options.bPoiEsp && s_options.bPoiShop,
         s_options.bPoiEsp && s_options.bPoiRespawn,s_options.bPoiEsp && s_options.bPoiGraves,s_options.bAllyEsp};

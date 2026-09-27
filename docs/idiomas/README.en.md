@@ -46,7 +46,7 @@ Managed tests require Harmony from the preceding build. UI tests use simulated d
 ## Known limitations
 
 - Multiplayer effects remain subject to server behavior and per-feature live validation.
-- Unimplemented controls, including teleport and chams, are marked pending.
+- Unimplemented controls such as manual teleport remain pending. Chams requires a compatible Built-in pipeline shader and live validation.
 - Distant unloaded entities expose known positions, not fabricated health or bones.
 - Legacy inventory, currency and unlock operations are not equivalent to reversible parameter modifiers.
 - Updates are manual. The injector does not require a GitHub token.
@@ -56,3 +56,5 @@ Managed tests require Harmony from the preceding build. UI tests use simulated d
 See the maintained Portuguese references for [structure](../ESTRUTURA.md), [distribution planning](../DISTRIBUICAO.md), [modifier audit](../AUDITORIA_MODIFICADORES_ESP.md), [render stability](../ESTABILIDADE_RENDER.md), [changelog](../../CHANGELOG.md), [contributing](../../.github/CONTRIBUTING.md) and [licensing](../../NOTICE.md).
 
 [Hotkeys and Magnet](../CONTROLES.md)
+
+[Visual catalog, team overlay and Magnet review](../REVISAO_VISUAL_MAGNET.md)

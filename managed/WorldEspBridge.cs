@@ -12,8 +12,12 @@ namespace Zb2Menu {
             public float X, Y, Distance;
             [MarshalAs(UnmanagedType.ByValArray, SizeConst=96)] public byte[] Name;
             public float Left,Top,Right,Bottom,Health;
+            public float MaxHealth;
+            [MarshalAs(UnmanagedType.ByValArray,SizeConst=24)] public float[] Corners;
+            [MarshalAs(UnmanagedType.ByValArray,SizeConst=51)] public float[] Bones;
         }
         static readonly List<Marker> result = new List<Marker>(256);
+        static readonly float[] emptyCorners=new float[24],emptyBones=new float[51];
         sealed class LootEntry { public DroppedLoot Loot; public Renderer[] Renderers; public string Name; public int Kind; public float Distance; }
         static readonly List<LootEntry> lootCache = new List<LootEntry>(512);
         static MapHash previousMap;
@@ -37,7 +41,7 @@ namespace Zb2Menu {
             if (float.IsNaN(distance) || float.IsInfinity(distance) || (limited && distance>(kind<4 ? radius : poiRadius))) return;
             var screen=camera.WorldToViewportPoint(position);
             if (!(screen.z > .01f && screen.x>=0 && screen.x<=1 && screen.y>=0 && screen.y<=1)) return;
-            var entry=new Marker {Kind=kind, X=screen.x, Y=1-screen.y, Distance=distance};
+            var entry=new Marker {Kind=kind, X=screen.x, Y=1-screen.y, Distance=distance,Corners=emptyCorners,Bones=emptyBones};
             entry.Name=new byte[96];
             string label=name ?? "?";
             // Truncate characters before UTF8 encoding, avoiding partial sequences.
@@ -67,6 +71,7 @@ namespace Zb2Menu {
                 if ((mask & 15)!=0) Items();
                 if ((mask & ~15)!=0) Points();
                 if ((mask & (1<<14))!=0) Team();
+                if ((mask & (1<<7))!=0) Wave();
             } catch(Exception ex) { error=ex.ToString(); }
             int count=Math.Min(capacity,result.Count), stride=Marshal.SizeOf(typeof(Marker));
             for(int i=0;i<count;++i) Marshal.StructureToPtr(result[i],IntPtr.Add(buffer,i*stride),false);
@@ -167,14 +172,16 @@ namespace Zb2Menu {
                 var bounds=player.movement.hitbox.bounds;
                 float distance=Vector3.Distance(origin,bounds.center);
                 if(!(distance>=0) || float.IsInfinity(distance))continue;
-                float left=1,right=0,top=1,bottom=0;int projected=0;
+                float left=1,right=0,top=1,bottom=0;int projected=0;var corners=new float[24];
                 for(int corner=0;corner<8;++corner){
                     var point=bounds.center+new Vector3((corner&1)==0?-bounds.extents.x:bounds.extents.x,(corner&2)==0?-bounds.extents.y:bounds.extents.y,(corner&4)==0?-bounds.extents.z:bounds.extents.z);
                     var screen=camera.WorldToViewportPoint(point);if(!(screen.z>.01f))continue;
+                    corners[corner*3]=screen.x;corners[corner*3+1]=1-screen.y;corners[corner*3+2]=1;
                     left=Math.Min(left,screen.x);right=Math.Max(right,screen.x);top=Math.Min(top,1-screen.y);bottom=Math.Max(bottom,1-screen.y);++projected;
                 }
                 if(projected<2 || right<0 || left>1 || bottom<0 || top>1)continue;
-                var marker=new Marker{Kind=14,X=(left+right)*.5f,Y=bottom,Distance=distance,Left=Math.Max(0,left),Right=Math.Min(1,right),Top=Math.Max(0,top),Bottom=Math.Min(1,bottom),Health=player.healthFast,Name=new byte[96]};
+                var marker=new Marker{Kind=14,X=(left+right)*.5f,Y=bottom,Distance=distance,Left=Math.Max(0,left),Right=Math.Min(1,right),Top=Math.Max(0,top),Bottom=Math.Min(1,bottom),Health=player.healthFast,MaxHealth=player.MaxHealth,Name=new byte[96],Corners=corners,Bones=new float[51]};
+                TeamBones(player,marker.Bones);
                 string name=player.lobbyPlayer==null?"Aliado":player.lobbyPlayer.playerName;
                 if(string.IsNullOrWhiteSpace(name))name="Aliado";
                 if(name.Length>28)name=name.Substring(0,28);
@@ -183,6 +190,18 @@ namespace Zb2Menu {
                 if(result.Count>=256)result.RemoveAt(result.Count-1);
                 result.Add(marker);
             }
+        }
+        static readonly HumanBodyBones[] joints={HumanBodyBones.Head,HumanBodyBones.Neck,HumanBodyBones.Chest,HumanBodyBones.Spine,HumanBodyBones.Hips,
+            HumanBodyBones.LeftUpperArm,HumanBodyBones.LeftLowerArm,HumanBodyBones.LeftHand,HumanBodyBones.RightUpperArm,HumanBodyBones.RightLowerArm,HumanBodyBones.RightHand,
+            HumanBodyBones.LeftUpperLeg,HumanBodyBones.LeftLowerLeg,HumanBodyBones.LeftFoot,HumanBodyBones.RightUpperLeg,HumanBodyBones.RightLowerLeg,HumanBodyBones.RightFoot};
+        static void TeamBones(PlayerMain player,float[] output){
+            var skin=player.SpawnedSkin;if(skin==null || skin.animator==null || !skin.animator.isHuman)return;
+            for(int i=0;i<joints.Length;++i){var bone=skin.animator.GetBoneTransform(joints[i]);if(bone==null)continue;var point=camera.WorldToViewportPoint(bone.position);if(!(point.z>.01f))continue;output[i*3]=point.x;output[i*3+1]=1-point.y;output[i*3+2]=1;}
+        }
+        static void Wave(){
+            var loader=ZombieLoader.Instance;if(loader==null)return;Vector3 sum=Vector3.zero;int count=0;
+            foreach(var zombie in loader.zombies)if(zombie!=null && zombie.isWaveZombie && zombie.obj!=null && zombie.health!=null && zombie.health.isAlive){sum+=zombie.obj.transform.position;if(++count>=512)break;}
+            if(count>0)Add(7,"Horda ativa ("+count+")",sum/count,false);
         }
     }
 }

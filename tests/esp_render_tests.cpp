@@ -2,7 +2,7 @@
 #include <cstdlib>
 #include <fstream>
 namespace Log { const char* GetDir(){return ".";} void Infof(const char*,...){} }
-namespace Mono {
+namespace Mono { int GetCatalog(CatalogEntry*,int){return 0;} void RequestIcon(int){} bool GetIcon(IconPixels&){return false;}
     static State state; static EspEntry entry; static WorldMarker marker; static int worldCount=0;
     const State& Get(){return state;}
     int GetEsp(EspEntry* out,int count){if(count<=0)return 0;out[0]=entry;return 1;}
@@ -62,7 +62,12 @@ int main(){
     Config::bZombieEsp=false;Config::bPoiEsp=false;Config::bItemEsp=false;Config::bAllyEsp=true;
     Mono::worldCount=1;Mono::marker.kind=14;Mono::marker.distance=20;Mono::marker.left=.4f;Mono::marker.right=.6f;Mono::marker.top=.3f;Mono::marker.bottom=.7f;Mono::marker.health=87;
     Config::bAllyBoxShow=true;Check(Frame()>0,"team renders with items and POI disabled");
+    Config::bAllyPct=false;Config::bAllySkeleton=false;Config::bAllyHeadDot=false;
     Config::bAllyBoxShow=false;Config::bAllyName=false;Config::bAllyDist=false;Config::bAllyHp=false;Config::bAllySnap=false;Check(Frame()==0,"team master without elements draws nothing");
     Config::bAllyName=true;Check(Frame()>0,"team name independent");Config::fAllyDistance=10;Check(Frame()==0,"team range independent");
+    auto team=GUI::ReadTeamLayout();team.items[EspLayout::Name].side=EspLayout::Bottom;GUI::SaveTeamLayout(team);
+    Check(GUI::ReadTeamLayout().items[EspLayout::Name].side==EspLayout::Bottom,"team drag layout retained independently");
+    Check(GUI::SaveConfig("team-layout-test"),"save team layout");Config::szAllyLayout[0]=0;GUI::LoadConfig("team-layout-test");
+    Check(GUI::ReadTeamLayout().items[EspLayout::Name].side==EspLayout::Bottom,"team layout survives preset reload");
     ImGui::DestroyContext();std::printf("PASS: %d real ImGui overlay checks\n",checks);
 }

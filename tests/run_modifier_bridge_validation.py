@@ -8,7 +8,7 @@ csc=Path(os.environ['WINDIR'])/'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
 exe=out/'modifier_tests.exe'
 commands=[[str(csc),'/nologo','/warnaserror+','/out:'+str(exe),'/reference:'+str(out/'0Harmony.dll'),
     str(root/'managed/OriginalValues.cs'),str(root/'managed/ModifierBridge.cs'),str(root/'tests/modifier_bridge_tests.cs')],[str(exe)],
-    [str(csc),'/nologo','/warnaserror+','/out:'+str(out/'world_tests.exe'),str(root/'managed/WorldEspBridge.cs'),str(root/'tests/world_esp_tests.cs')],
+    [str(csc),'/nologo','/warnaserror+','/out:'+str(out/'world_tests.exe'),str(root/'managed/WorldEspBridge.cs'),str(root/'tests/world_esp_tests.cs'),str(root/'tests/visual_model_stubs.cs')],
     [str(out/'world_tests.exe')]]
 log=[]
 for command in commands:

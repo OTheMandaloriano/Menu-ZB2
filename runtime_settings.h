@@ -18,6 +18,11 @@ struct Values {
     decltype(Config::fMagnetRadius) fMagnetRadius = {};
     decltype(Config::bAllyEsp) bAllyEsp = {};
     decltype(Config::iMagnetTargets) iMagnetTargets = {};
+    bool bChams=false;
+    decltype(Config::bPoiWave) bPoiWave = {};
+    int chamsVisible=0,chamsHidden=0;
+    decltype(Config::fMagnetFront) fMagnetFront={};
+    decltype(Config::fMagnetBoss) fMagnetBoss={};
     float viewportWidth=1920, viewportHeight=1080;
     decltype(Config::b360Mode) b360Mode = {};
     decltype(Config::bAimbot) bAimbot = {};
@@ -92,6 +97,11 @@ inline Values Capture(float width,float height) {
     values.bEnemyMagnet=Config::bEnemyMagnet;
     values.fMagnetRadius=Config::fMagnetRadius;
     values.bAllyEsp=Config::bAllyEsp; values.iMagnetTargets=Config::iMagnetTargets;
+    values.bChams=Config::bChams;
+    values.bPoiWave=Config::bPoiWave;
+    auto pack=[](const float* c){unsigned result=0;for(int i=0;i<4;++i){float value=c[i];if(!(value>=0))value=0;if(value>1)value=1;result|=static_cast<unsigned>(value*255)<<(i*8);}return static_cast<int>(result);};
+    values.chamsVisible=pack(Config::colChamsVis);values.chamsHidden=pack(Config::colChamsInv);
+    values.fMagnetFront=Config::fMagnetFront;values.fMagnetBoss=Config::fMagnetBoss;
     values.viewportWidth=width; values.viewportHeight=height;
     values.b360Mode=Config::b360Mode;
     values.bAimbot=Config::bAimbot;

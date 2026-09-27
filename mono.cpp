@@ -1705,8 +1705,17 @@ namespace Mono {
         }
     }
 
+    static void ApplyVisuals(bool ready) {
+        if(!s_chamsApply)return;
+        int enabled=ready && s_options.bChams?1:0;
+        void* args[]={&enabled,&s_options.chamsVisible,&s_options.chamsHidden};MonoObject* exception=nullptr;
+        auto message=pInvoke(s_chamsApply,nullptr,args,&exception);
+        s.visualStatus[0]=0;
+        if(message && !exception){char* text=pStrUtf8(message);if(text){strncpy_s(s.visualStatus,text,_TRUNCATE);pFree(text);}}
+    }
     static void RunGameCycle() {
         if (!s.ready || !SceneAlive()) {
+            ApplyVisuals(false);
             ClearEntitySnapshot(); ResetAim(); AmmoCachesClear();
             s.inMap = false; s_camWok = false;
             s.coopMode = 0;
@@ -1716,6 +1725,7 @@ namespace Mono {
             return;
         }
         if (MapSettling()) {
+            ApplyVisuals(false);
             ClearEntitySnapshot(); ResetAim();
             s_nextCycle = PiNow() + 500000;
             return;
@@ -1723,6 +1733,8 @@ namespace Mono {
         RefreshSessionDebug();
         s.featureKeysAllowed=false;
         if(s_featureKeys)InvokeAimBool(s_featureKeys,nullptr,nullptr,s.featureKeysAllowed);
+        UpdateCatalog();
+        ApplyVisuals(true);
         BuildWorldEsp();
         BuildDistantEsp();
         static int s_deadN = 0;
@@ -2872,7 +2884,7 @@ namespace Mono {
             (s_options.bFastKnife ? 256 : 0) | (s_options.bFullAuto ? 512 : 0) |
             (s_options.bUnlockSlots ? 1024 : 0) | (s_options.bNoClip ? 2048 : 0) | (s_options.bMenuOpen ? 4096 : 0) | (s_options.bEnemyMagnet ? 8192 : 0);
         void* args[] = {local, &flags, &s_options.fRapidMult, &s_options.fSpeedMult,
-            &s_options.fJumpMult, &s_options.fRollMult, &s_options.fKnifeMult, &s_options.fNoClipSpeed, &s_options.fMagnetRadius, &s_options.iMagnetTargets};
+            &s_options.fJumpMult, &s_options.fRollMult, &s_options.fKnifeMult, &s_options.fNoClipSpeed, &s_options.fMagnetRadius, &s_options.iMagnetTargets,&s_options.fMagnetFront,&s_options.fMagnetBoss};
         InvokeAimBool(s_modifierApply, nullptr, args, s_modifiersPending);
         BridgeError(s_modifierError, "MODIFIERS");
         s.slotsOn=s_options.bUnlockSlots;

@@ -4,6 +4,8 @@ using System.Runtime.InteropServices;
 using Zb2Menu;
 namespace UnityEngine {
     public struct Vector3 {
+        public static Vector3 zero {get{return new Vector3();}}
+        public static Vector3 operator /(Vector3 v,float s){return new Vector3(v.x/s,v.y/s,v.z/s);}
         public float x,y,z;
         public Vector3(float a,float b,float c){x=a;y=b;z=c;}
         public static Vector3 operator +(Vector3 a,Vector3 b){return new Vector3(a.x+b.x,a.y+b.y,a.z+b.z);}
@@ -21,7 +23,7 @@ namespace UnityEngine {
 }
 public class LobbyPlayer {public string playerName="Friend";}
 public class PlayerMovement {public UnityEngine.Collider hitbox=new UnityEngine.Collider();}
-public class PlayerMain {public bool HasLocalControl;public LobbyPlayer lobbyPlayer=new LobbyPlayer();public PlayerMovement movement=new PlayerMovement();public float healthFast=100;public UnityEngine.Transform transform=new UnityEngine.Transform();}
+public class PlayerMain {public float MaxHealth {get{return 100;}} public CharacterSkin SpawnedSkin;public bool HasLocalControl;public LobbyPlayer lobbyPlayer=new LobbyPlayer();public PlayerMovement movement=new PlayerMovement();public float healthFast=100;public UnityEngine.Transform transform=new UnityEngine.Transform();}
 public class PlayersController {public List<PlayerMain> players=new List<PlayerMain>();public static PlayersController instance=new PlayersController(); public PlayerMain player=new PlayerMain();public PlayerMain MyPlayer(){return player;}}
 public class MainCamera {public static MainCamera instance=new MainCamera(); public UnityEngine.Camera cam=new UnityEngine.Camera();}
 public class InventoryItem {public enum ID{RifleAmmo,SniperAmmo,ShotgunAmmo,PistolAmmo,Gun}; public ID id=ID.Gun; public DatabaseItem db=new DatabaseItem();public DatabaseItem GetDataBaseItem(){return db;}}
@@ -43,7 +45,7 @@ class WorldTests {
     static int Collect(int mask,float range=150,int cap=256,float poiRange=150){return WorldEspBridge.Collect(buffer,cap,mask,range,poiRange,-1,-1,-1,-1,-1);}
     static DroppedLoot Loot(float x,float z,DatabaseItem db,InventoryItem.ID id=InventoryItem.ID.Gun){var l=new DroppedLoot();l.item.db=db;l.item.id=id;l.transform.position=new UnityEngine.Vector3(x,0,z);return l;}
     static void Main(){
-        buffer=Marshal.AllocHGlobal(132*256+16);
+        buffer=Marshal.AllocHGlobal(436*256+16);
         try {
             MapHash.instance.cell.loot.Add(Loot(0,10,new DatabaseGun()));
             MapHash.instance.cell.loot.Add(Loot(0,12,new DatabaseItem(),InventoryItem.ID.PistolAmmo));
@@ -63,7 +65,7 @@ class WorldTests {
             PlayersController.instance.player.healthFast=0;Check(Collect(15|16)==0,"dead player clears");PlayersController.instance.player.healthFast=100;
             Check(Collect(15,150,1)==1,"caller capacity honored");
             for(int i=0;i<300;++i)InterestPointController.instance.points.Add(new InterestPoint{type=InterestPoint.Type.Helicopter});
-            Marshal.WriteInt32(buffer,132*256,1234567);Check(Collect(16)==256,"capacity bound");Check(Marshal.ReadInt32(buffer,132*256)==1234567,"no buffer overrun");
+            Marshal.WriteInt32(buffer,436*256,1234567);Check(Collect(16)==256,"capacity bound");Check(Marshal.ReadInt32(buffer,436*256)==1234567,"no buffer overrun");
             InterestPointController.instance.points.Clear();
             InterestPointController.instance.points.Add(new InterestPoint{type=InterestPoint.Type.ZumbiePyre,pos3D=new UnityEngine.Vector3(0,0,100)});
             Check(Collect(15|1024,11,256,150)==2,"short item radius keeps distant POI");
@@ -82,6 +84,8 @@ class WorldTests {
             Check(Marshal.ReadInt32(buffer)==14,"team category ABI");
             byte[] teamName=new byte[96];Marshal.Copy(IntPtr.Add(buffer,16),teamName,0,96);Check(System.Text.Encoding.UTF8.GetString(teamName).StartsWith("Friend"),"real teammate name");
             friend.healthFast=0;Check(Collect(1<<14)==0,"dead teammate excluded");
+            friend.healthFast=87;friend.SpawnedSkin=new CharacterSkin();Check(Collect(1<<14)==1,"humanoid teammate collected");
+            byte[] boneValid=new byte[4];Marshal.Copy(IntPtr.Add(buffer,136+24*4+2*4),boneValid,0,4);Check(BitConverter.ToSingle(boneValid,0)==1,"real head joint projected into team snapshot");
             MapHash.instance.cell.loot.Clear();var centered=Loot(0,10,new DatabaseGun());centered.renderers=new[]{new UnityEngine.Renderer{bounds=new UnityEngine.Bounds{center=new UnityEngine.Vector3(20,0,10)}}};MapHash.instance.cell.loot.Add(centered);UnityEngine.Time.unscaledTime+=1;
             Check(Collect(1)==1,"rendered item collected");byte[] scalar=new byte[4];Marshal.Copy(IntPtr.Add(buffer,4),scalar,0,4);Check(Math.Abs(BitConverter.ToSingle(scalar,0)-.7f)<.001f,"item anchor uses renderer center rather than root pivot");
             Console.WriteLine(checks+" world ESP checks passed");

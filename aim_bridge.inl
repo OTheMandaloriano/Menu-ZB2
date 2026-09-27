@@ -7,6 +7,9 @@ static MonoMethod* s_bridgeVisible = nullptr;
 static MonoMethod* s_modifierApply = nullptr;
 static MonoMethod* s_modifierStatus = nullptr;
 static MonoMethod* s_featureKeys = nullptr;
+static MonoMethod* s_catalogRead = nullptr;
+static MonoMethod* s_catalogIcon = nullptr;
+static MonoMethod* s_chamsApply = nullptr;
 static MonoMethod* s_modifierReset = nullptr;
 static MonoMethod* s_modifierError = nullptr;
 static MonoMethod* s_worldCollect = nullptr;
@@ -61,6 +64,10 @@ static bool LoadAimBridge() {
         auto image = static_cast<MonoImage*>(pAssmImage(assembly));
         auto modifiers = pClassFrom(image, "Zb2Menu", "ModifierBridge");
         auto world = pClassFrom(image, "Zb2Menu", "WorldEspBridge");
+        auto catalog = pClassFrom(image,"Zb2Menu","ItemCatalogBridge");
+        auto chams = pClassFrom(image,"Zb2Menu","ChamsBridge");
+        if(!catalog || !chams)return false;
+        s_catalogRead=pMethodFrom(catalog,"Read",2);s_catalogIcon=pMethodFrom(catalog,"Icon",2);s_chamsApply=pMethodFrom(chams,"Apply",3);
         auto ranges = pClassFrom(image, "Zb2Menu", "RangeBridge");
         if (!modifiers || !world || !ranges) return false;
         s_rangeConfigure = pMethodFrom(ranges, "Configure", 6);
@@ -68,7 +75,7 @@ static bool LoadAimBridge() {
         s_rangeError = pMethodFrom(ranges, "LastError", 0);
         s_rangeStats = pMethodFrom(ranges, "Statistics", 0);
         if (!s_rangeConfigure || !s_rangeCollect) return false;
-        s_modifierApply = pMethodFrom(modifiers, "Apply", 10);
+        s_modifierApply = pMethodFrom(modifiers, "Apply", 12);
         s_modifierStatus = pMethodFrom(modifiers, "Status", 0);
         s_featureKeys = pMethodFrom(modifiers, "CanUseKeys", 0);
         s_modifierReset = pMethodFrom(modifiers, "Reset", 0);
@@ -125,5 +132,6 @@ static void PublishAimBridge(void* local, const Aim::Target* target, int flags) 
     } __except (EXCEPTION_EXECUTE_HANDLER) { ClearAimBridge(); }
 }
 
+#include "catalog_runtime.inl"
 #include "world_esp.inl"
 #include "distance_runtime.inl"

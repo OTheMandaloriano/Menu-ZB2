@@ -66,6 +66,8 @@ python tests/run_managed_aim_validation.py
 python tests/run_modifier_bridge_validation.py
 python tests/run_range_validation.py
 python tests/run_player_features_validation.py
+python tests/run_catalog_validation.py
+python tests/run_chams_validation.py
 ```
 
 Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. Os testes de interface usam ImGui com dados simulados, sem controlar a tela do jogo.
@@ -75,7 +77,7 @@ Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. 
 | Área | Estado |
 |---|---|
 | Multiplayer | Há caminhos para solo, host e cliente; aceitação de efeitos pelo servidor e estabilidade prolongada precisam de validação por função. |
-| Controles pendentes | Teleporte manual, chams e outros controles sem execução estão identificados como pendentes. |
+| Controles pendentes | Teleporte manual e outros controles sem execução estão identificados como pendentes. |
 | ESP distante | Registros sem modelo carregado usam posição conhecida; não há vida ou ossos inventados. |
 | Modificadores legados | Inventário, moedas e desbloqueios têm comportamento distinto de restaurar parâmetros de armas e movimento. Consulte a auditoria. |
 | Distribuição | Injetor com dependências na mesma pasta. Atualização manual; launcher retirado. |
@@ -92,3 +94,5 @@ Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. 
 [Atalhos e Magnet](docs/CONTROLES.md)
 
 [Equipe, itens e filtros do Magnet](docs/EQUIPE_ITENS_MAGNET.md)
+
+[Catálogo visual, Chams e revisão do Magnet](docs/REVISAO_VISUAL_MAGNET.md)
