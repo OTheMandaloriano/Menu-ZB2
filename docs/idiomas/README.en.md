@@ -17,7 +17,7 @@ A development menu for Zumbi Blocks 2 with a D3D11 interface and Unity Mono inte
 The native C++ module provides the interface and rendering. Managed C# adapters run inside the game's Mono environment. Features include aiming controls, weapon and movement parameters, entity/item/world overlays, presets and diagnostic logs.
 
 > [!IMPORTANT]
-> This private repository contains development sources, tests and documentation. The 0.2.0 private preview includes an embedded local runtime and opt-in runtime updates. There is no stable public release. Automated tests do not establish live compatibility in solo, host and client modes.
+> This private repository contains development sources, tests and documentation. The 0.2.1 private preview includes an embedded local runtime and opt-in runtime updates. There is no stable public release. Automated tests do not establish live compatibility in solo, host and client modes.
 
 ## Build
 
@@ -54,3 +54,5 @@ Managed tests require Harmony from the preceding build. UI tests use simulated d
 - Licensing provenance must be consolidated before public redistribution.
 
 See the maintained Portuguese references for [structure](../ESTRUTURA.md), [distribution planning](../DISTRIBUICAO.md), [modifier audit](../AUDITORIA_MODIFICADORES_ESP.md), [render stability](../ESTABILIDADE_RENDER.md), [changelog](../../CHANGELOG.md), [contributing](../../.github/CONTRIBUTING.md) and [licensing](../../NOTICE.md).
+
+[Launcher and control changes](../CONTROLES_LAUNCHER.md)

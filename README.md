@@ -22,7 +22,7 @@ O projeto combina uma DLL nativa C++ para interface e renderização com adaptad
 Este é o repositório privado de **código-fonte, testes e documentação**. Distribuição para usuários e atualização do menu pertencem a um canal separado. Veja [distribuição e atualizações](docs/DISTRIBUICAO.md).
 
 > [!IMPORTANT]
-> O launcher 0.2.0 é uma prévia privada com pacote local e atualização opcional do runtime. Não há uma versão pública estável. Testes simulados não substituem validação em partida solo, host e cliente.
+> O launcher 0.2.1 é uma prévia privada com pacote local e atualização opcional do runtime. Não há uma versão pública estável. Testes simulados não substituem validação em partida solo, host e cliente.
 
 ## Requisitos de desenvolvimento
 
@@ -89,3 +89,5 @@ Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. 
 - [Estabilidade da renderização](docs/ESTABILIDADE_RENDER.md)
 - [Alcances de entidades](docs/DISTANCIAS.md) e [raios independentes](docs/RAIOS_ESP.md)
 - [Histórico](CHANGELOG.md), [contribuição](.github/CONTRIBUTING.md) e [licenciamento](NOTICE.md)
+
+[Interface e controles 0.2.1](docs/CONTROLES_LAUNCHER.md)

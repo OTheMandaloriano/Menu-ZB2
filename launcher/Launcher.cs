@@ -12,54 +12,46 @@ using System.Windows.Forms;
 
 namespace Zb2Launcher {
     public sealed class Preferences {public bool CheckOnStart;}
-    public sealed class Launcher : Form {
+    public partial class Launcher : Form {
         readonly string root=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),"ZB2Menu");
         readonly TextBox token=new TextBox{UseSystemPasswordChar=true,Width=470};
         readonly CheckBox remember=new CheckBox{Text="Salvar credencial protegida neste usuario Windows",AutoSize=true};
         readonly CheckBox automatic=new CheckBox{Text="Consultar e instalar atualizacoes ao abrir (opcional)",AutoSize=true};
         readonly CheckBox inMap=new CheckBox{Text="Estou dentro do mapa do jogo",AutoSize=true};
         readonly Label status=new Label{AutoSize=false,Width=480,Height=75};
-        readonly FlowLayoutPanel panel=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,Padding=new Padding(16),AutoScroll=true};
+        readonly Panel panel=new Panel{Dock=DockStyle.Fill};
         readonly PackageStore store;
         bool busy;
         string TokenPath {get{return Path.Combine(root,"configs","github.token.enc");}}
         string PrefPath {get{return Path.Combine(root,"configs","launcher.json");}}
         static bool GameRunning(){return Process.GetProcessesByName("ZumbiBlocks2").Length!=0;}
-        public Launcher() {
-            Text="ZB2Menu | Launcher de testes 0.2.0";ClientSize=new System.Drawing.Size(530,465);FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;
-            store=new PackageStore(root,GameRunning);
-            foreach(string dir in new[]{"configs","logs","licenses"})Directory.CreateDirectory(Path.Combine(root,dir));
-            MigratePresets();Controls.Add(panel);
-            panel.Controls.Add(new Label{Text="Modo local funciona sem acesso ao GitHub.",AutoSize=true});
-            panel.Controls.Add(new Label{Text="Canal privado: "+GitHubUpdates.Repository,AutoSize=true});
-            panel.Controls.Add(new Label{Text="Token pessoal GitHub com Contents: read (para atualizar)",AutoSize=true});
-            panel.Controls.Add(token);panel.Controls.Add(remember);panel.Controls.Add(automatic);
-            AddButton("Verificar e instalar atualizacao",()=>UpdateRuntime(false));
-            AddButton("Instalar pacote ZIP local",ImportLocal);
-            panel.Controls.Add(inMap);
-            AddButton("Carregar menu no jogo",Inject);
-            AddButton("Abrir pasta do menu",()=>{Process.Start(new ProcessStartInfo(root){UseShellExecute=true});return Task.FromResult(0);});
-            panel.Controls.Add(status);
+        public Launcher(bool preview=false) {
+            if(!preview) {
+                store=new PackageStore(root,GameRunning);
+                foreach(string dir in new[]{"configs","logs","licenses"})Directory.CreateDirectory(Path.Combine(root,dir));
+                MigratePresets();
+            }
+            BuildInterface(preview);
+            if(preview){status.Text="Versão local 0.2.1 · Modo local · Prévia visual sem conexão";return;}
             LoadPreferences();
             automatic.CheckedChanged+=(s,e)=>SavePreferences();
             remember.CheckedChanged+=(s,e)=>SavePreferences();
             Shown+=async(s,e)=>await Run(async()=>{
-                if(store.Current()==null) {
-                    using(var stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("runtime.zip"))using(var output=new MemoryStream()) {
-                        if(stream==null)throw new InvalidDataException("Pacote local ausente");stream.CopyTo(output);store.Install(output.ToArray());
-                    }
+                using(var stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("runtime.zip"))using(var output=new MemoryStream()) {
+                    if(stream==null)throw new InvalidDataException("Pacote local ausente");stream.CopyTo(output);
+                    var bytes=output.ToArray();var bundled=store.Inspect(bytes);var current=store.Current();
+                    if(current==null || PackageStore.ParseVersion(current.version)<PackageStore.ParseVersion(bundled.version))store.Install(bytes);
                 }
                 ShowVersion();if(automatic.Checked)await UpdateRuntime(true);
             });
         }
-        void AddButton(string title,Func<Task> action){var b=new Button{Text=title,Width=470,Height=32};b.Click+=async(s,e)=>await Run(action);panel.Controls.Add(b);}
         async Task Run(Func<Task> action) {
-            if(busy)return;busy=true;panel.Enabled=false;
+            if(busy)return;busy=true;panel.Enabled=false;progress.Visible=true;
             try{await action();}
             catch(Exception ex){status.Text=ex.Message;File.AppendAllText(Path.Combine(root,"logs","launcher.log"),DateTime.UtcNow.ToString("o")+" "+ex.GetType().Name+Environment.NewLine);}
-            finally{panel.Enabled=true;busy=false;}
+            finally{panel.Enabled=true;progress.Visible=false;busy=false;RefreshGameState();}
         }
-        void ShowVersion(){var current=store.Current();status.Text=current==null?"Nenhum pacote instalado.":"Versao local: "+current.version+". Pronta para teste no mapa.";}
+        void ShowVersion(){var current=store.Current();versionLabel.Text=current==null?"SEM PACOTE":"VERSÃO "+current.version;status.Text=current==null?"Nenhum pacote instalado.":"Versao local: "+current.version+". Pronta para teste no mapa.";}
         async Task UpdateRuntime(bool consent) {
             SavePreferences();status.Text="Consultando canal privado...";
             var current=store.Current();var updates=new GitHubUpdates();
@@ -103,7 +95,8 @@ namespace Zb2Launcher {
             if(remember.Checked && token.Text.Length>0)File.WriteAllBytes(TokenPath,ProtectedData.Protect(Encoding.UTF8.GetBytes(token.Text.Trim()),null,DataProtectionScope.CurrentUser));
             else if(File.Exists(TokenPath))File.Delete(TokenPath);
         }
-        [STAThread] static void Main() {
+        [STAThread] static void Main(string[] args) {
+            if(args.Length==2 && args[0]=="--preview"){Application.EnableVisualStyles();using(var view=new Launcher(true))view.SavePreview(args[1]);return;}
             bool created;
             using(var mutex=new Mutex(true,"Local\\ZB2MenuLauncher",out created)) {
                 if(!created)return;

@@ -38,6 +38,13 @@ namespace Zb2Launcher {
             return manifest;
         }
         public string VersionDirectory(string version) {ParseVersion(version);return Path.Combine(Root,"runtime",version);}
+        public PackageManifest Inspect(byte[] package) {
+            using(var zip=new ZipArchive(new MemoryStream(package),ZipArchiveMode.Read)) {
+                var entry=zip.GetEntry("manifest.json");
+                if(entry==null || entry.Length>32768)throw new InvalidDataException("Manifesto ausente ou excessivo");
+                using(var stream=entry.Open())using(var reader=new StreamReader(stream))return ReadManifest(reader.ReadToEnd());
+            }
+        }
         PackageManifest ReadManifest(string value) {
             if(value.Length>32768)throw new InvalidDataException("Manifesto excessivo");
             var m=json.Deserialize<PackageManifest>(value);

@@ -1,4 +1,4 @@
-# Launcher 0.2.0, prévia privada
+# Launcher 0.2.1, prévia privada
 
 O executável `ZB2Menu.exe` contém um pacote local de runtime. Não exige Cheat Engine, dnSpy ou GitHub CLI no computador do usuário. Requer Windows x64 e .NET Framework 4.8 ou compatível. Não é assinado com Authenticode.
 
@@ -11,7 +11,7 @@ O executável `ZB2Menu.exe` contém um pacote local de runtime. Não exige Cheat
 
 ```text
 Documentos/ZB2Menu/
-  runtime/0.2.0/        componentes verificados
+  runtime/0.2.1/        componentes verificados
   configs/             presets e preferências do launcher
   logs/                logs nativos e do launcher
   licenses/            avisos de dependências
@@ -36,7 +36,7 @@ As atualizações substituem o **runtime do menu**. Atualização do executável
 ## Build
 
 ```powershell
-python scripts/build_launcher.py --runtime build/Release_x64 --version 0.2.0
+python scripts/build_launcher.py --runtime build/Release_x64 --version 0.2.1
 python tests/run_launcher_validation.py
 ```
 
@@ -47,3 +47,5 @@ Referência do protocolo de download: [API de assets de Releases do GitHub](http
 ## Verificação remota da prévia
 
 O teste `tests/launcher_remote_smoke.cs` usa o mesmo cliente do launcher. Na publicação 0.2.0, consulta autenticada, download privado, digest SHA-256, instalação isolada e rejeição de atualização repetida passaram contra a Release real. O token de teste foi fornecido somente ao ambiente do processo e removido ao terminar. Esse teste não abre a interface nem executa o injetor.
+
+Veja [interface, atalhos e Magnet](CONTROLES_LAUNCHER.md). Um novo launcher compara a versão embutida à versão instalada e prepara a mais recente com o jogo fechado, mesmo sem conexão.

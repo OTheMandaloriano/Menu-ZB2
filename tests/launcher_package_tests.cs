@@ -29,6 +29,7 @@ class PackageTests {
         Reject(()=>store.Install(Package("1.0.0"),new string('0',64)),"reject download digest mismatch");
         running=true;Reject(()=>store.Install(Package("1.0.0")),"no update while game running");running=false;
         var first=store.Install(Package("1.0.0"));Check(first.version=="1.0.0" && store.Current().version=="1.0.0","install initial package");
+        Check(store.Inspect(Package("1.1.0")).version=="1.1.0","embedded package version available offline");
         Directory.CreateDirectory(Path.Combine(root,"configs"));File.WriteAllText(Path.Combine(root,"configs","user.json"),"keep");
         store.Install(Package("1.1.0"));Check(store.Current().version=="1.1.0","atomic version activation");
         Check(File.ReadAllText(Path.Combine(root,"previous.txt"))=="1.0.0","previous version retained");

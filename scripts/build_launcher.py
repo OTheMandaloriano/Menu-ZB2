@@ -2,7 +2,7 @@
 from pathlib import Path
 import argparse,hashlib,json,os,subprocess,zipfile
 r=Path(__file__).resolve().parents[1]
-p=argparse.ArgumentParser();p.add_argument('--runtime',type=Path,required=True);p.add_argument('--version',default='0.2.0');p.add_argument('--output',type=Path,default=r/'build/launcher');a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--runtime',type=Path,required=True);p.add_argument('--version',default='0.2.1');p.add_argument('--output',type=Path,default=r/'build/launcher');a=p.parse_args()
 if not __import__('re').fullmatch(r'\d+\.\d+\.\d+',a.version):raise SystemExit('Use numeric major.minor.patch')
 names=['injector.exe','config.ini','kiero-dx11-base.dll','Zb2.AimBridge.dll','0Harmony.dll','Harmony.LICENSE']
 a.output.mkdir(parents=True,exist_ok=True)

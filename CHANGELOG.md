@@ -2,10 +2,20 @@
 
 Formato baseado em Keep a Changelog. O projeto ainda não tem release estável numerada.
 
-## [Não lançado]
+## [0.2.1] - 2026-09-27
 
-- Atalhos configuráveis para NoClip e Magnet.
-- Magnet em lotes, restrito à autoridade solo/host e destinos livres.
+Prévia privada; validação em partida pendente.
+
+### Adicionado
+
+- Atalhos configuráveis de alternância para NoClip (F6) e Magnet (H), salvos nos presets.
+- Magnet de zumbis carregados para solo/host, em lotes e com verificação de destino.
+- Launcher com navegação lateral, cartão do menu e páginas Início, Atualizações e Preferências.
+
+### Corrigido
+
+- Captura de atalho ignora a tecla ou clique que abriu o seletor.
+- Novo executável pode atualizar o runtime embutido offline quando já existe uma versão anterior.
 
 ## [0.2.0] - 2026-09-26
 
