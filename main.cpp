@@ -231,7 +231,7 @@ static HWND GetProcessWindow() {
 }
 
 static DWORD WINAPI MainThread(LPVOID lpReserved) {
-    Log::SetModule(static_cast<HMODULE>(lpReserved));
+    Log::SetModule(static_cast<HMODULE>(lpReserved), "ZB2Menu");
     Log::Info("==================================================");
     Log::Infof("Log ativo em: %s", Log::GetPath());
     Log::Info("MainThread iniciada.");

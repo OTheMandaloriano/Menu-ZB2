@@ -22,7 +22,7 @@ O projeto combina uma DLL nativa C++ para interface e renderização com adaptad
 Este é o repositório privado de **código-fonte, testes e documentação**. Distribuição para usuários e atualização do menu pertencem a um canal separado. Veja [distribuição e atualizações](docs/DISTRIBUICAO.md).
 
 > [!IMPORTANT]
-> O launcher de arquivo único e a atualização automática ainda não estão implementados. Não há uma versão pública estável. Testes simulados não substituem validação em partida solo, host e cliente.
+> O launcher 0.2.0 é uma prévia privada com pacote local e atualização opcional do runtime. Não há uma versão pública estável. Testes simulados não substituem validação em partida solo, host e cliente.
 
 ## Requisitos de desenvolvimento
 
@@ -53,9 +53,9 @@ A saída fica em `build/Release_x64`. A distribuição de desenvolvimento conté
 1. Compile os componentes compatíveis com a instalação local.
 2. Entre no mapa do jogo antes de executar `injector.exe`.
 3. Use Insert para abrir ou fechar o menu.
-4. Consulte configurações e logs em `Documentos/kiero-dx11-base`.
+4. Consulte configurações e logs em `Documentos/ZB2Menu`.
 
-O futuro launcher usará `Documentos/ZB2Menu`. Essa migração ainda não faz parte da implementação atual.
+O [launcher](docs/LAUNCHER.md) prepara os arquivos em `Documentos/ZB2Menu` e copia presets antigos quando o destino ainda não existe. O injetor tradicional continua disponível.
 
 ## Testes
 
@@ -65,6 +65,8 @@ python tests/run_aim_validation.py
 python tests/run_managed_aim_validation.py
 python tests/run_modifier_bridge_validation.py
 python tests/run_range_validation.py
+python tests/run_player_features_validation.py
+python tests/run_launcher_validation.py
 ```
 
 Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. Os testes de interface usam ImGui com dados simulados, sem controlar a tela do jogo.
@@ -77,7 +79,7 @@ Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. 
 | Controles pendentes | Teleporte, chams, ESP de aliados e outros controles sem execução estão identificados como pendentes. |
 | ESP distante | Registros sem modelo carregado usam posição conhecida; não há vida ou ossos inventados. |
 | Modificadores legados | Inventário, moedas e desbloqueios têm comportamento distinto de restaurar parâmetros de armas e movimento. Consulte a auditoria. |
-| Distribuição | Launcher, autenticação de acesso e atualização automática são planejamento, não recursos entregues. |
+| Distribuição | Launcher privado com atualização opcional do runtime; exige credencial própria para o canal privado. Controle comercial de acesso e atualização do executável do launcher não são automáticos. |
 | Licenciamento | Origem e avisos de terceiros precisam ser consolidados antes de distribuição pública. |
 
 ## Organização e documentação

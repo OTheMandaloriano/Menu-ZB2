@@ -2,14 +2,23 @@
 
 Formato baseado em Keep a Changelog. O projeto ainda não tem release estável numerada.
 
-## [Não lançado]
+## [0.2.0] - 2026-09-26
 
-### Revisão de inventário e controles
+Prévia privada, validação em partida ainda pendente.
 
-- Slots respeitam limites reais e preservam itens ao restaurar.
-- NoClip passa a executar com restauração de física e bloqueio de entrada.
-- ESP inclui filtros individuais e categorias sem corte visual.
+### Corrigido
 
+- Slots respeitam a capacidade real; desativação não deixa itens fora da área acessível.
+- Categorias do ESP deixam de ser cortadas pela disposição dos seletores de cor.
+
+### Adicionado
+
+- NoClip local com controle de entrada, velocidade e restauração da física.
+- Busca e filtros individuais por ID de item e tipo de ponto.
+- Launcher com pacote embutido, atualização manual/local e consulta automática opcional ao canal privado.
+- Instalação por versão em Documentos/ZB2Menu, com hashes e preservação de presets.
+
+## Histórico anterior à prévia
 
 ### Adicionado
 
@@ -33,4 +42,4 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ### Pendente
 
-- Launcher único, mecanismo de atualização, canal separado de Releases e validação prolongada nos três modos de jogo.
+- Validação prolongada nos três modos de jogo, controle de acesso próprio e revisão de licenciamento para eventual distribuição pública.
