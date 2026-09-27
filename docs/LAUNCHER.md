@@ -43,3 +43,7 @@ python tests/run_launcher_validation.py
 O runtime deve conter as seis dependências atuais, com configuração portátil. O script gera `ZB2Menu.exe`, `ZB2Menu-runtime.zip` e `SHA256SUMS.txt` em `build/launcher`. Não versione esses binários nos fontes. A Release privada recebe os arquivos para teste.
 
 Referência do protocolo de download: [API de assets de Releases do GitHub](https://docs.github.com/en/rest/releases/assets).
+
+## Verificação remota da prévia
+
+O teste `tests/launcher_remote_smoke.cs` usa o mesmo cliente do launcher. Na publicação 0.2.0, consulta autenticada, download privado, digest SHA-256, instalação isolada e rejeição de atualização repetida passaram contra a Release real. O token de teste foi fornecido somente ao ambiente do processo e removido ao terminar. Esse teste não abre a interface nem executa o injetor.

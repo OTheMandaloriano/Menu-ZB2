@@ -18,6 +18,10 @@ Prévia privada, validação em partida ainda pendente.
 - Launcher com pacote embutido, atualização manual/local e consulta automática opcional ao canal privado.
 - Instalação por versão em Documentos/ZB2Menu, com hashes e preservação de presets.
 
+### Verificado
+
+- Cliente do launcher testado contra o canal privado: consulta, download, hash, instalação isolada e ausência de atualização repetida.
+
 ## Histórico anterior à prévia
 
 ### Adicionado
