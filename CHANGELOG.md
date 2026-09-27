@@ -4,6 +4,9 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Boost temporário de 4× com Shift restaurado no NoClip por solicitação do proprietário; soltar retorna à velocidade selecionada.
+
+
 ### Ajustes de velocidade e Magnet
 
 - NoClip e Speed Hack iniciam em 1×; NoClip usa caminhada original sem aceleração oculta de Shift.

@@ -50,7 +50,8 @@ namespace Zb2Menu {
                 (Input.GetKey(KeyCode.W)?1:0)-(Input.GetKey(KeyCode.S)?1:0));
             if(direction.sqrMagnitude>1)direction.Normalize();
             var basis=player.cam!=null ? player.cam.CameraTransform : active.transform;
-            active.transform.position+=basis.TransformDirection(direction)*active.speed*Time.deltaTime;
+            float boost=Input.GetKey(KeyCode.LeftShift)?4f:1f;
+            active.transform.position+=basis.TransformDirection(direction)*active.speed*Time.deltaTime*boost;
             if(!Blocked(player))safePosition=active.transform.position;
             return false;
         }

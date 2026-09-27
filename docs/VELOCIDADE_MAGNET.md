@@ -1,6 +1,6 @@
 # Velocidade normal e atração contínua
 
-NoClip e Speed Hack iniciam em 1×. NoClip usa `PlayerMovement.walkSpeed` original, não `NoClip.speed` de debug (10 na definição). O registro de originais fornece a base mesmo quando Speed Hack está ativo. O multiplicador de NoClip é independente e não acumula. Shift não acrescenta aceleração oculta. Desativar restaura a velocidade e a física anteriores do componente NoClip.
+NoClip e Speed Hack iniciam em 1×. NoClip usa `PlayerMovement.walkSpeed` original, não `NoClip.speed` de debug (10 na definição). O registro de originais fornece a base mesmo quando Speed Hack está ativo. O multiplicador de NoClip é independente e não acumula. Segurar Shift aplica boost temporário de 4×; soltar retorna ao multiplicador escolhido sem alterar a base. Desativar restaura a velocidade e a física anteriores do componente NoClip.
 
 Mensagens permanentes de ativação foram retiradas. Permanecem mensagens acionáveis: restauração de inventário pendente, impossibilidade de ativar dentro de obstáculo, velocidade indisponível ou falta de autoridade do Magnet.
 
