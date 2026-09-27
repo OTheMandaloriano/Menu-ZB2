@@ -21,13 +21,13 @@ static void BuildWorldEsp() {
         s_options.bPoiEsp && s_options.bPoiMission, false,
         s_options.bPoiEsp && s_options.bPoiLootFix, s_options.bPoiEsp && s_options.bPoiBench,
         s_options.bPoiEsp && s_options.bPoiFire, s_options.bPoiEsp && s_options.bPoiShop,
-        s_options.bPoiEsp && s_options.bPoiRespawn};
-    for(int i=0;i<13;++i) if(enabled[i]) mask |= 1<<i;
+        s_options.bPoiEsp && s_options.bPoiRespawn,s_options.bPoiEsp && s_options.bPoiGraves,s_options.bPoiEsp && s_options.bPoiPlayers};
+    for(int i=0;i<15;++i) if(enabled[i]) mask |= 1<<i;
     if (!mask || !s_worldCollect) { ClearWorldEsp(); return; }
     WorldSnapshot snapshot;
     void* buffer=snapshot.entries;
     int capacity=256;
-    void* args[]={&buffer,&capacity,&mask,&s_options.fItemRadius,&s_options.fPoiRadius};
+    void* args[]={&buffer,&capacity,&mask,&s_options.fItemRadius,&s_options.fPoiRadius,&s_options.iItemFilter0,&s_options.iItemFilter1,&s_options.iItemFilter2,&s_options.iItemFilter3,&s_options.iPoiFilter};
     MonoObject* exception=nullptr;
     auto result=pInvoke(s_worldCollect,nullptr,args,&exception);
     if(result && !exception) {

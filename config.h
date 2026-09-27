@@ -129,6 +129,12 @@ namespace Config {
     extern float colItemAmmo[4];    // cor Municao (cinza)
     extern float colItemSupply[4];  // cor Suprimento (verde)
     extern float fItemRadius;
+    extern int iItemFilter0;
+    extern int iItemFilter1;
+    extern int iItemFilter2;
+    extern int iItemFilter3;
+    extern int iPoiFilter;
+    extern bool bPoiGraves, bPoiPlayers;
     extern float fPoiRadius; // independent radius for static world points
 
     // ---- VISUAL / POI ----

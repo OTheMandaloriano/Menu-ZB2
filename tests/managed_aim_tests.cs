@@ -5,6 +5,7 @@ using Zb2Menu;
 using UnityEngine;
 namespace Zb2Menu {
     internal static class TestEnvironment { public static bool Focused = true; }
+    internal static class NoClipBridge {public static void Install(HarmonyLib.Harmony h) {}}
     // Range/LOD has its own Harmony integration suite.
     internal static class RangeBridge { public static void Install(HarmonyLib.Harmony harmony) {} }
 }

@@ -23,6 +23,8 @@ namespace Zb2Menu {
         static Vector3 origin;
         static int mask;
         static float radius, poiRadius;
+        static readonly int[] itemFilters=new int[4];
+        static int pointFilter;
         static string error="";
         public static string LastError() { return error; }
         // Kind bits: weapons, rare, ammo, supply, heli, boss, mission, wave,
@@ -47,7 +49,8 @@ namespace Zb2Menu {
                 if(distance<result[farthest].Distance) result[farthest]=entry;
             }
         }
-        public static int Collect(IntPtr buffer, int capacity, int enabled, float range, float pointRange) {
+        public static int Collect(IntPtr buffer, int capacity, int enabled, float range, float pointRange,
+            int item0,int item1,int item2,int item3,int points) {
             result.Clear(); error="";
             if (buffer==IntPtr.Zero || capacity<=0 || enabled==0 || MainCamera.instance==null) return 0;
             camera=MainCamera.instance.cam;
@@ -56,9 +59,11 @@ namespace Zb2Menu {
             origin=player.transform.position; mask=enabled;
             radius=ClampRadius(range);
             poiRadius=ClampRadius(pointRange);
+            if(itemFilters[0]!=item0 || itemFilters[1]!=item1 || itemFilters[2]!=item2 || itemFilters[3]!=item3)nextLootScan=0;
+            itemFilters[0]=item0;itemFilters[1]=item1;itemFilters[2]=item2;itemFilters[3]=item3;pointFilter=points;
             try {
                 if ((mask & 15)!=0) Items();
-                if ((mask & 8176)!=0) Points();
+                if ((mask & ~15)!=0) Points();
             } catch(Exception ex) { error=ex.ToString(); }
             int count=Math.Min(capacity,result.Count), stride=Marshal.SizeOf(typeof(Marker));
             for(int i=0;i<count;++i) Marshal.StructureToPtr(result[i],IntPtr.Add(buffer,i*stride),false);
@@ -92,6 +97,8 @@ namespace Zb2Menu {
                     var db=loot.item.GetDataBaseItem();
                     if(db==null) continue;
                     var id=loot.item.id;
+                    int index=(int)id;
+                    if(index<0 || index>=128 || ((uint)itemFilters[index/32] & (1u<<(index%32)))==0)continue;
                     bool ammo=id==InventoryItem.ID.RifleAmmo || id==InventoryItem.ID.SniperAmmo ||
                         id==InventoryItem.ID.ShotgunAmmo || id.ToString().IndexOf("Ammo",StringComparison.Ordinal)>=0;
                     var subtype=db.GetSubType();
@@ -115,8 +122,12 @@ namespace Zb2Menu {
             if(owner==null || owner.points==null) return;
             foreach(var point in owner.points) {
                 if(point==null) continue;
+                int index=(int)point.type;
+                if(index<0 || index>=32 || ((uint)pointFilter & (1u<<index))==0)continue;
                 int kind; string name;
                 switch(point.type) {
+                    case InterestPoint.Type.Gravestone: kind=13; name="Sepultura"; break;
+                    case InterestPoint.Type.OtherPlayerDot: kind=14; name="Jogador"; break;
                     case InterestPoint.Type.Helicopter: kind=4; name="Helicoptero"; break;
                     case InterestPoint.Type.Bossfight: kind=5; name="Chefao"; break;
                     case InterestPoint.Type.QuestionMark: kind=6; name="Ponto desconhecido"; break;

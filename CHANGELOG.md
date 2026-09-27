@@ -4,6 +4,13 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+### Revisão de inventário e controles
+
+- Slots respeitam limites reais e preservam itens ao restaurar.
+- NoClip passa a executar com restauração de física e bloqueio de entrada.
+- ESP inclui filtros individuais e categorias sem corte visual.
+
+
 ### Adicionado
 
 - Documentação de entrada em português e inglês, orientações de contribuição e separação entre código e distribuição.

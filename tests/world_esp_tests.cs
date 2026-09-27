@@ -27,14 +27,14 @@ public class HashCell {public List<DroppedLoot> loot=new List<DroppedLoot>();}
 public class MapHash {public static MapHash instance=new MapHash();public bool IsCreated=true;public float cellSize=96;public HashCell cell=new HashCell();public HashCell GetCell(int x,int y){return cell;}public Coord GetHashCoord(UnityEngine.Vector3 p){return new Coord();}}
 public class InterestPointController {public static InterestPointController instance=new InterestPointController();public List<InterestPoint> points=new List<InterestPoint>();}
 public class InterestPoint {
-    public enum Type {Helicopter,Bossfight,QuestionMark,Bomb,Ammo,Gun,Melee,HealingItem,CraftingMaterial,Food,ReloadingBench,GunUpgradeTable,ZumbiePyre,VendorVan,StartingHouse,PlayerArrow};
+    public enum Type {Helicopter,Bossfight,QuestionMark,Bomb,Ammo,Gun,Melee,HealingItem,CraftingMaterial,Food,ReloadingBench,GunUpgradeTable,ZumbiePyre,VendorVan,StartingHouse,PlayerArrow,Gravestone,OtherPlayerDot};
     public Type type; public UnityEngine.Transform objTransform; public UnityEngine.Vector3 pos3D=new UnityEngine.Vector3(0,0,10);
 }
 class WorldTests {
     static int checks;
     static IntPtr buffer;
     static void Check(bool v,string label){if(!v)throw new Exception(label+" "+WorldEspBridge.LastError());++checks;}
-    static int Collect(int mask,float range=150,int cap=256,float poiRange=150){return WorldEspBridge.Collect(buffer,cap,mask,range,poiRange);}
+    static int Collect(int mask,float range=150,int cap=256,float poiRange=150){return WorldEspBridge.Collect(buffer,cap,mask,range,poiRange,-1,-1,-1,-1,-1);}
     static DroppedLoot Loot(float x,float z,DatabaseItem db,InventoryItem.ID id=InventoryItem.ID.Gun){var l=new DroppedLoot();l.item.db=db;l.item.id=id;l.transform.position=new UnityEngine.Vector3(x,0,z);return l;}
     static void Main(){
         buffer=Marshal.AllocHGlobal(112*256+16);
@@ -65,6 +65,10 @@ class WorldTests {
             Check(Collect(15|1024,11,256,20)==1,"both radii independent");
             Check(Collect(15|1024,150,256,150)==5,"both radii expanded");
             Check(WorldEspBridge.LastError()=="","no adapter error");
+            Check(WorldEspBridge.Collect(buffer,256,15,150,150,0,0,0,0,-1)==0,"individual item masks hide all items");
+            Check(WorldEspBridge.Collect(buffer,256,1024,150,150,-1,-1,-1,-1,0)==0,"individual point mask hides points");
+            MapHash.instance.cell.loot.Add(Loot(0,15,new DatabaseGun(),(InventoryItem.ID)115));
+            Check(WorldEspBridge.Collect(buffer,256,1,150,150,0,0,0,1<<19,-1)==1,"item filter covers IDs above 96");
             Console.WriteLine(checks+" world ESP checks passed");
         } finally {Marshal.FreeHGlobal(buffer);}
     }

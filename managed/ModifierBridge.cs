@@ -12,6 +12,7 @@ namespace Zb2Menu {
         static PlayerMain previous;
         static string lastError = "";
         public static string LastError() { return lastError; }
+        public static string Status() {return SlotsBridge.Status+ (NoClipBridge.Status.Length==0 ? "" : " | "+NoClipBridge.Status);}
         static bool Exists(object target) {
             return target != null && (!(target is UnityEngine.Object) || (UnityEngine.Object)target != null);
         }
@@ -47,15 +48,18 @@ namespace Zb2Menu {
             Change<float>(target, name, original => original * multiplier);
         }
         public static bool Reset() {
-            try { values.RestoreAll(); previous=null; lastError=""; }
+            try { values.RestoreAll(); SlotsBridge.Restore(); NoClipBridge.Restore(); previous=null; lastError=""; }
             catch (Exception ex) { lastError=ex.ToString(); }
-            return values.Count != 0;
+            return values.Count != 0 || SlotsBridge.Pending || NoClipBridge.Active;
         }
         // Called only by the native callback inside ZBMain.Update, including all-off frames.
-        public static bool Apply(PlayerMain player, int flags, float rapid, float speed, float jump, float roll, float knife) {
+        public static bool Apply(PlayerMain player, int flags, float rapid, float speed, float jump, float roll, float knife, float noclip) {
             try {
                 if (!ReferenceEquals(previous, player)) { values.RestoreAll(); previous=player; }
                 values.Begin();
+                bool alive=player!=null && player.HasLocalControl && player.healthFast>0;
+                SlotsBridge.Apply(alive?player:null,alive && (flags&1024)!=0);
+                NoClipBridge.Apply(alive?player:null,alive && (flags&2048)!=0,noclip,(flags&4096)==0);
                 if (player != null && player.HasLocalControl && player.healthFast > 0) {
                     Movement(player, flags, Mult(speed,5), Mult(jump,10), Mult(roll,5));
                     Weapons(player, flags, Mult(rapid,5));
@@ -71,7 +75,7 @@ namespace Zb2Menu {
                 // A failed chain must not leave other disabled features applied.
                 try { values.End(); } catch (Exception restore) { lastError += "\n" + restore; }
             }
-            return values.Count != 0;
+            return values.Count != 0 || SlotsBridge.Pending || NoClipBridge.Active;
         }
         static void Movement(PlayerMain player, int flags, float speed, float jump, float roll) {
             var movement=player.movement;

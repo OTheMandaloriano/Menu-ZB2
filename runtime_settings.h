@@ -5,6 +5,15 @@
 // Render owns Config. Unity owns its copy; no game call holds the UI gate.
 namespace RuntimeSettings {
 struct Values {
+    decltype(Config::bNoClip) bNoClip = {};
+    decltype(Config::fNoClipSpeed) fNoClipSpeed = {};
+    decltype(Config::iItemFilter0) iItemFilter0 = {};
+    decltype(Config::iItemFilter1) iItemFilter1 = {};
+    decltype(Config::iItemFilter2) iItemFilter2 = {};
+    decltype(Config::iItemFilter3) iItemFilter3 = {};
+    decltype(Config::iPoiFilter) iPoiFilter = {};
+    decltype(Config::bPoiGraves) bPoiGraves = {};
+    decltype(Config::bPoiPlayers) bPoiPlayers = {};
     float viewportWidth=1920, viewportHeight=1080;
     decltype(Config::b360Mode) b360Mode = {};
     decltype(Config::bAimbot) bAimbot = {};
@@ -68,6 +77,14 @@ struct Values {
 };
 inline Values Capture(float width,float height) {
     Values values;
+    values.bNoClip=Config::bNoClip; values.fNoClipSpeed=Config::fNoClipSpeed;
+    values.iItemFilter0=Config::iItemFilter0;
+    values.iItemFilter1=Config::iItemFilter1;
+    values.iItemFilter2=Config::iItemFilter2;
+    values.iItemFilter3=Config::iItemFilter3;
+    values.iPoiFilter=Config::iPoiFilter;
+    values.bPoiGraves=Config::bPoiGraves;
+    values.bPoiPlayers=Config::bPoiPlayers;
     values.viewportWidth=width; values.viewportHeight=height;
     values.b360Mode=Config::b360Mode;
     values.bAimbot=Config::bAimbot;

@@ -1,3 +1,4 @@
+#include "item_catalog.h"
 #include "esp_options.h"
 #include "esp_layout.h"
 #include "config_json.h"
@@ -132,6 +133,12 @@ namespace Config {
     float colItemAmmo[4] = { 0.7f, 0.7f, 0.7f, 1 };
     float colItemSupply[4] = { 0.2f, 1, 0.4f, 1 };
     float fItemRadius = 150.0f;
+    int iItemFilter0 = -1;
+    int iItemFilter1 = -1;
+    int iItemFilter2 = -1;
+    int iItemFilter3 = -1;
+    int iPoiFilter = -1;
+    bool bPoiGraves=true,bPoiPlayers=true;
     float fPoiRadius = 150.0f;
 
     bool  bPoiEsp = true;
@@ -667,7 +674,7 @@ namespace GUI {
         JB(bAllyEsp); JI(iAllyBox); JB(bAllyName); JB(bAllyDist); JB(bAllyHp);
         JB(bAllySkeleton); JB(bAllySnap); JB(bAllyHeadDot); JV(colAllyVis);
         JB(bChams); JV(colChamsVis); JV(colChamsInv); JB(bItemEsp); JB(bItemWeapons);
-        JB(bItemRare); JB(bItemAmmo); JB(bItemSupply); JV(colItem); JV(colItemRare); JV(colItemAmmo); JV(colItemSupply); JF(fItemRadius); JF(fPoiRadius);
+        JB(bItemRare); JB(bItemAmmo); JB(bItemSupply); JV(colItem); JV(colItemRare); JV(colItemAmmo); JV(colItemSupply); JF(fItemRadius); JF(fPoiRadius); JI(iItemFilter0); JI(iItemFilter1); JI(iItemFilter2); JI(iItemFilter3); JI(iPoiFilter); JB(bPoiGraves); JB(bPoiPlayers);
         JB(bPoiEsp); JB(bPoiHeli); JB(bPoiBoss); JB(bPoiMission); JB(bPoiWave); JB(bPoiLootFix); JB(bPoiBench); JB(bPoiFire); JB(bPoiShop); JB(bPoiRespawn);
         JV(colPoiHeli); JV(colPoiBoss); JV(colPoiMission); JV(colPoiWave); JV(colPoiLootFix); JV(colPoiBench); JV(colPoiFire); JV(colPoiShop); JV(colPoiRespawn);
         JF(fNameX); JF(fNameY); JF(fDistX); JF(fDistY); JF(fHpX); JF(fHpY);
@@ -754,7 +761,7 @@ namespace GUI {
         LB(bAllyEsp); LI(iAllyBox); LB(bAllyName); LB(bAllyDist); LB(bAllyHp);
         LB(bAllySkeleton); LB(bAllySnap); LB(bAllyHeadDot); LV(colAllyVis);
         LB(bChams); LV(colChamsVis); LV(colChamsInv); LB(bItemEsp); LB(bItemWeapons);
-        LB(bItemRare); LB(bItemAmmo); LB(bItemSupply); LV(colItem); LV(colItemRare); LV(colItemAmmo); LV(colItemSupply); LF(fItemRadius); LF(fPoiRadius);
+        LB(bItemRare); LB(bItemAmmo); LB(bItemSupply); LV(colItem); LV(colItemRare); LV(colItemAmmo); LV(colItemSupply); LF(fItemRadius); LF(fPoiRadius); LI(iItemFilter0); LI(iItemFilter1); LI(iItemFilter2); LI(iItemFilter3); LI(iPoiFilter); LB(bPoiGraves); LB(bPoiPlayers);
         LB(bPoiEsp); LB(bPoiHeli); LB(bPoiBoss); LB(bPoiMission); LB(bPoiWave); LB(bPoiLootFix); LB(bPoiBench); LB(bPoiFire); LB(bPoiShop); LB(bPoiRespawn);
         LV(colPoiHeli); LV(colPoiBoss); LV(colPoiMission); LV(colPoiWave); LV(colPoiLootFix); LV(colPoiBench); LV(colPoiFire); LV(colPoiShop); LV(colPoiRespawn);
         LF(fNameX); LF(fNameY); LF(fDistX); LF(fDistY); LF(fHpX); LF(fHpY);
@@ -826,6 +833,7 @@ namespace GUI {
         Log::Infof("Config carregada: %s", path);
     }
 
+    #include "esp_filter_ui.inl"
     #include "distant_esp_draw.inl"
     void RenderOverlay() {
         if (!g_bInit) return;
@@ -862,13 +870,13 @@ namespace GUI {
                 Config::bPoiEsp && Config::bPoiMission, Config::bPoiEsp && Config::bPoiWave,
                 Config::bPoiEsp && Config::bPoiLootFix, Config::bPoiEsp && Config::bPoiBench,
                 Config::bPoiEsp && Config::bPoiFire, Config::bPoiEsp && Config::bPoiShop,
-                Config::bPoiEsp && Config::bPoiRespawn};
+                Config::bPoiEsp && Config::bPoiRespawn, Config::bPoiEsp && Config::bPoiGraves,Config::bPoiEsp && Config::bPoiPlayers};
             const float* colors[] = {Config::colItem,Config::colItemRare,Config::colItemAmmo,Config::colItemSupply,
                 Config::colPoiHeli,Config::colPoiBoss,Config::colPoiMission,Config::colPoiWave,Config::colPoiLootFix,
-                Config::colPoiBench,Config::colPoiFire,Config::colPoiShop,Config::colPoiRespawn};
+                Config::colPoiBench,Config::colPoiFire,Config::colPoiShop,Config::colPoiRespawn,Config::colPoiRespawn,Config::colAllyVis};
             for(int i=0;i<count;++i) {
                 const auto& marker=markers[i];
-                if(marker.kind<0 || marker.kind>=13 || !enabled[marker.kind]) continue;
+                if(marker.kind<0 || marker.kind>=15 || !enabled[marker.kind]) continue;
                 if(marker.kind<4 && marker.distance>Config::fItemRadius) continue;
                 if(marker.kind>=8 && marker.kind<=11 && marker.distance>Config::fPoiRadius) continue;
                 const float* color=colors[marker.kind];
@@ -1243,14 +1251,15 @@ namespace GUI {
                         ImGui::Indent();
                         ImGui::Checkbox("Armas", &Config::bItemWeapons);
                         SwatchR("##CArma", Config::colItem, "Cor das armas.");
-                        ImGui::SameLine(); ImGui::Checkbox("Raros", &Config::bItemRare);
+                        ImGui::Checkbox("Raros", &Config::bItemRare);
                         SwatchR("##CRaro", Config::colItemRare, "Cor dos raros.");
                         ImGui::Checkbox("Municao", &Config::bItemAmmo);
                         SwatchR("##CMunic", Config::colItemAmmo, "Cor da municao.");
-                        ImGui::SameLine(); ImGui::Checkbox("Suprimento", &Config::bItemSupply);
+                        ImGui::Checkbox("Suprimento", &Config::bItemSupply);
                         SwatchR("##CSupri", Config::colItemSupply, "Cor do suprimento.");
                         ImGui::SetNextItemWidth(160.0f);
                         ImGui::SliderFloat("Raio", &Config::fItemRadius, 10, 500, "%.0fm"); Tip("So mostra item dentro deste raio.");
+                        DrawItemFilters();
                         ImGui::Unindent();
                     }
                     Section("Pontos / Mundo");
@@ -1259,22 +1268,25 @@ namespace GUI {
                         ImGui::Indent();
                         ImGui::Checkbox("Helicoptero", &Config::bPoiHeli);
                         SwatchR("##PHeli", Config::colPoiHeli, "Sempre visivel (dinamico).");
-                        ImGui::SameLine(); ImGui::Checkbox("Chefao", &Config::bPoiBoss);
+                        ImGui::Checkbox("Chefao", &Config::bPoiBoss);
                         SwatchR("##PBoss", Config::colPoiBoss, "Sempre visivel (dinamico).");
                         ImGui::Checkbox("Missao", &Config::bPoiMission);
                         SwatchR("##PMiss", Config::colPoiMission, "Sempre visivel (dinamico).");
-                        ImGui::SameLine(); ImGui::BeginDisabled(); ImGui::Checkbox("Onda (pendente)", &Config::bPoiWave); ImGui::EndDisabled();
+                        ImGui::BeginDisabled(); ImGui::Checkbox("Onda (pendente)", &Config::bPoiWave); ImGui::EndDisabled();
                         SwatchR("##PWave", Config::colPoiWave, "Mostra a direcao da onda.");
                         ImGui::Checkbox("Loot fixo", &Config::bPoiLootFix);
                         SwatchR("##PLoot", Config::colPoiLootFix, "Dentro do raio (estatico).");
-                        ImGui::SameLine(); ImGui::Checkbox("Bancadas", &Config::bPoiBench);
+                        ImGui::Checkbox("Bancadas", &Config::bPoiBench);
                         SwatchR("##PBench", Config::colPoiBench, "Dentro do raio (estatico).");
                         ImGui::Checkbox("Fogueira", &Config::bPoiFire);
                         SwatchR("##PFire", Config::colPoiFire, "Dentro do raio (estatico).");
-                        ImGui::SameLine(); ImGui::Checkbox("Mercador", &Config::bPoiShop);
+                        ImGui::Checkbox("Mercador", &Config::bPoiShop);
                         SwatchR("##PShop", Config::colPoiShop, "Dentro do raio (estatico).");
                         ImGui::Checkbox("Respawn", &Config::bPoiRespawn);
                         SwatchR("##PResp", Config::colPoiRespawn, "Respawn conhecido nesta partida.");
+                        ImGui::Checkbox("Sepulturas", &Config::bPoiGraves);
+                        ImGui::Checkbox("Jogadores no mapa", &Config::bPoiPlayers);
+                        DrawPointFilters();
                         ImGui::SliderFloat("Raio pontos fixos", &Config::fPoiRadius, 10, 500, "%.0fm");
                         ImGui::Unindent();
                     }
@@ -1295,7 +1307,10 @@ namespace GUI {
                 ImGui::Checkbox("Infinite Items (por categoria)", &Config::bInfItems); Tip("Tudo no teto: bala, granada, bandagem, madeira 999x.");
                 ImGui::Checkbox("Infinite Money (3 moedas)", &Config::bInfMoney); Tip("Dolar/prata/ouro em 99999 (compra Loadout I/II/III).");
                 // REMOVIDO 17/09: Anti-Flood (quarentena bania o proprio infinito).
-                ImGui::Checkbox("Desbloquear Slots", &Config::bUnlockSlots); Tip("Storage+misc cheios (1x por sessao).");
+                ImGui::Checkbox("Desbloquear Slots", &Config::bUnlockSlots); Tip("Desbloqueia somente a capacidade existente. Para desativar, esvazie os slots/area extras; nao apaga nem move itens automaticamente.");
+                if(Mono::Get().modifierStatus[0]) ImGui::TextWrapped("%s",Mono::Get().modifierStatus);
+                ImGui::Checkbox("NoClip (WASD / Space / Ctrl)", &Config::bNoClip);
+                ImGui::SliderFloat("NoClip velocidade", &Config::fNoClipSpeed, .5f, 5.0f, "%.1fx");
                 ImGui::Checkbox("Desbloquear Loadout", &Config::bUnlockLoadout); Tip("Kits do loadout livres (a loja compra com Money: use Infinite Money).");
                 ImGui::Separator();
                 // REMOVIDO 17/09: Spawn de Itens (nao util; IDs ficam no historico p/ fase futura).
@@ -1335,8 +1350,6 @@ namespace GUI {
                 ImGui::Checkbox("Third Person", &Config::bThirdPerson);
                 ImGui::SliderFloat("Dist 3rd", &Config::fThirdDist, 1, 10, "%.1fm");
                 ImGui::Checkbox("Anti-AFK", &Config::bAntiAfk);
-                ImGui::Checkbox("NoClip (Space/Ctrl)", &Config::bNoClip);
-                ImGui::SliderFloat("NoClip Vel", &Config::fNoClipSpeed, 0.5f, 5.0f, "%.1fx");
                 ImGui::Checkbox("No Fall Damage", &Config::bNoFall);
                 if (ImGui::Button("Revive Yourself")) {}
                 ImGui::EndDisabled();

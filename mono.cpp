@@ -319,7 +319,6 @@ namespace Mono {
     static MonoClass* FindUnityClass(const char* name, MonoImage** image = nullptr);
     static MonoImage* UnityImageWithTransform(void); // imagem com UnityEngine.Transform
     static void ApplyMoney(); // forward (dinheiro infinito, worker)
-    static void ApplySlots(void* local); // forward (slots desbloqueados, 1x)
     // REMOVIDO 17/09: DoGiveItem (spawn de itens).
     static void ApplyDefense(void* local); // forward (defesa rapida, worker)
     static void ApplyLoadout(); // forward (LoadoutSelector.UnlockAll, worker)
@@ -1737,7 +1736,7 @@ namespace Mono {
             // mas o player nao existe ainda. Sem gate = invoke em objeto nulo =
             // hang/crash reportado pelo operador.
             void* aimLocal = nullptr;
-            bool wantDef = s.ready && (s_options.bDebugOverlay || HasPendingRestores() || s_options.bGodMode || s_options.bInfStamina || s_options.bInfAmmo || s_options.bInfItems || s_options.bInfMoney || s_options.bUnlockSlots || s_options.bUnlockLoadout || s_options.bNoRecoil || s_options.bNoSpread || s_options.bNoSway || s_options.bTightAim || s_options.bRapidFire || s_options.bFullAuto || s_options.bSpeedHack || s_options.bSuperJump || s_options.bRollSpeed || s_options.bFastKnife || s_options.bInstantReload || AimRequested());
+            bool wantDef = s.ready && (s_options.bDebugOverlay || HasPendingRestores() || s_options.bGodMode || s_options.bInfStamina || s_options.bInfAmmo || s_options.bInfItems || s_options.bInfMoney || s_options.bUnlockSlots || s_options.bUnlockLoadout || s_options.bNoRecoil || s_options.bNoSpread || s_options.bNoSway || s_options.bTightAim || s_options.bRapidFire || s_options.bFullAuto || s_options.bNoClip || s_options.bSpeedHack || s_options.bSuperJump || s_options.bRollSpeed || s_options.bFastKnife || s_options.bInstantReload || AimRequested());
             if (wantDef && SceneAlive()) {
                 // Detecta se estamos dentro do mapa: precisa de player local vivo.
                 bool inMap = false;
@@ -1781,7 +1780,6 @@ namespace Mono {
                     bool coop = (s.coopMode == 2); // CLIENTE
                     if (s_options.bInfMoney) ApplyMoney();
                     ApplyDefense(localEnt);
-                    if (s_options.bUnlockSlots) ApplySlots(localEnt);
                     if (s_options.bUnlockLoadout) ApplyLoadout();
                     if (s_options.bInfAmmo || s_options.bInfItems || s_options.bInstantReload) ApplyAmmo(localEnt, coop);
                     aimLocal = localEnt;
@@ -2833,125 +2831,6 @@ namespace Mono {
         }
     }
 
-    // C2: slots desbloqueados (storage+misc+weapons cheios). O print mostra
-    // cadeados em 3 lugares: TotalStorage/Misc (bools do PlayerInventory) +
-    // armas 2/3 bloqueadas por WeaponSlotTypes (lista de slots validos) +
-    // misc travado por UnlockedMiscSlotsCount. Resolve os 3 + GRID:
-    // 4) ItemContainer.TotalSize/UsableSize (IntVec2): sem grid util nao ha
-    // onde por a pilha (AddItem recusa = x/0 eterno, bug 21/09). Metodos
-    // SetTotalSize/SetUsableSize existem â€” invoke 1x por container.
-    static void ApplySlots(void* local) {
-        // Roda a cada ativacao (borda de subida) + reforco todo ciclo (o jogo
-        // pode re-travar ao trocar de cena). Sem 'done' permanente: barato
-        // (2 bytes) e visivel no debug ([SLOTS] mostra estado atual).
-        if (!local) return;
-        __try {
-            void* pinv = ReadP(local, FieldOff(fInv));
-            if (!pinv) return;
-            static int oTU = -2, oMU = -2, oUMisc = -2, oWST = -2;
-            if (oTU == -2) {
-                oTU = -1; oMU = -1; oUMisc = -1; oWST = -1;
-                if (cPInv) {
-                    MonoClassField* a = pFieldFrom(cPInv, "<TotalStorageUnlocked>k__BackingField");
-                    MonoClassField* b = pFieldFrom(cPInv, "<TotalMiscSlotsUnlocked>k__BackingField");
-                    oTU = FieldOff(a); oMU = FieldOff(b);
-                }
-                if (cPEq) {
-                    MonoClassField* u = pFieldFrom(cPEq, "<UnlockedMiscSlotsCount>k__BackingField");
-                    MonoClassField* w = pFieldFrom(cPEq, "WeaponSlotTypes");
-                    oUMisc = FieldOff(u); oWST = FieldOff(w);
-                }
-                Log::Infof("[SLOTS] offs storage=%d misc=%d umisc=%d wst=%d", oTU, oMU, oUMisc, oWST);
-                s.slotsOk = (oTU >= 0 && oMU >= 0);
-                if (!s.slotsOk) Log::Warn("[SLOTS] campos nao resolveram â€” slots intactos.");
-            }
-            if (oTU >= 0) {
-                unsigned char v = 0;
-                memcpy(&v, (char*)pinv + oTU, 1);
-                if (!v) { unsigned char t = 1; memcpy((char*)pinv + oTU, &t, 1); }
-            }
-            if (oMU >= 0) {
-                unsigned char v = 0;
-                memcpy(&v, (char*)pinv + oMU, 1);
-                if (!v) { unsigned char t = 1; memcpy((char*)pinv + oMU, &t, 1); }
-            }
-            // 3) UnlockedMiscSlotsCount = MiscCount (abre os 4 cadeados do equip).
-            // Le o misc atual (peq+oMisc) e escreve o tamanho como desbloqueado.
-            if (oUMisc >= 0) {
-                void* peq = ReadP(pinv, FieldOff(fEq));
-                if (peq) {
-                    int cur = ReadI(peq, oUMisc, -1);
-                    if (cur >= 0 && cur < 16) {
-                        int want = 16; // abre todos os slots de misc
-                        if (cur < want) WriteI(peq, oUMisc, want);
-                    }
-                }
-            }
-            // 2) WeaponSlotTypes eh STATIC (CE MCP 19/09: off=0 static=true).
-            // Nao se le via instancia (peq+0 = vtable, lixo). Estatico = ler
-            // via vtable da classe (pVTable + pStaticGet), igual ZLoader.
-            // Por enquanto: diagnostico 1x do tamanho real.
-            {
-                static bool s_wstLogged = false;
-                if (!s_wstLogged && cPEq && s_dom) {
-                    s_wstLogged = true;
-                    __try {
-                        MonoVTable* vt = pVTable(s_dom, cPEq);
-                        void* lst = nullptr;
-                        if (vt && oWST >= 0) {
-                            // static List: o field estatico mora na area estatica;
-                            // pStaticGet com field estatico resolve o endereco.
-                            MonoClassField* fW = pFieldFrom(cPEq, "WeaponSlotTypes");
-                            if (fW) pStaticGet(vt, fW, &lst);
-                        }
-                        int n = -1;
-                        if (lst) memcpy(&n, (char*)lst + Off::L_size, sizeof(n));
-                        Log::Infof("[SLOTS] WeaponSlotTypes n=%d (static, slots de arma validos).", n);
-                    } __except (EXCEPTION_EXECUTE_HANDLER) {
-                        Log::Warn("[SLOTS] WeaponSlotTypes: leitura statica falhou.");
-                    }
-                }
-            }
-            // 4) GRID util do storage (bug 21/09: pilha recusada 3x = sem
-            // espaco fisico; bools desbloqueados mas grid pequeno = AddItem
-            // retorna false). SetUsableSize(16,20) via invoke 1x por sessao.
-            // IntVec2 = struct {x@+0, y@+4}; metodo (int,int)->void.
-            {
-                static bool s_gridDone = false;
-                if (!s_gridDone) {
-                    void* cont = ReadP(pinv, FieldOff(fStorage));
-                    if (cont && cPInv) {
-                        // Resolve SetUsableSize na classe ItemContainer 1x.
-                        static MonoClass* cCont = nullptr;
-                        static MonoMethod* mSetU = nullptr;
-                        static bool s_mInit = false;
-                        if (!s_mInit) {
-                            s_mInit = true;
-                            ResolveClass("ItemContainer", cCont);
-                            if (cCont) mSetU = pMethodFrom(cCont, "SetUsableSize", 2);
-                        }
-                        if (mSetU) {
-                            int w = 16, h = 20; // teto do jogo (dump 21/09)
-                            void* args[2] = { &w, &h };
-                            __try {
-                                MonoObject* exc = nullptr;
-                                pInvoke(mSetU, cont, args, &exc);
-                                if (!exc) {
-                                    s_gridDone = true;
-                                    Log::Info("[SLOTS] grid storage 16x20 (pilha cabe).");
-                                    // Reabre tentativas: com espaco, o criador
-                                    // merece 3 novas chances.
-                                    PileTriesReset("grid 16x20");
-                                }
-                            } __except (EXCEPTION_EXECUTE_HANDLER) {}
-                        }
-                    }
-                }
-            }
-            s.slotsOn = true;
-        } __except (EXCEPTION_EXECUTE_HANDLER) {}
-    }
-
     // Defesa (God + Stamina): reescreve os campos do LOCAL player.
     // Roda no bloco rapido da worker (todo ciclo, ~33ms) SOB GATE de mapa
     // (local vivo dentro da partida). Sem hook, sem patch, custo zero desligado.
@@ -2988,11 +2867,18 @@ namespace Mono {
             (s_options.bNoSway ? 4 : 0) | (s_options.bTightAim ? 8 : 0) |
             (s_options.bRapidFire ? 16 : 0) | (s_options.bSpeedHack ? 32 : 0) |
             (s_options.bSuperJump ? 64 : 0) | (s_options.bRollSpeed ? 128 : 0) |
-            (s_options.bFastKnife ? 256 : 0) | (s_options.bFullAuto ? 512 : 0);
+            (s_options.bFastKnife ? 256 : 0) | (s_options.bFullAuto ? 512 : 0) |
+            (s_options.bUnlockSlots ? 1024 : 0) | (s_options.bNoClip ? 2048 : 0) | (s_options.bMenuOpen ? 4096 : 0);
         void* args[] = {local, &flags, &s_options.fRapidMult, &s_options.fSpeedMult,
-            &s_options.fJumpMult, &s_options.fRollMult, &s_options.fKnifeMult};
+            &s_options.fJumpMult, &s_options.fRollMult, &s_options.fKnifeMult, &s_options.fNoClipSpeed};
         InvokeAimBool(s_modifierApply, nullptr, args, s_modifiersPending);
         BridgeError(s_modifierError, "MODIFIERS");
+        s.slotsOn=s_options.bUnlockSlots;
+        if(s_modifierStatus) {
+            MonoObject* exception=nullptr;
+            auto message=pInvoke(s_modifierStatus,nullptr,nullptr,&exception);
+            if(message && !exception){char* text=pStrUtf8(message);if(text){strncpy_s(s.modifierStatus,text,_TRUNCATE);pFree(text);}}
+        }
     }
 
     // ========================================================================

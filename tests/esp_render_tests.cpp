@@ -46,9 +46,11 @@ int main(){
     Config::bZombieDist=false;Mono::distantCount=0;Mono::entry.onScreen=true;Mono::entry.dist=210;Config::bZombieBoxShow=true;
     Config::fEspDistance=200;Check(Frame()==0,"stale active snapshot filtered by new smaller limit");
     Config::fItemRadius=35;Config::fPoiRadius=280;
+    Config::iItemFilter0=123;Config::iItemFilter3=1<<19;Config::iPoiFilter=1<<17;
     Check(GUI::SaveConfig("independent-ranges-test"),"save separate radii");
     Config::fItemRadius=80;Config::fPoiRadius=90;GUI::LoadConfig("independent-ranges-test");
     Check(Config::fItemRadius==35 && Config::fPoiRadius==280,"preset restores distinct radii");
+    Check(Config::iItemFilter0==123 && Config::iItemFilter3==(1<<19) && Config::iPoiFilter==(1<<17),"preset preserves individual item and POI masks");
     Config::fItemRadius=10;Check(Config::fPoiRadius==280,"item slider independent");
     Config::fPoiRadius=20;Check(Config::fItemRadius==10,"POI slider independent");
     Config::bZombieEsp=false;Mono::worldCount=1;Mono::marker.kind=10;Mono::marker.distance=100;
