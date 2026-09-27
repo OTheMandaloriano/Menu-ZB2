@@ -1,3 +1,5 @@
+#include "ui_input_queue.h"
+#include <atomic>
 #include "includes.h"
 #include "runtime_gate.h"
 
@@ -27,6 +29,10 @@ static ResizeBuffers_t oResizeBuffers = nullptr;
 static WNDPROC         oWndProc = nullptr;
 static HWND            g_hWindow = nullptr;
 static bool            g_bInit = false;
+static UiInput::Queue g_uiInput;
+static std::atomic<bool> g_uiOpen{false};
+static std::atomic<int> g_uiKey{VK_INSERT};
+static void DrainUiInput();
 
 static ID3D11Device*           g_pDevice = nullptr;
 static ID3D11DeviceContext*    g_pContext = nullptr;
@@ -110,6 +116,7 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
         }
     }
 
+    DrainUiInput();
     ImGui_ImplDX11_NewFrame();
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
@@ -119,7 +126,8 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
     { static int s_clipTick = 0;
       if (!Config::bMenuOpen && g_bInit && (++s_clipTick % 120 == 0)) ApplyGameClip(); }
     GUI::ProcessFeatureHotkeys();
-    GUI::Render();         // janela do menu (4 abas)
+    GUI::Render();
+    g_uiOpen.store(Config::bMenuOpen);g_uiKey.store(Config::iMenuKey);         // janela do menu (4 abas)
     Mono::SetViewport(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y);
     Mono::Tick(); // bootstrap only; never invokes Unity
     GUI::RenderOverlay();  // watermark/debug/FOV fora da janela
@@ -157,53 +165,27 @@ static void ApplyGameClip() {
     ClipCursor(&r);
 }
 
+static void DrainUiInput() {
+    UiInput::Event event;
+    while(g_uiInput.Pop(event)) {
+        if(event.message==WM_KEYDOWN && (event.wparam==static_cast<WPARAM>(Config::iMenuKey)||(event.wparam==VK_DELETE && !ImGui::GetIO().WantTextInput))) {
+            if(!(event.lparam&(1LL<<30))) {
+                Config::bMenuOpen=!Config::bMenuOpen;
+                if(Config::bMenuOpen && !s_cursorHiddenByUs){ShowCursor(FALSE);s_cursorHiddenByUs=true;}
+                if(!Config::bMenuOpen){ApplyGameClip();if(s_cursorHiddenByUs){ShowCursor(TRUE);s_cursorHiddenByUs=false;}}
+            }
+        } else if(Config::bMenuOpen) ImGui_ImplWin32_WndProcHandler(event.window,event.message,event.wparam,event.lparam);
+    }
+}
 static LRESULT CALLBACK hkWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    RuntimeGate::TryScope guard;
-    auto forward = [&]() { guard.Release(); return CallWindowProc(oWndProc, hWnd, uMsg, wParam, lParam); };
-    if (!guard) return forward();
-    // Volta de ALT+TAB/foco: re-prende o cursor se o menu estiver fechado.
-    if (uMsg == WM_ACTIVATE && LOWORD(wParam) != WA_INACTIVE && !Config::bMenuOpen && g_bInit) {
-        ApplyGameClip();
-        return forward();
+    const bool open=g_uiOpen.load();
+    const bool keyboard=uMsg>=WM_KEYFIRST && uMsg<=WM_KEYLAST;
+    const bool mouse=uMsg>=WM_MOUSEFIRST && uMsg<=WM_MOUSELAST;
+    const bool toggle=uMsg==WM_KEYDOWN && (wParam==static_cast<WPARAM>(g_uiKey.load())||wParam==VK_DELETE);
+    if(toggle || (open && (keyboard || mouse || uMsg==WM_SETFOCUS || uMsg==WM_KILLFOCUS))) {
+        if(g_uiInput.Push({hWnd,uMsg,wParam,lParam}) && (keyboard||mouse))return TRUE;
     }
-    if (uMsg == WM_KEYDOWN && ((int)wParam == Config::iMenuKey || wParam == VK_DELETE)) {
-        if (lParam & (1LL << 30)) return TRUE; // one toggle per physical press
-        Config::bMenuOpen = !Config::bMenuOpen;
-        // Cursor (v0.7.1): idempotente por estado + diagnostico no log.
-        // ShowCursor tem contador GLOBAL da sessao; builds antigas (loop)
-        // podem ter deixado ele corrompido - o log abaixo denuncia (se ao
-        // fechar o cnt ja estiver >=0, a sessao esta corrompida: reboot limpa).
-        ImGuiIO& io = ImGui::GetIO();
-        io.MouseDrawCursor = Config::bMenuOpen;
-        if (!Config::bMenuOpen) {
-            ApplyGameClip(); // re-prende na janela (jogo retoma camera/cursor travado)
-            if (s_cursorHiddenByUs) {
-                int c = ShowCursor(TRUE);
-                s_cursorHiddenByUs = false;
-                Log::Infof("Cursor restaurado p/ jogo (cnt=%d).", c);
-            }
-        } else {
-            if (!s_cursorHiddenByUs) {
-                int c = ShowCursor(FALSE);
-                s_cursorHiddenByUs = true;
-                Log::Infof("Cursor oculto p/ menu (cnt=%d).", c);
-            }
-        }
-        return TRUE;
-    }
-    // Menu fechado (ou GUI ainda nao init): jogo processa tudo, sem tocar.
-    if (!Config::bMenuOpen || !g_bInit)
-        return forward();
-    if (ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam))
-        return TRUE;
-    {
-        ImGuiIO& io = ImGui::GetIO();
-        if (io.WantCaptureMouse && (uMsg >= WM_MOUSEFIRST && uMsg <= WM_MOUSELAST))
-            return TRUE;
-        if (io.WantCaptureKeyboard && (uMsg == WM_KEYDOWN || uMsg == WM_KEYUP || uMsg == WM_CHAR))
-            return TRUE;
-    }
-    return forward();
+    return CallWindowProc(oWndProc,hWnd,uMsg,wParam,lParam);
 }
 
 static BOOL CALLBACK EnumWindowsCallback(HWND handle, LPARAM lParam) {
