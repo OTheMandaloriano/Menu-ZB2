@@ -1,10 +1,9 @@
-# Código e distribuição
+# Distribuição por injetor
 
-- Fontes privados: [Menu-ZB2](https://github.com/OTheMandaloriano/Menu-ZB2).
-- Canal privado de pacotes: [Menu-ZB2-Releases](https://github.com/OTheMandaloriano/Menu-ZB2-Releases).
+O launcher e a atualização automática foram retirados por decisão do proprietário.
 
-O canal de pacotes não contém os fontes. A prévia 0.2.0 inclui `ZB2Menu.exe`, o pacote de runtime e hashes. A Release identifica o commit de origem e limitações conhecidas. Não há distribuição pública estável.
+Distribua juntos `injector.exe`, `config.ini`, `kiero-dx11-base.dll`, `Zb2.AimBridge.dll`, `0Harmony.dll` e `Harmony.LICENSE`. Símbolos PDB/MAP são preservados para diagnóstico, mas não são necessários no pacote de execução.
 
-O launcher implementa modo local, importação manual de ZIP e consulta automática opcional. Atualização remota exige credencial do próprio usuário com acesso ao canal privado; nenhuma credencial do mantenedor é embutida. Veja [funcionamento e limites](LAUNCHER.md).
+Atualizações são manuais. O injetor não exige token GitHub. Configurações e logs do menu permanecem em Documentos/ZB2Menu. NoClip usa N por padrão e permite personalizar a tecla.
 
-O histórico do repositório de fontes é preservado e pode conter artefatos antigos. Revisar todo o histórico antes de qualquer mudança de visibilidade. Atualizações não apagam configurações nem logs. Não há sistema comercial de licenciamento do menu.
+Fontes permanecem no repositório privado Menu-ZB2. As prévias antigas com launcher não representam a distribuição atual.

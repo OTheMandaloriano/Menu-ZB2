@@ -22,7 +22,7 @@ O projeto combina uma DLL nativa C++ para interface e renderização com adaptad
 Este é o repositório privado de **código-fonte, testes e documentação**. Distribuição para usuários e atualização do menu pertencem a um canal separado. Veja [distribuição e atualizações](docs/DISTRIBUICAO.md).
 
 > [!IMPORTANT]
-> O launcher 0.2.1 é uma prévia privada com pacote local e atualização opcional do runtime. Não há uma versão pública estável. Testes simulados não substituem validação em partida solo, host e cliente.
+> O menu é distribuído com o injetor e suas dependências. O launcher foi retirado por decisão do proprietário. Não há uma versão pública estável. Testes simulados não substituem validação em partida solo, host e cliente.
 
 ## Requisitos de desenvolvimento
 
@@ -55,7 +55,7 @@ A saída fica em `build/Release_x64`. A distribuição de desenvolvimento conté
 3. Use Insert para abrir ou fechar o menu.
 4. Consulte configurações e logs em `Documentos/ZB2Menu`.
 
-O [launcher](docs/LAUNCHER.md) prepara os arquivos em `Documentos/ZB2Menu` e copia presets antigos quando o destino ainda não existe. O injetor tradicional continua disponível.
+Use `injector.exe` com as DLLs e `config.ini` na mesma pasta. Não há atualização automática nem necessidade de token GitHub para executar. NoClip alterna com N por padrão; a tecla continua configurável.
 
 ## Testes
 
@@ -66,7 +66,6 @@ python tests/run_managed_aim_validation.py
 python tests/run_modifier_bridge_validation.py
 python tests/run_range_validation.py
 python tests/run_player_features_validation.py
-python tests/run_launcher_validation.py
 ```
 
 Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. Os testes de interface usam ImGui com dados simulados, sem controlar a tela do jogo.
@@ -79,7 +78,7 @@ Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. 
 | Controles pendentes | Teleporte, chams, ESP de aliados e outros controles sem execução estão identificados como pendentes. |
 | ESP distante | Registros sem modelo carregado usam posição conhecida; não há vida ou ossos inventados. |
 | Modificadores legados | Inventário, moedas e desbloqueios têm comportamento distinto de restaurar parâmetros de armas e movimento. Consulte a auditoria. |
-| Distribuição | Launcher privado com atualização opcional do runtime; exige credencial própria para o canal privado. Controle comercial de acesso e atualização do executável do launcher não são automáticos. |
+| Distribuição | Injetor com dependências na mesma pasta. Atualização manual; launcher retirado. |
 | Licenciamento | Origem e avisos de terceiros precisam ser consolidados antes de distribuição pública. |
 
 ## Organização e documentação
@@ -90,4 +89,4 @@ Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. 
 - [Alcances de entidades](docs/DISTANCIAS.md) e [raios independentes](docs/RAIOS_ESP.md)
 - [Histórico](CHANGELOG.md), [contribuição](.github/CONTRIBUTING.md) e [licenciamento](NOTICE.md)
 
-[Interface e controles 0.2.1](docs/CONTROLES_LAUNCHER.md)
+[Atalhos e Magnet](docs/CONTROLES.md)

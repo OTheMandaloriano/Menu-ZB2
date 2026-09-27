@@ -2,6 +2,16 @@
 
 Formato baseado em Keep a Changelog. O projeto ainda não tem release estável numerada.
 
+## [Não lançado]
+
+### Removido
+
+- Launcher, atualizador, empacotador e testes exclusivos do launcher, por decisão do proprietário. Distribuição volta ao injetor.
+
+### Alterado
+
+- Tecla padrão do NoClip passa de F6 para N; seleção personalizada continua disponível.
+
 ## [0.2.1] - 2026-09-27
 
 Prévia privada; validação em partida pendente.

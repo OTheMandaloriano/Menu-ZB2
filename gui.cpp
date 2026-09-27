@@ -213,7 +213,7 @@ namespace Config {
     float fThirdDist = 4.0f;
     bool  bAntiAfk = false;
     bool  bNoClip = false;
-    int iNoClipKey = VK_F6;
+    int iNoClipKey = 0x4E;
     float fNoClipSpeed = 1.3f;
     bool  bNoFall = false;
 }
@@ -1323,7 +1323,7 @@ namespace GUI {
                 ImGui::Checkbox("Desbloquear Slots", &Config::bUnlockSlots); Tip("Desbloqueia somente a capacidade existente. Para desativar, esvazie os slots/area extras; nao apaga nem move itens automaticamente.");
                 if(Mono::Get().modifierStatus[0]) ImGui::TextWrapped("%s",Mono::Get().modifierStatus);
                 ImGui::Checkbox("NoClip (WASD / Space / Ctrl)", &Config::bNoClip);
-                HotkeyButton("Tecla NoClip", &Config::iNoClipKey, "Alterna ligado/desligado com o menu fechado. Padrao F6.");
+                HotkeyButton("Tecla NoClip", &Config::iNoClipKey, "Alterna ligado/desligado com o menu fechado. Padrao N.");
                 ImGui::SliderFloat("NoClip velocidade", &Config::fNoClipSpeed, .5f, 5.0f, "%.1fx");
                 ImGui::Checkbox("Desbloquear Loadout", &Config::bUnlockLoadout); Tip("Kits do loadout livres (a loja compra com Money: use Infinite Money).");
                 ImGui::Separator();
@@ -1375,7 +1375,7 @@ namespace GUI {
                 ImGui::Text("HOTKEYS (clique e pressione a tecla)");
                 HotkeyButton("Menu", &Config::iMenuKey, "Abre/fecha o menu (DELETE sempre funciona).");
                 HotkeyButton("Aim Key", &Config::iAimKey, "Tecla do aimbot.");
-                HotkeyButton("NoClip", &Config::iNoClipKey, "Alterna NoClip, padrao F6.");
+                HotkeyButton("NoClip", &Config::iNoClipKey, "Alterna NoClip, padrao N.");
                 HotkeyButton("Enemy Magnet", &Config::iMagnetKey, "Ativa/posiciona o magnet (H).");
                 HotkeyButton("Item Magnet", &Config::iItemMagnetKey, "Ativa/posiciona o item magnet (J).");
                 ImGui::Separator();

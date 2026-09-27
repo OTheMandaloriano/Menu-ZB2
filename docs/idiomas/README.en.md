@@ -17,7 +17,7 @@ A development menu for Zumbi Blocks 2 with a D3D11 interface and Unity Mono inte
 The native C++ module provides the interface and rendering. Managed C# adapters run inside the game's Mono environment. Features include aiming controls, weapon and movement parameters, entity/item/world overlays, presets and diagnostic logs.
 
 > [!IMPORTANT]
-> This private repository contains development sources, tests and documentation. The 0.2.1 private preview includes an embedded local runtime and opt-in runtime updates. There is no stable public release. Automated tests do not establish live compatibility in solo, host and client modes.
+> This private repository contains development sources, tests and documentation. Use the injector with its dependencies. The launcher has been withdrawn at the owner’s request. There is no stable public release. Automated tests do not establish live compatibility in solo, host and client modes.
 
 ## Build
 
@@ -29,7 +29,7 @@ msbuild injector/injector.vcxproj /p:Configuration=Release /p:Platform=x64
 python scripts/build_managed_aim.py --managed "GAME_PATH/ZumbiBlocks2_Data/Managed"
 ```
 
-Build output is in `build/Release_x64`. Keep the injector, configuration, native DLL, managed adapter, Harmony dependency and its license together. Preserve matching PDB/MAP files for crash diagnosis. Enter a map before running the injector; Insert toggles the menu. Current logs, presets and runtime versions live in `Documents/ZB2Menu`. The launcher migrates missing presets from the previous directory.
+Build output is in `build/Release_x64`. Keep the injector, configuration, native DLL, managed adapter, Harmony dependency and its license together. Preserve matching PDB/MAP files for crash diagnosis. Enter a map before running the injector; Insert toggles the menu. Current logs, presets and runtime versions live in `Documents/ZB2Menu`. NoClip defaults to N and remains configurable.
 
 ## Tests
 
@@ -49,10 +49,10 @@ Managed tests require Harmony from the preceding build. UI tests use simulated d
 - Unimplemented controls, including teleport and chams, are marked pending.
 - Distant unloaded entities expose known positions, not fabricated health or bones.
 - Legacy inventory, currency and unlock operations are not equivalent to reversible parameter modifiers.
-- Private runtime updates require the user's own repository access token. Commercial access management is not implemented; updating the launcher executable itself remains manual.
-- See [launcher instructions](../LAUNCHER.md) and [inventory/NoClip/ESP audit](../INVENTARIO_NOCLIP_ESP.md).
+- Updates are manual. The injector does not require a GitHub token.
+- See the [inventory/NoClip/ESP audit](../INVENTARIO_NOCLIP_ESP.md).
 - Licensing provenance must be consolidated before public redistribution.
 
 See the maintained Portuguese references for [structure](../ESTRUTURA.md), [distribution planning](../DISTRIBUICAO.md), [modifier audit](../AUDITORIA_MODIFICADORES_ESP.md), [render stability](../ESTABILIDADE_RENDER.md), [changelog](../../CHANGELOG.md), [contributing](../../.github/CONTRIBUTING.md) and [licensing](../../NOTICE.md).
 
-[Launcher and control changes](../CONTROLES_LAUNCHER.md)
+[Hotkeys and Magnet](../CONTROLES.md)
