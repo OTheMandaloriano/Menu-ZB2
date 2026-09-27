@@ -11,9 +11,10 @@ namespace Zb2Menu {
             public int Kind;
             public float X, Y, Distance;
             [MarshalAs(UnmanagedType.ByValArray, SizeConst=96)] public byte[] Name;
+            public float Left,Top,Right,Bottom,Health;
         }
         static readonly List<Marker> result = new List<Marker>(256);
-        sealed class LootEntry { public DroppedLoot Loot; public string Name; public int Kind; public float Distance; }
+        sealed class LootEntry { public DroppedLoot Loot; public Renderer[] Renderers; public string Name; public int Kind; public float Distance; }
         static readonly List<LootEntry> lootCache = new List<LootEntry>(512);
         static MapHash previousMap;
         static float nextLootScan;
@@ -25,6 +26,7 @@ namespace Zb2Menu {
         static float radius, poiRadius;
         static readonly int[] itemFilters=new int[4];
         static int pointFilter;
+        static int teamCount;
         static string error="";
         public static string LastError() { return error; }
         // Kind bits: weapons, rare, ammo, supply, heli, boss, mission, wave,
@@ -64,6 +66,7 @@ namespace Zb2Menu {
             try {
                 if ((mask & 15)!=0) Items();
                 if ((mask & ~15)!=0) Points();
+                if ((mask & (1<<14))!=0) Team();
             } catch(Exception ex) { error=ex.ToString(); }
             int count=Math.Min(capacity,result.Count), stride=Marshal.SizeOf(typeof(Marker));
             for(int i=0;i<count;++i) Marshal.StructureToPtr(result[i],IntPtr.Add(buffer,i*stride),false);
@@ -81,7 +84,14 @@ namespace Zb2Menu {
                 RefreshItems(map);
             }
             foreach(var entry in lootCache)
-                if(entry.Loot!=null) Add(entry.Kind,entry.Name,entry.Loot.transform.position,true);
+                if(entry.Loot!=null) Add(entry.Kind,entry.Name,LootCenter(entry),true);
+        }
+        static Vector3 LootCenter(LootEntry entry) {
+            Bounds bounds=new Bounds();bool found=false;
+            foreach(var renderer in entry.Renderers)if(renderer!=null && renderer.enabled && renderer.gameObject.activeInHierarchy) {
+                if(!found){bounds=renderer.bounds;found=true;}else bounds.Encapsulate(renderer.bounds);
+            }
+            return found?bounds.center:entry.Loot.transform.position;
         }
         static void RefreshItems(MapHash map) {
             lootCache.Clear();
@@ -107,7 +117,7 @@ namespace Zb2Menu {
                     // Rare is an additional filter, not a reason to hide an enabled category.
                     if((int)db.tier>=2 && (mask & 2)!=0) kind=1;
                     if((mask & (1<<kind))==0) continue;
-                    var entry=new LootEntry {Loot=loot,Name=db.GetName,Kind=kind,Distance=distance};
+                    var entry=new LootEntry {Loot=loot,Renderers=loot.GetComponentsInChildren<Renderer>(true),Name=db.GetName,Kind=kind,Distance=distance};
                     if(lootCache.Count<512) lootCache.Add(entry);
                     else {
                         int farthest=0;
@@ -127,17 +137,17 @@ namespace Zb2Menu {
                 int kind; string name;
                 switch(point.type) {
                     case InterestPoint.Type.Gravestone: kind=13; name="Sepultura"; break;
-                    case InterestPoint.Type.OtherPlayerDot: kind=14; name="Jogador"; break;
+                    case InterestPoint.Type.OtherPlayerDot: continue;
                     case InterestPoint.Type.Helicopter: kind=4; name="Helicoptero"; break;
                     case InterestPoint.Type.Bossfight: kind=5; name="Chefao"; break;
                     case InterestPoint.Type.QuestionMark: kind=6; name="Ponto desconhecido"; break;
                     case InterestPoint.Type.Bomb: kind=6; name="Bomba"; break;
-                    case InterestPoint.Type.Ammo: kind=8; name="Municao"; break;
-                    case InterestPoint.Type.Gun: kind=8; name="Armas"; break;
-                    case InterestPoint.Type.Melee: kind=8; name="Armas brancas"; break;
-                    case InterestPoint.Type.HealingItem: kind=8; name="Cura"; break;
-                    case InterestPoint.Type.CraftingMaterial: kind=8; name="Materiais"; break;
-                    case InterestPoint.Type.Food: kind=8; name="Comida"; break;
+                    case InterestPoint.Type.Ammo: kind=8; name="Area: municao"; break;
+                    case InterestPoint.Type.Gun: kind=8; name="Area: armas"; break;
+                    case InterestPoint.Type.Melee: kind=8; name="Area: armas brancas"; break;
+                    case InterestPoint.Type.HealingItem: kind=8; name="Area: cura"; break;
+                    case InterestPoint.Type.CraftingMaterial: kind=8; name="Area: materiais"; break;
+                    case InterestPoint.Type.Food: kind=8; name="Area: comida"; break;
                     case InterestPoint.Type.ReloadingBench: kind=9; name="Bancada de recarga"; break;
                     case InterestPoint.Type.GunUpgradeTable: kind=9; name="Bancada de melhoria"; break;
                     case InterestPoint.Type.ZumbiePyre: kind=10; name="Fogueira"; break;
@@ -147,6 +157,31 @@ namespace Zb2Menu {
                 }
                 var position=point.objTransform!=null ? point.objTransform.position : point.pos3D;
                 Add(kind,name,position,kind>=8 && kind<=11);
+            }
+        }
+        static void Team() {
+            teamCount=0;
+            foreach(var player in PlayersController.instance.players) {
+                if(player==null || player.HasLocalControl || player.healthFast<=0 || player.movement==null || player.movement.hitbox==null)continue;
+                if(teamCount++>=32)break;
+                var bounds=player.movement.hitbox.bounds;
+                float distance=Vector3.Distance(origin,bounds.center);
+                if(!(distance>=0) || float.IsInfinity(distance))continue;
+                float left=1,right=0,top=1,bottom=0;int projected=0;
+                for(int corner=0;corner<8;++corner){
+                    var point=bounds.center+new Vector3((corner&1)==0?-bounds.extents.x:bounds.extents.x,(corner&2)==0?-bounds.extents.y:bounds.extents.y,(corner&4)==0?-bounds.extents.z:bounds.extents.z);
+                    var screen=camera.WorldToViewportPoint(point);if(!(screen.z>.01f))continue;
+                    left=Math.Min(left,screen.x);right=Math.Max(right,screen.x);top=Math.Min(top,1-screen.y);bottom=Math.Max(bottom,1-screen.y);++projected;
+                }
+                if(projected<2 || right<0 || left>1 || bottom<0 || top>1)continue;
+                var marker=new Marker{Kind=14,X=(left+right)*.5f,Y=bottom,Distance=distance,Left=Math.Max(0,left),Right=Math.Min(1,right),Top=Math.Max(0,top),Bottom=Math.Min(1,bottom),Health=player.healthFast,Name=new byte[96]};
+                string name=player.lobbyPlayer==null?"Aliado":player.lobbyPlayer.playerName;
+                if(string.IsNullOrWhiteSpace(name))name="Aliado";
+                if(name.Length>28)name=name.Substring(0,28);
+                var bytes=Encoding.UTF8.GetBytes(name);Array.Copy(bytes,marker.Name,Math.Min(bytes.Length,95));
+                // Reserve room for actual teammates, not generic map dots.
+                if(result.Count>=256)result.RemoveAt(result.Count-1);
+                result.Add(marker);
             }
         }
     }

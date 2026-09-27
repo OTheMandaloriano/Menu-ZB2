@@ -2872,7 +2872,7 @@ namespace Mono {
             (s_options.bFastKnife ? 256 : 0) | (s_options.bFullAuto ? 512 : 0) |
             (s_options.bUnlockSlots ? 1024 : 0) | (s_options.bNoClip ? 2048 : 0) | (s_options.bMenuOpen ? 4096 : 0) | (s_options.bEnemyMagnet ? 8192 : 0);
         void* args[] = {local, &flags, &s_options.fRapidMult, &s_options.fSpeedMult,
-            &s_options.fJumpMult, &s_options.fRollMult, &s_options.fKnifeMult, &s_options.fNoClipSpeed, &s_options.fMagnetRadius};
+            &s_options.fJumpMult, &s_options.fRollMult, &s_options.fKnifeMult, &s_options.fNoClipSpeed, &s_options.fMagnetRadius, &s_options.iMagnetTargets};
         InvokeAimBool(s_modifierApply, nullptr, args, s_modifiersPending);
         BridgeError(s_modifierError, "MODIFIERS");
         s.slotsOn=s_options.bUnlockSlots;

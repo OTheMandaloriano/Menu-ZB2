@@ -14,14 +14,20 @@ namespace UnityEngine {
     public class Transform {public Vector3 position;public Vector3 forward=new Vector3(0,0,1);}
     public class Camera {public Transform transform=new Transform();public Vector3 WorldToViewportPoint(Vector3 p){return new Vector3(.5f+p.x/100,.5f+p.y/100,p.z);}}
     public static class Time { public static float unscaledTime; }
+    public struct Bounds {public Vector3 center,extents;public void Encapsulate(Bounds b){center=b.center;}}
+    public class GameObject {public bool activeInHierarchy=true;}
+    public class Renderer {public bool enabled=true;public GameObject gameObject=new GameObject();public Bounds bounds;}
+    public class Collider {public Bounds bounds=new Bounds{center=new Vector3(0,0,10),extents=new Vector3(1,1,1)};}
 }
-public class PlayerMain {public float healthFast=100;public UnityEngine.Transform transform=new UnityEngine.Transform();}
-public class PlayersController {public static PlayersController instance=new PlayersController(); public PlayerMain player=new PlayerMain();public PlayerMain MyPlayer(){return player;}}
+public class LobbyPlayer {public string playerName="Friend";}
+public class PlayerMovement {public UnityEngine.Collider hitbox=new UnityEngine.Collider();}
+public class PlayerMain {public bool HasLocalControl;public LobbyPlayer lobbyPlayer=new LobbyPlayer();public PlayerMovement movement=new PlayerMovement();public float healthFast=100;public UnityEngine.Transform transform=new UnityEngine.Transform();}
+public class PlayersController {public List<PlayerMain> players=new List<PlayerMain>();public static PlayersController instance=new PlayersController(); public PlayerMain player=new PlayerMain();public PlayerMain MyPlayer(){return player;}}
 public class MainCamera {public static MainCamera instance=new MainCamera(); public UnityEngine.Camera cam=new UnityEngine.Camera();}
 public class InventoryItem {public enum ID{RifleAmmo,SniperAmmo,ShotgunAmmo,PistolAmmo,Gun}; public ID id=ID.Gun; public DatabaseItem db=new DatabaseItem();public DatabaseItem GetDataBaseItem(){return db;}}
 public class DatabaseItem {public enum SubType{Melee,Misc};public int tier;public string GetName{get{return "Objeto";}}public virtual SubType GetSubType(){return SubType.Misc;}}
 public class DatabaseGun:DatabaseItem{}
-public class DroppedLoot {public InventoryItem item=new InventoryItem();public UnityEngine.Transform transform=new UnityEngine.Transform();}
+public class DroppedLoot {public UnityEngine.Renderer[] renderers=new UnityEngine.Renderer[0];public T[] GetComponentsInChildren<T>(bool include){return renderers as T[];}public InventoryItem item=new InventoryItem();public UnityEngine.Transform transform=new UnityEngine.Transform();}
 public struct Coord {public int x,y;}
 public class HashCell {public List<DroppedLoot> loot=new List<DroppedLoot>();}
 public class MapHash {public static MapHash instance=new MapHash();public bool IsCreated=true;public float cellSize=96;public HashCell cell=new HashCell();public HashCell GetCell(int x,int y){return cell;}public Coord GetHashCoord(UnityEngine.Vector3 p){return new Coord();}}
@@ -37,7 +43,7 @@ class WorldTests {
     static int Collect(int mask,float range=150,int cap=256,float poiRange=150){return WorldEspBridge.Collect(buffer,cap,mask,range,poiRange,-1,-1,-1,-1,-1);}
     static DroppedLoot Loot(float x,float z,DatabaseItem db,InventoryItem.ID id=InventoryItem.ID.Gun){var l=new DroppedLoot();l.item.db=db;l.item.id=id;l.transform.position=new UnityEngine.Vector3(x,0,z);return l;}
     static void Main(){
-        buffer=Marshal.AllocHGlobal(112*256+16);
+        buffer=Marshal.AllocHGlobal(132*256+16);
         try {
             MapHash.instance.cell.loot.Add(Loot(0,10,new DatabaseGun()));
             MapHash.instance.cell.loot.Add(Loot(0,12,new DatabaseItem(),InventoryItem.ID.PistolAmmo));
@@ -57,7 +63,7 @@ class WorldTests {
             PlayersController.instance.player.healthFast=0;Check(Collect(15|16)==0,"dead player clears");PlayersController.instance.player.healthFast=100;
             Check(Collect(15,150,1)==1,"caller capacity honored");
             for(int i=0;i<300;++i)InterestPointController.instance.points.Add(new InterestPoint{type=InterestPoint.Type.Helicopter});
-            Marshal.WriteInt32(buffer,112*256,1234567);Check(Collect(16)==256,"capacity bound");Check(Marshal.ReadInt32(buffer,112*256)==1234567,"no buffer overrun");
+            Marshal.WriteInt32(buffer,132*256,1234567);Check(Collect(16)==256,"capacity bound");Check(Marshal.ReadInt32(buffer,132*256)==1234567,"no buffer overrun");
             InterestPointController.instance.points.Clear();
             InterestPointController.instance.points.Add(new InterestPoint{type=InterestPoint.Type.ZumbiePyre,pos3D=new UnityEngine.Vector3(0,0,100)});
             Check(Collect(15|1024,11,256,150)==2,"short item radius keeps distant POI");
@@ -69,6 +75,15 @@ class WorldTests {
             Check(WorldEspBridge.Collect(buffer,256,1024,150,150,-1,-1,-1,-1,0)==0,"individual point mask hides points");
             MapHash.instance.cell.loot.Add(Loot(0,15,new DatabaseGun(),(InventoryItem.ID)115));
             Check(WorldEspBridge.Collect(buffer,256,1,150,150,0,0,0,1<<19,-1)==1,"item filter covers IDs above 96");
+            InterestPointController.instance.points.Clear();InterestPointController.instance.points.Add(new InterestPoint{type=InterestPoint.Type.OtherPlayerDot});
+            Check(Collect(1<<14)==0,"map player marker does not masquerade as team ESP");
+            var friend=new PlayerMain();PlayersController.instance.players.Add(friend);PlayersController.instance.players.Add(new PlayerMain{HasLocalControl=true});
+            Check(Collect(1<<14)==1,"real teammate collected independently, self excluded");
+            Check(Marshal.ReadInt32(buffer)==14,"team category ABI");
+            byte[] teamName=new byte[96];Marshal.Copy(IntPtr.Add(buffer,16),teamName,0,96);Check(System.Text.Encoding.UTF8.GetString(teamName).StartsWith("Friend"),"real teammate name");
+            friend.healthFast=0;Check(Collect(1<<14)==0,"dead teammate excluded");
+            MapHash.instance.cell.loot.Clear();var centered=Loot(0,10,new DatabaseGun());centered.renderers=new[]{new UnityEngine.Renderer{bounds=new UnityEngine.Bounds{center=new UnityEngine.Vector3(20,0,10)}}};MapHash.instance.cell.loot.Add(centered);UnityEngine.Time.unscaledTime+=1;
+            Check(Collect(1)==1,"rendered item collected");byte[] scalar=new byte[4];Marshal.Copy(IntPtr.Add(buffer,4),scalar,0,4);Check(Math.Abs(BitConverter.ToSingle(scalar,0)-.7f)<.001f,"item anchor uses renderer center rather than root pivot");
             Console.WriteLine(checks+" world ESP checks passed");
         } finally {Marshal.FreeHGlobal(buffer);}
     }

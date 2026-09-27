@@ -59,5 +59,10 @@ int main(){
     Config::bPoiEsp=Config::bPoiFire=true;
     Check(Frame()==0,"reduced POI range filters stale marker immediately");
     Config::fPoiRadius=150;Check(Frame()>0,"POI independent of short item range");
+    Config::bZombieEsp=false;Config::bPoiEsp=false;Config::bItemEsp=false;Config::bAllyEsp=true;
+    Mono::worldCount=1;Mono::marker.kind=14;Mono::marker.distance=20;Mono::marker.left=.4f;Mono::marker.right=.6f;Mono::marker.top=.3f;Mono::marker.bottom=.7f;Mono::marker.health=87;
+    Config::bAllyBoxShow=true;Check(Frame()>0,"team renders with items and POI disabled");
+    Config::bAllyBoxShow=false;Config::bAllyName=false;Config::bAllyDist=false;Config::bAllyHp=false;Config::bAllySnap=false;Check(Frame()==0,"team master without elements draws nothing");
+    Config::bAllyName=true;Check(Frame()>0,"team name independent");Config::fAllyDistance=10;Check(Frame()==0,"team range independent");
     ImGui::DestroyContext();std::printf("PASS: %d real ImGui overlay checks\n",checks);
 }

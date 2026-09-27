@@ -4,6 +4,11 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- ESP de equipe usa jogadores reais, nome, HP, box 2D e raio próprios.
+- Itens ancoram no centro visual; áreas de loot são identificadas explicitamente.
+- Magnet permite filtrar zumbis/bosses; bosses existentes ignoram o raio de origem.
+
+
 - Boost temporário de 4× com Shift restaurado no NoClip por solicitação do proprietário; soltar retorna à velocidade selecionada.
 
 

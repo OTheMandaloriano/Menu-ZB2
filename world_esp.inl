@@ -21,7 +21,7 @@ static void BuildWorldEsp() {
         s_options.bPoiEsp && s_options.bPoiMission, false,
         s_options.bPoiEsp && s_options.bPoiLootFix, s_options.bPoiEsp && s_options.bPoiBench,
         s_options.bPoiEsp && s_options.bPoiFire, s_options.bPoiEsp && s_options.bPoiShop,
-        s_options.bPoiEsp && s_options.bPoiRespawn,s_options.bPoiEsp && s_options.bPoiGraves,s_options.bPoiEsp && s_options.bPoiPlayers};
+        s_options.bPoiEsp && s_options.bPoiRespawn,s_options.bPoiEsp && s_options.bPoiGraves,s_options.bAllyEsp};
     for(int i=0;i<15;++i) if(enabled[i]) mask |= 1<<i;
     if (!mask || !s_worldCollect) { ClearWorldEsp(); return; }
     WorldSnapshot snapshot;

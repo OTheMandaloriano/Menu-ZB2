@@ -12,7 +12,7 @@ namespace Zb2Menu {
         public static string Status="";
         public static bool Active {get{return previous || Status.Length>0;}}
         public static void Reset(){cursor=0;previous=false;owner=null;loader=null;Status="";nextPass=0;}
-        public static void Apply(PlayerMain player,bool enabled,bool inputAllowed,float radius) {
+        public static void Apply(PlayerMain player,bool enabled,bool inputAllowed,float radius,int targetMode=0) {
             if(!enabled || player==null || player.healthFast<=0 || !player.HasLocalControl){Reset();return;}
             var multiplayer=MultiplayerController.instance;
             if(multiplayer==null || !multiplayer.IsServer()){Status="Magnet requer autoridade do host";cursor=0;previous=false;return;}
@@ -23,6 +23,8 @@ namespace Zb2Menu {
             if(Time.unscaledTime<nextPass)return;nextPass=Time.unscaledTime+.1f;
             if(float.IsNaN(radius)||float.IsInfinity(radius))radius=50;
             radius=Mathf.Clamp(radius,10,300);
+            if(targetMode<0 || targetMode>2)targetMode=0;
+            if(targetMode!=1)LoadOneBoss(current);
             Vector3 origin=player.transform.position;
             Vector3 forward=player.cam.CameraTransform.forward;forward.y=0;
             if(forward.sqrMagnitude<.01f)return;forward.Normalize();
@@ -34,7 +36,9 @@ namespace Zb2Menu {
                 int index=cursor%total;cursor=(index+1)%total;
                 var zombie=current.zombies[index];
                 if(zombie==null || zombie.obj==null || zombie.health==null || !zombie.health.isAlive || zombie.health.amount<=0)continue;
-                if(Vector3.Distance(origin,zombie.obj.transform.position)>radius)continue;
+                bool boss=zombie.identity.IsBoss;
+                if((targetMode==1 && boss) || (targetMode==2 && !boss))continue;
+                if(!boss && Vector3.Distance(origin,zombie.obj.transform.position)>radius)continue;
                 // A compact moving anchor follows the player. Small stable offsets
                 // prevent rigidbodies from sharing exactly the same destination.
                 int slot=(zombie.identity.id&int.MaxValue)%9;
@@ -48,6 +52,13 @@ namespace Zb2Menu {
                 ++count;
             }
             Status="";
+        }
+        static void LoadOneBoss(ZombieLoader current) {
+            int id=-1;
+            foreach(var zombie in current.unloadedZombies)if(zombie!=null && zombie.identity.IsBoss){id=zombie.identity.id;break;}
+            if(id<0)foreach(var zombie in current.zombieProps)if(zombie!=null && zombie.identity.IsBoss){id=zombie.identity.id;break;}
+            // The game owns conversion and network state. Never mutate the list being enumerated.
+            if(id>=0)current.ForceLoadRealZombie(id);
         }
     }
 }

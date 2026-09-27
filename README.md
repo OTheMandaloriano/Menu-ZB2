@@ -75,7 +75,7 @@ Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. 
 | Área | Estado |
 |---|---|
 | Multiplayer | Há caminhos para solo, host e cliente; aceitação de efeitos pelo servidor e estabilidade prolongada precisam de validação por função. |
-| Controles pendentes | Teleporte, chams, ESP de aliados e outros controles sem execução estão identificados como pendentes. |
+| Controles pendentes | Teleporte manual, chams e outros controles sem execução estão identificados como pendentes. |
 | ESP distante | Registros sem modelo carregado usam posição conhecida; não há vida ou ossos inventados. |
 | Modificadores legados | Inventário, moedas e desbloqueios têm comportamento distinto de restaurar parâmetros de armas e movimento. Consulte a auditoria. |
 | Distribuição | Injetor com dependências na mesma pasta. Atualização manual; launcher retirado. |
@@ -90,3 +90,5 @@ Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. 
 - [Histórico](CHANGELOG.md), [contribuição](.github/CONTRIBUTING.md) e [licenciamento](NOTICE.md)
 
 [Atalhos e Magnet](docs/CONTROLES.md)
+
+[Equipe, itens e filtros do Magnet](docs/EQUIPE_ITENS_MAGNET.md)

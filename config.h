@@ -104,6 +104,9 @@ namespace Config {
 
     // ---- VISUAL / Aliados ----
     extern bool  bAllyEsp;
+    extern bool bAllyBoxShow;
+    extern float fAllyDistance;
+    extern int iMagnetTargets;
     extern int   iAllyBox;
     extern bool  bAllyName;
     extern bool  bAllyDist;
