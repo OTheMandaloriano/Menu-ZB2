@@ -11,7 +11,7 @@ namespace Zb2Menu {
             if(buffer==IntPtr.Zero || capacity<1 || ItemsBase.instance==null)return 0;
             int count=0,stride=Marshal.SizeOf(typeof(Entry));
             foreach(var item in ItemsBase.instance.Items) {
-                if(item==null || item.itemID==InventoryItem.ID.None || count>=capacity)continue;
+                if(!ItemEligibility.Allowed(item) || count>=capacity)continue;
                 string name=item.GetName;
                 if(string.IsNullOrWhiteSpace(name) || name=="<?>")name=item.itemID.ToString();
                 if(name.Length>28)name=name.Substring(0,28);
@@ -24,7 +24,7 @@ namespace Zb2Menu {
         public static bool Icon(int id,IntPtr buffer) {
             if(buffer==IntPtr.Zero || ItemsBase.instance==null || id<=0 || id>=ItemsBase.ItemCount)return false;
             var item=ItemsBase.instance.GetItem((InventoryItem.ID)id);
-            if(item==null || item.sprite==null)return false;
+            if(!ItemEligibility.Allowed(item) || item.sprite==null)return false;
             var sprite=item.sprite;var texture=sprite.texture;if(texture==null)return false;
             RenderTexture temporary=null;Texture2D readback=null;var previous=RenderTexture.active;
             try {

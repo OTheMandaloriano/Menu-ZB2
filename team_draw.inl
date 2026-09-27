@@ -13,7 +13,7 @@ static void DrawTeamMarker(ImDrawList* draw,const Mono::WorldMarker& marker,cons
     if(Config::bAllySkeleton){static const int edges[][2]={{0,1},{1,2},{2,3},{3,4},{2,5},{5,6},{6,7},{2,8},{8,9},{9,10},{4,11},{11,12},{12,13},{4,14},{14,15},{15,16}};
         for(auto& edge:edges){int l=edge[0]*3,r=edge[1]*3;if(marker.bones[l+2] && marker.bones[r+2])draw->AddLine(ImVec2(marker.bones[l]*io.DisplaySize.x,marker.bones[l+1]*io.DisplaySize.y),ImVec2(marker.bones[r]*io.DisplaySize.x,marker.bones[r+1]*io.DisplaySize.y),tint(Config::colAllySkel),1.5f);}
     }
-    if(Config::bAllyHeadDot && marker.bones[2])draw->AddCircleFilled(ImVec2(marker.bones[0]*io.DisplaySize.x,marker.bones[1]*io.DisplaySize.y),3,tint(Config::colAllyDot));
+
     auto model=ReadTeamLayout();
     model.items[EspLayout::Name].enabled=Config::bAllyName;model.items[EspLayout::Distance].enabled=Config::bAllyDist;
     model.items[EspLayout::Health].enabled=Config::bAllyHp;model.items[EspLayout::Percent].enabled=Config::bAllyPct;

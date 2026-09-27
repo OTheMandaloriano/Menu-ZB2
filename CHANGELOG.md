@@ -4,6 +4,13 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Itens bloqueados pela edição, ocultos ou internos são excluídos do catálogo/ESP e das operações de loot.
+- Equipe mantém somente box, nome, distância, barra/percentual, esqueleto, linha e raio.
+- Congelamento de atraídos executa suspensão/restauração de física e animação com watchdog.
+- Item Magnet move loot permitido ao chão próximo em lotes, com atualização da célula e sincronização nativa; sem auto-coleta.
+- A especificação ampliada de aliados, alvo Steam e redirecionamento de spawn permanece incompleta e documentada.
+
+
 ### Catálogo, equipe e estabilidade
 
 - Catálogo de itens em modal com nomes do banco e ícones locais sob demanda; busca normalizada.

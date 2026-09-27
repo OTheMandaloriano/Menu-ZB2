@@ -14,7 +14,8 @@ namespace UnityEngine {
     public static class Graphics {public static Vector2 Scale,Offset;public static void Blit(Texture2D source,RenderTexture target,Vector2 scale,Vector2 offset){Scale=scale;Offset=offset;}}
 }
 public class InventoryItem {public enum ID {None,Wood,PistolAmmo}}
-public class DatabaseItem {public InventoryItem.ID itemID;public string GetName;public UnityEngine.Sprite sprite;}
+public static class Pricing {public static bool blocked;public static bool IsBlocked(InventoryItem.ID id){return blocked;}}
+public class DatabaseItem {public bool hidden,reserved;public InventoryItem.ID itemID;public string GetName;public UnityEngine.Sprite sprite;}
 public class ItemsBase {public static ItemsBase instance;public List<DatabaseItem> Items=new List<DatabaseItem>();public static float ItemCount {get{return instance.Items.Count;}}public DatabaseItem GetItem(InventoryItem.ID id){return Items[(int)id];}}
 class CatalogTests {
     static int checks;static void Check(bool b,string n){if(!b)throw new Exception(n);checks++;}
@@ -28,6 +29,8 @@ class CatalogTests {
             Check(ItemCatalogBridge.Icon(1,buffer),"sprite icon converted");Check(Marshal.ReadByte(buffer,12*48*4)==23 && Marshal.ReadByte(buffer,3)==0,"orientation and aspect ratio preserved with transparent padding");Check(Marshal.ReadInt32(buffer,48*48*4)==9123,"icon buffer bounded");
             Check(ReferenceEquals(active,UnityEngine.RenderTexture.active) && UnityEngine.RenderTexture.released==1 && UnityEngine.Object.destroyed==1,"render target restored and temporary resources released");
             Check(UnityEngine.Graphics.Scale.x==.5f && UnityEngine.Graphics.Offset.x==.25f,"sprite atlas cropped");Check(!ItemCatalogBridge.Icon(2,buffer),"missing image returns no fabricated icon");
+            Pricing.blocked=true;Check(ItemCatalogBridge.Read(buffer,128)==0 && !ItemCatalogBridge.Icon(1,buffer),"blocked items excluded from names and images");Pricing.blocked=false;
+            ItemsBase.instance.Items[1].reserved=true;ItemsBase.instance.Items[2].hidden=true;Check(ItemCatalogBridge.Read(buffer,128)==0,"internal and hidden items excluded");
             Console.WriteLine(checks+" catalog and icon checks passed");
         }finally{Marshal.FreeHGlobal(buffer);}
     }

@@ -7,8 +7,9 @@ using UnityEngine;
 namespace UnityEngine {
     public class Object { }
     public class Transform {public Vector3 position;public Quaternion rotation;public Vector3 forward=new Vector3(0,0,1);public Vector3 TransformDirection(Vector3 p){return p;}public bool IsChildOf(Transform t){return ReferenceEquals(this,t);}}
-    public struct Vector3 {public float x,y,z;public static Vector3 up{get{return new Vector3(0,1,0);}}public static Vector3 down{get{return new Vector3(0,-1,0);}}public static float Distance(Vector3 a,Vector3 b){float x=a.x-b.x,y=a.y-b.y,z=a.z-b.z;return (float)Math.Sqrt(x*x+y*y+z*z);}public Vector3(float a,float b,float c){x=a;y=b;z=c;}public float sqrMagnitude{get{return x*x+y*y+z*z;}}public void Normalize(){float n=(float)Math.Sqrt(sqrMagnitude);x/=n;y/=n;z/=n;}public static Vector3 operator *(Vector3 v,float n){return new Vector3(v.x*n,v.y*n,v.z*n);}public static Vector3 operator +(Vector3 a,Vector3 b){return new Vector3(a.x+b.x,a.y+b.y,a.z+b.z);}}
-    public class Rigidbody {public bool isKinematic,detectCollisions=true;}
+    public struct Vector3 {public static Vector3 zero {get{return new Vector3();}}public float x,y,z;public static Vector3 up{get{return new Vector3(0,1,0);}}public static Vector3 down{get{return new Vector3(0,-1,0);}}public static float Distance(Vector3 a,Vector3 b){float x=a.x-b.x,y=a.y-b.y,z=a.z-b.z;return (float)Math.Sqrt(x*x+y*y+z*z);}public Vector3(float a,float b,float c){x=a;y=b;z=c;}public float sqrMagnitude{get{return x*x+y*y+z*z;}}public void Normalize(){float n=(float)Math.Sqrt(sqrMagnitude);x/=n;y/=n;z/=n;}public static Vector3 operator *(Vector3 v,float n){return new Vector3(v.x*n,v.y*n,v.z*n);}public static Vector3 operator +(Vector3 a,Vector3 b){return new Vector3(a.x+b.x,a.y+b.y,a.z+b.z);}}
+    public class Animator {public float speed=1;}
+    public class Rigidbody {public Vector3 linearVelocity;public bool isKinematic,detectCollisions=true;}
     public struct Bounds {public Vector3 center,extents;}
     public class Collider {public Transform transform=new Transform();public Bounds bounds;}
     public struct Quaternion {public static Quaternion identity {get{return new Quaternion();}}}

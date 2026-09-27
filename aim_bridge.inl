@@ -8,6 +8,7 @@ static MonoMethod* s_modifierApply = nullptr;
 static MonoMethod* s_modifierStatus = nullptr;
 static MonoMethod* s_featureKeys = nullptr;
 static MonoMethod* s_catalogRead = nullptr;
+static MonoMethod* s_itemAllowed = nullptr;
 static MonoMethod* s_catalogIcon = nullptr;
 static MonoMethod* s_chamsApply = nullptr;
 static MonoMethod* s_modifierReset = nullptr;
@@ -64,6 +65,8 @@ static bool LoadAimBridge() {
         auto image = static_cast<MonoImage*>(pAssmImage(assembly));
         auto modifiers = pClassFrom(image, "Zb2Menu", "ModifierBridge");
         auto world = pClassFrom(image, "Zb2Menu", "WorldEspBridge");
+        auto eligible=pClassFrom(image,"Zb2Menu","ItemEligibility");
+        if(eligible)s_itemAllowed=pMethodFrom(eligible,"AllowedId",1);
         auto catalog = pClassFrom(image,"Zb2Menu","ItemCatalogBridge");
         auto chams = pClassFrom(image,"Zb2Menu","ChamsBridge");
         if(!catalog || !chams)return false;
@@ -75,7 +78,7 @@ static bool LoadAimBridge() {
         s_rangeError = pMethodFrom(ranges, "LastError", 0);
         s_rangeStats = pMethodFrom(ranges, "Statistics", 0);
         if (!s_rangeConfigure || !s_rangeCollect) return false;
-        s_modifierApply = pMethodFrom(modifiers, "Apply", 12);
+        s_modifierApply = pMethodFrom(modifiers, "Apply", 18);
         s_modifierStatus = pMethodFrom(modifiers, "Status", 0);
         s_featureKeys = pMethodFrom(modifiers, "CanUseKeys", 0);
         s_modifierReset = pMethodFrom(modifiers, "Reset", 0);

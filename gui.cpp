@@ -213,8 +213,8 @@ namespace Config {
     bool  bMagnetFreeze = false;
     bool  bKillOnSpawn = false;
     bool  bItemMagnet = false;
-    int   iItemMagnetKey = 0x4A; // J
-    int   iItemMagnetType = 4;
+    int   iItemMagnetKey = 0x58; // X
+    int   iItemMagnetType = 3;
     float fItemMagnetRadius = 50.0f;
     bool  bAutoCollect = false;
 
@@ -867,6 +867,9 @@ namespace GUI {
         auto down=[](int key){return key>0 && key<256 && (GetAsyncKeyState(key)&0x8000)!=0;};
         const bool noConflict=Config::iNoClipKey!=Config::iMenuKey && Config::iNoClipKey!=VK_DELETE;
         if(noclip.Pressed(Config::iNoClipKey,down(Config::iNoClipKey),allowed && noConflict))Config::bNoClip=!Config::bNoClip;
+        static bool itemHeld=false;
+        const bool hold=allowed && down(Config::iItemMagnetKey) && Config::iItemMagnetKey!=Config::iMenuKey && Config::iItemMagnetKey!=VK_DELETE;
+        if(hold){Config::bItemMagnet=true;itemHeld=true;}else if(itemHeld){Config::bItemMagnet=false;itemHeld=false;}
         const bool magnetConflict=Config::iMagnetKey==Config::iNoClipKey || Config::iMagnetKey==Config::iMenuKey || Config::iMagnetKey==VK_DELETE;
         if(magnet.Pressed(Config::iMagnetKey,down(Config::iMagnetKey),allowed && !magnetConflict))Config::bEnemyMagnet=!Config::bEnemyMagnet;
     }
@@ -1266,10 +1269,7 @@ namespace GUI {
                         ImGui::Checkbox("Barra de vida##A", &Config::bAllyHp);ImGui::SameLine();ImGui::Checkbox("%##A",&Config::bAllyPct);SwatchR("##AHp",Config::colAllyHp,"Cor do percentual");
                         ImGui::Checkbox("Esqueleto##A", &Config::bAllySkeleton);SwatchR("##ASkel",Config::colAllySkel,"Ossos reais do rig humano");
                         ImGui::Checkbox("Linha##A", &Config::bAllySnap);ImGui::SameLine();ImGui::SetNextItemWidth(90);ImGui::Combo("Origem##A",&Config::iAllySnapFrom,kSnapFrom,3);SwatchR("##ALine",Config::colAllyLine,"Cor da linha");
-                        ImGui::Checkbox("Ponto na cabeca##A", &Config::bAllyHeadDot);SwatchR("##ADot",Config::colAllyDot,"Cor do ponto");
-                        const char* layouts[]={"Personalizado","Classico esquerda","Classico direita","Vida acima","Vida abaixo","Tudo a esquerda","Tudo a direita","Tudo acima","Tudo abaixo","Cantos esquerda","Cantos direita"};
-                        if(ImGui::Combo("Layout equipe",&Config::iAllyLayout,layouts,11))Config::szAllyLayout[0]=0;
-                        DrawTeamLayoutEditor();
+
                         ImGui::SliderFloat("Raio equipe", &Config::fAllyDistance,10,500,"%.0fm");
                     }
 
@@ -1361,15 +1361,16 @@ namespace GUI {
                 ImGui::SliderFloat("Distancia frontal",&Config::fMagnetFront,1.5f,10,"%.1fm");
                 ImGui::SliderFloat("Distancia bosses",&Config::fMagnetBoss,6,20,"%.1fm");
                 ImGui::SliderFloat("Raio Magnet", &Config::fMagnetRadius, 10, 300, "%.0fm");
-                ImGui::TextDisabled("Pendente: controles sem implementacao nesta versao.");
-                ImGui::BeginDisabled();
-                ImGui::Checkbox("Freeze Attracted", &Config::bMagnetFreeze);
-                ImGui::Checkbox("Kill On Spawn", &Config::bKillOnSpawn);
+                ImGui::Checkbox("Congelar atraidos", &Config::bMagnetFreeze);Tip("Suspende atualizacao dos zumbis reunidos e restaura fisica/animacao ao desligar.");
                 ImGui::Separator();
-                ImGui::Checkbox("Item Magnet (J)", &Config::bItemMagnet);
-                ImGui::Combo("Tipo", &Config::iItemMagnetType, kMagType, 5);
-                ImGui::SliderFloat("Raio Item Magnet", &Config::fItemMagnetRadius, 10, 200, "%.0fm");
-                ImGui::Checkbox("Auto Collect", &Config::bAutoCollect);
+                ImGui::Checkbox("Item Magnet", &Config::bItemMagnet);Tip("Move loot permitido ao chao perto de voce, sem coleta automatica. Solo/host. Respeita filtros individuais do ESP.");
+                HotkeyButton("Tecla Item Magnet", &Config::iItemMagnetKey,"Segure X por padrao para puxar; solte para parar.");
+                const char* lootCategories[]={"Armas","Municao","Suprimentos","Todos"};
+                if(Config::iItemMagnetType>3)Config::iItemMagnetType=3;
+                ImGui::Combo("Categoria loot", &Config::iItemMagnetType,lootCategories,4);
+                ImGui::SliderFloat("Raio Item Magnet", &Config::fItemMagnetRadius,10,200,"%.0fm");
+                ImGui::TextDisabled("Auto-coleta, aliados e selecao Steam: nao implementados.");
+                ImGui::BeginDisabled();
                 ImGui::Separator();
                 ImGui::Text("Teleports");
                 ImGui::InputFloat3("XYZ", &Config::fSaveX);
@@ -1407,7 +1408,7 @@ namespace GUI {
                 HotkeyButton("Aim Key", &Config::iAimKey, "Tecla do aimbot.");
                 HotkeyButton("NoClip", &Config::iNoClipKey, "Alterna NoClip, padrao N.");
                 HotkeyButton("Enemy Magnet", &Config::iMagnetKey, "Ativa/posiciona o magnet (H).");
-                HotkeyButton("Item Magnet", &Config::iItemMagnetKey, "Ativa/posiciona o item magnet (J).");
+                HotkeyButton("Item Magnet", &Config::iItemMagnetKey, "Segure a tecla para Item Magnet (padrao X).");
                 ImGui::Separator();
                 ImGui::Checkbox("Watermark", &Config::bWatermark);
                 ImGui::Checkbox("Debug Overlay", &Config::bDebugOverlay);

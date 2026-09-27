@@ -1750,7 +1750,7 @@ namespace Mono {
             // mas o player nao existe ainda. Sem gate = invoke em objeto nulo =
             // hang/crash reportado pelo operador.
             void* aimLocal = nullptr;
-            bool wantDef = s.ready && (s_options.bDebugOverlay || HasPendingRestores() || s_options.bGodMode || s_options.bInfStamina || s_options.bInfAmmo || s_options.bInfItems || s_options.bInfMoney || s_options.bUnlockSlots || s_options.bUnlockLoadout || s_options.bNoRecoil || s_options.bNoSpread || s_options.bNoSway || s_options.bTightAim || s_options.bRapidFire || s_options.bFullAuto || s_options.bEnemyMagnet || s_options.bNoClip || s_options.bSpeedHack || s_options.bSuperJump || s_options.bRollSpeed || s_options.bFastKnife || s_options.bInstantReload || AimRequested());
+            bool wantDef = s.ready && (s_options.bDebugOverlay || HasPendingRestores() || s_options.bGodMode || s_options.bInfStamina || s_options.bInfAmmo || s_options.bInfItems || s_options.bInfMoney || s_options.bUnlockSlots || s_options.bUnlockLoadout || s_options.bNoRecoil || s_options.bNoSpread || s_options.bNoSway || s_options.bTightAim || s_options.bRapidFire || s_options.bFullAuto || s_options.bEnemyMagnet || s_options.bItemMagnet || s_options.bNoClip || s_options.bSpeedHack || s_options.bSuperJump || s_options.bRollSpeed || s_options.bFastKnife || s_options.bInstantReload || AimRequested());
             if (wantDef && SceneAlive()) {
                 // Detecta se estamos dentro do mapa: precisa de player local vivo.
                 bool inMap = false;
@@ -1937,6 +1937,8 @@ namespace Mono {
     // com backoff de ~2s por slot e limite de 3 tentativas.
     static void AmmoEnsurePile(void* pinv, int id, int smax) {
         if (!pinv || id <= 0) return;
+        if(!s_itemAllowed)return;bool allowed=false;void* eligibilityArgs[]={&id};
+        if(!InvokeAimBool(s_itemAllowed,nullptr,eligibilityArgs,allowed) || !allowed)return;
         if (s_options.bUnlockSlots && !s_slotsWasOn) {
             s_slotsWasOn = true;
             PileTriesReset("slots ligados");
@@ -2882,9 +2884,9 @@ namespace Mono {
             (s_options.bRapidFire ? 16 : 0) | (s_options.bSpeedHack ? 32 : 0) |
             (s_options.bSuperJump ? 64 : 0) | (s_options.bRollSpeed ? 128 : 0) |
             (s_options.bFastKnife ? 256 : 0) | (s_options.bFullAuto ? 512 : 0) |
-            (s_options.bUnlockSlots ? 1024 : 0) | (s_options.bNoClip ? 2048 : 0) | (s_options.bMenuOpen ? 4096 : 0) | (s_options.bEnemyMagnet ? 8192 : 0);
+            (s_options.bUnlockSlots ? 1024 : 0) | (s_options.bNoClip ? 2048 : 0) | (s_options.bMenuOpen ? 4096 : 0) | (s_options.bEnemyMagnet ? 8192 : 0) | (s_options.bMagnetFreeze?16384:0) | (s_options.bItemMagnet?32768:0);
         void* args[] = {local, &flags, &s_options.fRapidMult, &s_options.fSpeedMult,
-            &s_options.fJumpMult, &s_options.fRollMult, &s_options.fKnifeMult, &s_options.fNoClipSpeed, &s_options.fMagnetRadius, &s_options.iMagnetTargets,&s_options.fMagnetFront,&s_options.fMagnetBoss};
+            &s_options.fJumpMult, &s_options.fRollMult, &s_options.fKnifeMult, &s_options.fNoClipSpeed, &s_options.fMagnetRadius, &s_options.iMagnetTargets,&s_options.fMagnetFront,&s_options.fMagnetBoss,&s_options.fItemMagnetRadius,&s_options.iItemMagnetType,&s_options.iItemFilter0,&s_options.iItemFilter1,&s_options.iItemFilter2,&s_options.iItemFilter3};
         InvokeAimBool(s_modifierApply, nullptr, args, s_modifiersPending);
         BridgeError(s_modifierError, "MODIFIERS");
         s.slotsOn=s_options.bUnlockSlots;

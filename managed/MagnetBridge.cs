@@ -17,14 +17,16 @@ namespace Zb2Menu {
         static bool anchorSet;
         public static string Status="";
         public static bool Active {get{return previous || Status.Length>0;}}
-        public static void Reset(){cursor=0;previous=false;owner=null;loader=null;Status="";nextPass=0;slots.Clear();bossSlots.Clear();placed.Clear();requestedBosses.Clear();anchorSet=false;}
-        public static void Apply(PlayerMain player,bool enabled,bool inputAllowed,float radius,int targetMode=0,float frontDistance=2.5f,float bossDistance=8) {
+        public static void Reset(){MagnetFreeze.Clear();cursor=0;previous=false;owner=null;loader=null;Status="";nextPass=0;slots.Clear();bossSlots.Clear();placed.Clear();requestedBosses.Clear();anchorSet=false;}
+        public static void Apply(PlayerMain player,bool enabled,bool inputAllowed,float radius,int targetMode=0,float frontDistance=2.5f,float bossDistance=8,bool freeze=false) {
             if(!enabled || player==null || player.healthFast<=0 || !player.HasLocalControl){Reset();return;}
             var multiplayer=MultiplayerController.instance;
-            if(multiplayer==null || !multiplayer.IsServer()){Status="Magnet requer autoridade do host";cursor=0;previous=false;return;}
+            if(multiplayer==null || !multiplayer.IsServer()){Reset();Status="Magnet requer autoridade do host";return;}
             var current=ZombieLoader.Instance;
             if(current==null || player.cam==null || player.cam.CameraTransform==null)return;
             if(!previous || owner!=player || loader!=current){Reset();owner=player;loader=current;previous=true;}
+            if(!freeze)MagnetFreeze.Clear();
+            else MagnetFreeze.Pulse();
             if(!inputAllowed || !Application.isFocused || GlobalTexting.IsTexting || DeveloperConsole.Opened || Time.timeScale<=0)return;
             if(Time.unscaledTime<nextPass)return;nextPass=Time.unscaledTime+.1f;
             if(float.IsNaN(radius)||float.IsInfinity(radius))radius=50;
@@ -46,11 +48,11 @@ namespace Zb2Menu {
                 var zombie=current.zombies[index];
                 if(zombie==null || zombie.obj==null || zombie.health==null || !zombie.health.isAlive || zombie.health.amount<=0)continue;
                 bool boss=zombie.identity.IsBoss;
-                if((targetMode==1 && boss) || (targetMode==2 && !boss))continue;
+                if((targetMode==1 && boss) || (targetMode==2 && !boss)){MagnetFreeze.Release(zombie);continue;}
                 if(!boss && Vector3.Distance(origin,zombie.obj.transform.position)>radius)continue;
                 // One placement per stationary anchor. AI movement does not trigger
                 // another teleport every tick; only a new anchor does.
-                if(placed.ContainsKey(zombie.identity.id))continue;
+                if(placed.ContainsKey(zombie.identity.id)){if(freeze)MagnetFreeze.Hold(zombie);continue;}
                 var allocation=boss?bossSlots:slots;
                 int slot;if(!allocation.TryGetValue(zombie.identity.id,out slot)){slot=allocation.Count;allocation.Add(zombie.identity.id,slot);}
                 float spacing=boss?4:1.2f;
@@ -60,11 +62,12 @@ namespace Zb2Menu {
                 RaycastHit ground;
                 if(!Physics.Raycast(proposed,Vector3.down,out ground,7,~0,QueryTriggerInteraction.Ignore) || ground.normal.y<.6f)continue;
                 Vector3 target=ground.point+Vector3.up*.15f;
-                if(Vector3.Distance(zombie.obj.transform.position,target)<1.25f){placed[zombie.identity.id]=target;continue;}
+                if(Vector3.Distance(zombie.obj.transform.position,target)<1.25f){placed[zombie.identity.id]=target;if(freeze)MagnetFreeze.Hold(zombie);continue;}
                 float bodyRadius=boss?1.5f:.4f,bodyHeight=boss?4:1.6f;
                 if((!boss && Vector3.Distance(origin,target)>radius) || Physics.CheckCapsule(target+Vector3.up*bodyRadius,target+Vector3.up*bodyHeight,bodyRadius,~0,QueryTriggerInteraction.Ignore))continue;
                 zombie.TeleportTo(target,zombie.obj.transform.rotation);
                 placed[zombie.identity.id]=target;
+                if(freeze)MagnetFreeze.Hold(zombie);
                 ++count;
             }
             Status="";

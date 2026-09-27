@@ -26,8 +26,10 @@ public class PlayerMovement {public UnityEngine.Collider hitbox=new UnityEngine.
 public class PlayerMain {public float MaxHealth {get{return 100;}} public CharacterSkin SpawnedSkin;public bool HasLocalControl;public LobbyPlayer lobbyPlayer=new LobbyPlayer();public PlayerMovement movement=new PlayerMovement();public float healthFast=100;public UnityEngine.Transform transform=new UnityEngine.Transform();}
 public class PlayersController {public List<PlayerMain> players=new List<PlayerMain>();public static PlayersController instance=new PlayersController(); public PlayerMain player=new PlayerMain();public PlayerMain MyPlayer(){return player;}}
 public class MainCamera {public static MainCamera instance=new MainCamera(); public UnityEngine.Camera cam=new UnityEngine.Camera();}
-public class InventoryItem {public enum ID{RifleAmmo,SniperAmmo,ShotgunAmmo,PistolAmmo,Gun}; public ID id=ID.Gun; public DatabaseItem db=new DatabaseItem();public DatabaseItem GetDataBaseItem(){return db;}}
-public class DatabaseItem {public enum SubType{Melee,Misc};public int tier;public string GetName{get{return "Objeto";}}public virtual SubType GetSubType(){return SubType.Misc;}}
+public class InventoryItem {public enum ID{None=-1,RifleAmmo,SniperAmmo,ShotgunAmmo,PistolAmmo,Gun}; public ID id=ID.Gun; public DatabaseItem db=new DatabaseItem();public DatabaseItem GetDataBaseItem(){db.itemID=id;return db;}}
+public static class Pricing {public static bool blocked;public static bool IsBlocked(InventoryItem.ID id){return blocked;}}
+public class ItemsBase {public static ItemsBase instance;public static float ItemCount=128;public DatabaseItem GetItem(InventoryItem.ID id){return null;}}
+public class DatabaseItem {public InventoryItem.ID itemID;public bool hidden,reserved;public enum SubType{Melee,Misc};public int tier;public string GetName{get{return "Objeto";}}public virtual SubType GetSubType(){return SubType.Misc;}}
 public class DatabaseGun:DatabaseItem{}
 public class DroppedLoot {public UnityEngine.Renderer[] renderers=new UnityEngine.Renderer[0];public T[] GetComponentsInChildren<T>(bool include){return renderers as T[];}public InventoryItem item=new InventoryItem();public UnityEngine.Transform transform=new UnityEngine.Transform();}
 public struct Coord {public int x,y;}
@@ -73,6 +75,7 @@ class WorldTests {
             Check(Collect(15|1024,11,256,20)==1,"both radii independent");
             Check(Collect(15|1024,150,256,150)==5,"both radii expanded");
             Check(WorldEspBridge.LastError()=="","no adapter error");
+            Pricing.blocked=true;Check(Collect(15)==0,"blocked live loot excluded including cached entries");Pricing.blocked=false;
             Check(WorldEspBridge.Collect(buffer,256,15,150,150,0,0,0,0,-1)==0,"individual item masks hide all items");
             Check(WorldEspBridge.Collect(buffer,256,1024,150,150,-1,-1,-1,-1,0)==0,"individual point mask hides points");
             MapHash.instance.cell.loot.Add(Loot(0,15,new DatabaseGun(),(InventoryItem.ID)115));

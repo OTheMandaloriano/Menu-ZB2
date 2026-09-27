@@ -89,7 +89,7 @@ namespace Zb2Menu {
                 RefreshItems(map);
             }
             foreach(var entry in lootCache)
-                if(entry.Loot!=null) Add(entry.Kind,entry.Name,LootCenter(entry),true);
+                if(entry.Loot!=null && entry.Loot.item!=null && ItemEligibility.Allowed(entry.Loot.item.GetDataBaseItem())) Add(entry.Kind,entry.Name,LootCenter(entry),true);
         }
         static Vector3 LootCenter(LootEntry entry) {
             Bounds bounds=new Bounds();bool found=false;
@@ -110,7 +110,7 @@ namespace Zb2Menu {
                     float distance=Vector3.Distance(origin,loot.transform.position);
                     if(!(distance<=radius)) continue;
                     var db=loot.item.GetDataBaseItem();
-                    if(db==null) continue;
+                    if(!ItemEligibility.Allowed(db)) continue;
                     var id=loot.item.id;
                     int index=(int)id;
                     if(index<0 || index>=128 || ((uint)itemFilters[index/32] & (1u<<(index%32)))==0)continue;

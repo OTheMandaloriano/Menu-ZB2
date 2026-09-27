@@ -2,11 +2,12 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Zb2Menu;
+using System.Runtime.CompilerServices;
 public class MultiplayerController {public static MultiplayerController instance=new MultiplayerController();public bool server=true;public bool IsServer(){return server;}}
 public struct ZombieIdentity {public int id;public bool IsBoss;}
 public class ZombieHealth {public bool isAlive=true;public float amount=100;}
-public class ZombieObject {public Transform transform=new Transform();}
-public class Zombie {public ZombieIdentity identity;public ZombieHealth health=new ZombieHealth();public ZombieObject obj=new ZombieObject();public int calls;public void TeleportTo(Vector3 p,Quaternion r){obj.transform.position=p;calls++;}}
+public class ZombieObject {public Rigidbody body=new Rigidbody();public Animator animator=new Animator();public Transform transform=new Transform();}
+public class Zombie {public int updates;[MethodImpl(MethodImplOptions.NoInlining)]public void UpdateStateMachine(int index){updates++;}[MethodImpl(MethodImplOptions.NoInlining)]public void UpdatePhysicsAndAnimation(){updates++;}[MethodImpl(MethodImplOptions.NoInlining)]public void UpdateBossBehaviour(){updates++;}public ZombieIdentity identity;public ZombieHealth health=new ZombieHealth();public ZombieObject obj=new ZombieObject();public int calls;public void TeleportTo(Vector3 p,Quaternion r){obj.transform.position=p;calls++;}}
 public class ZombieLoader {public static ZombieLoader Instance=new ZombieLoader();public List<Zombie> zombies=new List<Zombie>();public List<Zombie> unloadedZombies=new List<Zombie>();public List<Zombie> zombieProps=new List<Zombie>();public void ForceLoadRealZombie(int id){var z=unloadedZombies.Find(v=>v.identity.id==id);if(z!=null){unloadedZombies.Remove(z);zombies.Add(z);}}}
 class MagnetTests {
     static int checks;
@@ -30,6 +31,8 @@ class MagnetTests {
         Time.unscaledTime=7;MagnetBridge.Apply(p,true,true,10,2);Check(boss.calls==1 && normal.calls==0,"boss only loads distant existing boss and ignores source radius");
         Check(boss.obj.transform.position.z>=p.transform.position.z+8,"boss landing is separated from normal anchor");
         MagnetBridge.Reset();boss.obj.transform.position=new Vector3(0,0,900);normal.obj.transform.position=new Vector3(0,0,15);Time.unscaledTime=8;MagnetBridge.Apply(p,true,true,50,1);Check(boss.calls==1 && normal.calls==1,"zombies only excludes boss");
+        var harmony=new HarmonyLib.Harmony("magnet.freeze.tests");MagnetFreeze.Install(harmony);MagnetFreeze.Hold(normal);normal.UpdateStateMachine(0);normal.UpdatePhysicsAndAnimation();normal.UpdateBossBehaviour();Check(normal.updates==0 && normal.obj.body.isKinematic && normal.obj.animator.speed==0,"freeze suspends updates physics and animation");
+        MagnetFreeze.Clear();normal.UpdateStateMachine(0);Check(normal.updates==1 && !normal.obj.body.isKinematic && normal.obj.animator.speed==1,"freeze restores exact body and animation state");harmony.UnpatchAll("magnet.freeze.tests");
         Console.WriteLine(checks+" magnet checks passed");
     }
 }

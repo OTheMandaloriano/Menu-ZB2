@@ -17,7 +17,7 @@ namespace Zb2Menu {
             var messages=new List<string>();
             if(SlotsBridge.Status.StartsWith("Para restaurar:"))messages.Add(SlotsBridge.Status);
             if(NoClipBridge.Status.Length>0)messages.Add(NoClipBridge.Status);
-            if(MagnetBridge.Status.Length>0)messages.Add(MagnetBridge.Status);
+            if(MagnetBridge.Status.Length>0)messages.Add(MagnetBridge.Status);if(LootMagnetBridge.Status.Length>0)messages.Add(LootMagnetBridge.Status);
             return string.Join(" | ",messages.ToArray());
         }
         static bool Exists(object target) {
@@ -60,12 +60,13 @@ namespace Zb2Menu {
             return values.Count != 0 || SlotsBridge.Pending || NoClipBridge.Active || MagnetBridge.Active;
         }
         // Called only by the native callback inside ZBMain.Update, including all-off frames.
-        public static bool Apply(PlayerMain player, int flags, float rapid, float speed, float jump, float roll, float knife, float noclip,float magnetRadius,int magnetTargets,float magnetFront,float magnetBoss) {
+        public static bool Apply(PlayerMain player, int flags, float rapid, float speed, float jump, float roll, float knife, float noclip,float magnetRadius,int magnetTargets,float magnetFront,float magnetBoss,float lootRadius,int lootCategory,int filter0,int filter1,int filter2,int filter3) {
             try {
                 if (!ReferenceEquals(previous, player)) { values.RestoreAll(); previous=player; }
                 values.Begin();
                 bool alive=player!=null && player.HasLocalControl && player.healthFast>0;
-                MagnetBridge.Apply(alive?player:null,alive && (flags&8192)!=0,(flags&4096)==0,magnetRadius,magnetTargets,magnetFront,magnetBoss);
+                MagnetBridge.Apply(alive?player:null,alive && (flags&8192)!=0,(flags&4096)==0,magnetRadius,magnetTargets,magnetFront,magnetBoss,(flags&16384)!=0);
+                LootMagnetBridge.Apply(alive?player:null,alive && (flags&32768)!=0,(flags&4096)==0,lootRadius,lootCategory,filter0,filter1,filter2,filter3);
                 SlotsBridge.Apply(alive?player:null,alive && (flags&1024)!=0);
                 float normalWalk=alive && player.movement!=null ? values.ReadOriginal(player.movement,"walkSpeed",()=>player.movement.walkSpeed) : 0;
                 NoClipBridge.Apply(alive?player:null,alive && (flags&2048)!=0,noclip,(flags&4096)==0,normalWalk);

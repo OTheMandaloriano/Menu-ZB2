@@ -48,6 +48,7 @@ namespace Zb2Menu {
                     candidate.Patch(update, postfix: new HarmonyMethod(typeof(AimBridge), "AfterGameUpdate"));
                     RangeBridge.Install(candidate);
                     NoClipBridge.Install(candidate);
+                    MagnetFreeze.Install(candidate);
                     harmony = candidate;
                     return true;
                 } catch (Exception ex) {
