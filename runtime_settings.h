@@ -14,6 +14,8 @@ struct Values {
     decltype(Config::iPoiFilter) iPoiFilter = {};
     decltype(Config::bPoiGraves) bPoiGraves = {};
     decltype(Config::bPoiPlayers) bPoiPlayers = {};
+    decltype(Config::bEnemyMagnet) bEnemyMagnet = {};
+    decltype(Config::fMagnetRadius) fMagnetRadius = {};
     float viewportWidth=1920, viewportHeight=1080;
     decltype(Config::b360Mode) b360Mode = {};
     decltype(Config::bAimbot) bAimbot = {};
@@ -85,6 +87,8 @@ inline Values Capture(float width,float height) {
     values.iPoiFilter=Config::iPoiFilter;
     values.bPoiGraves=Config::bPoiGraves;
     values.bPoiPlayers=Config::bPoiPlayers;
+    values.bEnemyMagnet=Config::bEnemyMagnet;
+    values.fMagnetRadius=Config::fMagnetRadius;
     values.viewportWidth=width; values.viewportHeight=height;
     values.b360Mode=Config::b360Mode;
     values.bAimbot=Config::bAimbot;

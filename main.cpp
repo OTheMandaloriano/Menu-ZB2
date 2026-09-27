@@ -118,6 +118,7 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
 
     { static int s_clipTick = 0;
       if (!Config::bMenuOpen && g_bInit && (++s_clipTick % 120 == 0)) ApplyGameClip(); }
+    GUI::ProcessFeatureHotkeys();
     GUI::Render();         // janela do menu (4 abas)
     Mono::SetViewport(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y);
     Mono::Tick(); // bootstrap only; never invokes Unity

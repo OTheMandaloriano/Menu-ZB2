@@ -58,6 +58,7 @@ namespace Mono {
     int GetDistantEsp(DistantMarker* output,int capacity);
 
     struct State {
+        bool featureKeysAllowed = false;
         char modifierStatus[192] = {};
         bool  ready = false;
         float dayTime = 0.0f;

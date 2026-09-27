@@ -1,3 +1,4 @@
+#include "hotkey_toggle.h"
 #include "item_catalog.h"
 #include "esp_options.h"
 #include "esp_layout.h"
@@ -212,6 +213,7 @@ namespace Config {
     float fThirdDist = 4.0f;
     bool  bAntiAfk = false;
     bool  bNoClip = false;
+    int iNoClipKey = VK_F6;
     float fNoClipSpeed = 1.3f;
     bool  bNoFall = false;
 }
@@ -586,12 +588,14 @@ namespace GUI {
 
     // Botao de hotkey: mostra a tecla atual; clicando abre o modal de captura.
     static void HotkeyButton(const char* label, int* vk, const char* tip) {
+        static bool prev[256] = {};
         ImGui::PushID(label);
         ImGui::Text("%s", label);
         ImGui::SameLine(230);
         char nm[64] = { 0 };
         KeyName(*vk, nm, sizeof(nm));
         if (ImGui::Button(nm, ImVec2(150, 0))) {
+            for(int v=1;v<256;++v)prev[v]=(GetAsyncKeyState(v)&0x8000)!=0;
             s_capKey = vk;
             ImGui::OpenPopup("hotkey_modal");
         }
@@ -600,7 +604,6 @@ namespace GUI {
             ImGui::Text("Pressione a tecla para: %s", label);
             ImGui::TextDisabled("ESC cancela. Mouse tambem vale.");
             // Captura a primeira tecla RECEM-pressionada (borda de subida).
-            static bool prev[256] = { false };
             bool cur[256] = { false };
             for (int v = 1; v < 256; ++v)
                 cur[v] = (GetAsyncKeyState(v) & 0x8000) != 0;
@@ -686,7 +689,7 @@ namespace GUI {
         JI(iItemMagnetType); JF(fItemMagnetRadius); JB(bAutoCollect);
         JF(fSaveX); JF(fSaveY); JF(fSaveZ);
         JF(fDayHour); JF(fDaySpeed); JI(iSpawnCount); JI(iSpawnBoss);
-        JF(fCamFov); JB(bThirdPerson); JF(fThirdDist); JB(bAntiAfk); JB(bNoClip);
+        JF(fCamFov); JB(bThirdPerson); JF(fThirdDist); JB(bAntiAfk); JB(bNoClip); JI(iNoClipKey);
         JF(fNoClipSpeed); JB(bNoFall); JI(iCfgVer);
 #undef JB
 #undef JI
@@ -773,7 +776,7 @@ namespace GUI {
         LI(iItemMagnetType); LF(fItemMagnetRadius); LB(bAutoCollect);
         LF(fSaveX); LF(fSaveY); LF(fSaveZ);
         LF(fDayHour); LF(fDaySpeed); LI(iSpawnCount); LI(iSpawnBoss);
-        LF(fCamFov); LB(bThirdPerson); LF(fThirdDist); LB(bAntiAfk); LB(bNoClip);
+        LF(fCamFov); LB(bThirdPerson); LF(fThirdDist); LB(bAntiAfk); LB(bNoClip); LI(iNoClipKey);
         LF(fNoClipSpeed); LB(bNoFall);
         LF(fAlongN); LF(fAlongD); LF(fAlongH); LF(fAlongP); LF(fGapN); LF(fGapD); LF(fGapH); LF(fGapP);
         LI(iOrderN); LI(iOrderD); LI(iOrderH); LI(iOrderP); LF(fBarLength); LF(fBarThickness);
@@ -835,6 +838,16 @@ namespace GUI {
 
     #include "esp_filter_ui.inl"
     #include "distant_esp_draw.inl"
+    void ProcessFeatureHotkeys() {
+        static Hotkeys::Toggle noclip,magnet;
+        DWORD process=0;GetWindowThreadProcessId(GetForegroundWindow(),&process);
+        const bool allowed=process==GetCurrentProcessId() && !Config::bMenuOpen && !s_capKey && Mono::Get().inMap && Mono::Get().featureKeysAllowed;
+        auto down=[](int key){return key>0 && key<256 && (GetAsyncKeyState(key)&0x8000)!=0;};
+        const bool noConflict=Config::iNoClipKey!=Config::iMenuKey && Config::iNoClipKey!=VK_DELETE;
+        if(noclip.Pressed(Config::iNoClipKey,down(Config::iNoClipKey),allowed && noConflict))Config::bNoClip=!Config::bNoClip;
+        const bool magnetConflict=Config::iMagnetKey==Config::iNoClipKey || Config::iMagnetKey==Config::iMenuKey || Config::iMagnetKey==VK_DELETE;
+        if(magnet.Pressed(Config::iMagnetKey,down(Config::iMagnetKey),allowed && !magnetConflict))Config::bEnemyMagnet=!Config::bEnemyMagnet;
+    }
     void RenderOverlay() {
         if (!g_bInit) return;
         ImDrawList* dl = ImGui::GetBackgroundDrawList();
@@ -1310,14 +1323,16 @@ namespace GUI {
                 ImGui::Checkbox("Desbloquear Slots", &Config::bUnlockSlots); Tip("Desbloqueia somente a capacidade existente. Para desativar, esvazie os slots/area extras; nao apaga nem move itens automaticamente.");
                 if(Mono::Get().modifierStatus[0]) ImGui::TextWrapped("%s",Mono::Get().modifierStatus);
                 ImGui::Checkbox("NoClip (WASD / Space / Ctrl)", &Config::bNoClip);
+                HotkeyButton("Tecla NoClip", &Config::iNoClipKey, "Alterna ligado/desligado com o menu fechado. Padrao F6.");
                 ImGui::SliderFloat("NoClip velocidade", &Config::fNoClipSpeed, .5f, 5.0f, "%.1fx");
                 ImGui::Checkbox("Desbloquear Loadout", &Config::bUnlockLoadout); Tip("Kits do loadout livres (a loja compra com Money: use Infinite Money).");
                 ImGui::Separator();
                 // REMOVIDO 17/09: Spawn de Itens (nao util; IDs ficam no historico p/ fase futura).
+                ImGui::Checkbox("Magnet de zumbis (solo/host)", &Config::bEnemyMagnet);
+                HotkeyButton("Tecla Magnet", &Config::iMagnetKey, "Alterna o Magnet. Reune zumbis carregados dentro do raio, em lotes. Padrao H.");
+                ImGui::SliderFloat("Raio Magnet", &Config::fMagnetRadius, 10, 300, "%.0fm");
                 ImGui::TextDisabled("Pendente: controles sem implementacao nesta versao.");
                 ImGui::BeginDisabled();
-                ImGui::Checkbox("Enemy Magnet (H)", &Config::bEnemyMagnet);
-                ImGui::SliderFloat("Raio Magnet", &Config::fMagnetRadius, 10, 300, "%.0fm");
                 ImGui::Checkbox("Freeze Attracted", &Config::bMagnetFreeze);
                 ImGui::Checkbox("Kill On Spawn", &Config::bKillOnSpawn);
                 ImGui::Separator();
@@ -1360,6 +1375,7 @@ namespace GUI {
                 ImGui::Text("HOTKEYS (clique e pressione a tecla)");
                 HotkeyButton("Menu", &Config::iMenuKey, "Abre/fecha o menu (DELETE sempre funciona).");
                 HotkeyButton("Aim Key", &Config::iAimKey, "Tecla do aimbot.");
+                HotkeyButton("NoClip", &Config::iNoClipKey, "Alterna NoClip, padrao F6.");
                 HotkeyButton("Enemy Magnet", &Config::iMagnetKey, "Ativa/posiciona o magnet (H).");
                 HotkeyButton("Item Magnet", &Config::iItemMagnetKey, "Ativa/posiciona o item magnet (J).");
                 ImGui::Separator();

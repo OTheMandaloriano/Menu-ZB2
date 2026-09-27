@@ -6,19 +6,20 @@ using Zb2Menu;
 using UnityEngine;
 namespace UnityEngine {
     public class Object { }
-    public class Transform {public Vector3 position;public Vector3 TransformDirection(Vector3 p){return p;}public bool IsChildOf(Transform t){return ReferenceEquals(this,t);}}
-    public struct Vector3 {public float x,y,z;public Vector3(float a,float b,float c){x=a;y=b;z=c;}public float sqrMagnitude{get{return x*x+y*y+z*z;}}public void Normalize(){float n=(float)Math.Sqrt(sqrMagnitude);x/=n;y/=n;z/=n;}public static Vector3 operator *(Vector3 v,float n){return new Vector3(v.x*n,v.y*n,v.z*n);}public static Vector3 operator +(Vector3 a,Vector3 b){return new Vector3(a.x+b.x,a.y+b.y,a.z+b.z);}}
+    public class Transform {public Vector3 position;public Quaternion rotation;public Vector3 forward=new Vector3(0,0,1);public Vector3 TransformDirection(Vector3 p){return p;}public bool IsChildOf(Transform t){return ReferenceEquals(this,t);}}
+    public struct Vector3 {public float x,y,z;public static Vector3 up{get{return new Vector3(0,1,0);}}public static Vector3 down{get{return new Vector3(0,-1,0);}}public static float Distance(Vector3 a,Vector3 b){float x=a.x-b.x,y=a.y-b.y,z=a.z-b.z;return (float)Math.Sqrt(x*x+y*y+z*z);}public Vector3(float a,float b,float c){x=a;y=b;z=c;}public float sqrMagnitude{get{return x*x+y*y+z*z;}}public void Normalize(){float n=(float)Math.Sqrt(sqrMagnitude);x/=n;y/=n;z/=n;}public static Vector3 operator *(Vector3 v,float n){return new Vector3(v.x*n,v.y*n,v.z*n);}public static Vector3 operator +(Vector3 a,Vector3 b){return new Vector3(a.x+b.x,a.y+b.y,a.z+b.z);}}
     public class Rigidbody {public bool isKinematic,detectCollisions=true;}
     public struct Bounds {public Vector3 center,extents;}
     public class Collider {public Transform transform=new Transform();public Bounds bounds;}
     public struct Quaternion {public static Quaternion identity {get{return new Quaternion();}}}
     public enum QueryTriggerInteraction {Ignore}
-    public static class Physics {public static bool blocked;public static int OverlapBoxNonAlloc(Vector3 a,Vector3 b,Collider[] c,Quaternion d,int e,QueryTriggerInteraction f){if(!blocked)return 0;c[0]=new Collider();return 1;}}
+    public struct RaycastHit {public Vector3 point,normal;}
+    public static class Physics {public static bool blocked;public static bool ground=true;public static bool Raycast(Vector3 p,Vector3 d,out RaycastHit hit,float range,int mask,QueryTriggerInteraction q){hit=new RaycastHit{point=new Vector3(p.x,0,p.z),normal=new Vector3(0,1,0)};return ground;}public static bool CheckCapsule(Vector3 a,Vector3 b,float radius,int mask,QueryTriggerInteraction q){return blocked;}public static int OverlapBoxNonAlloc(Vector3 a,Vector3 b,Collider[] c,Quaternion d,int e,QueryTriggerInteraction f){if(!blocked)return 0;c[0]=new Collider();return 1;}}
     public static class Time {public static float unscaledTime,deltaTime=.1f,timeScale=1;}
     public static class Application {public static bool isFocused=true;}
     public enum KeyCode {W,A,S,D,Space,LeftControl,LeftShift}
     public static class Input {public static HashSet<KeyCode> keys=new HashSet<KeyCode>();public static bool GetKey(KeyCode k){return keys.Contains(k);}}
-    public static class Mathf {public static float Clamp(float x,float a,float b){return Math.Max(a,Math.Min(b,x));}}
+    public static class Mathf {public const float PI=(float)Math.PI;public static float Sin(float x){return (float)Math.Sin(x);}public static float Cos(float x){return (float)Math.Cos(x);}public static float Clamp(float x,float a,float b){return Math.Max(a,Math.Min(b,x));}}
 }
 public struct IntVec2 {public int x,y;public IntVec2(int a,int b){x=a;y=b;}}
 public class DatabaseItem {public IntVec2 Size(bool rotated){return new IntVec2(1,1);}}
@@ -28,7 +29,7 @@ public class PlayerEquippedItems {public List<InventoryItem> misc=new List<Inven
 public class PlayerInventory {public ItemContainer storage=new ItemContainer();public PlayerEquippedItems equippedItems=new PlayerEquippedItems();public bool TotalStorageUnlocked{get;private set;}public bool TotalMiscSlotsUnlocked{get;private set;}public int updates;public void OnEquipmentChanged(){++updates;}}
 public class PlayerMovement {public Collider hitbox=new Collider();}
 public class PlayerCamera {public Transform CameraTransform=new Transform();}
-public class PlayerMain {public PlayerInventory inventory=new PlayerInventory();public NoClip noClip=new NoClip();public PlayerMovement movement=new PlayerMovement();public Transform transform=new Transform();public PlayerCamera cam=new PlayerCamera();public float healthFast=100;}
+public class PlayerMain {public bool HasLocalControl=true;public PlayerInventory inventory=new PlayerInventory();public NoClip noClip=new NoClip();public PlayerMovement movement=new PlayerMovement();public Transform transform=new Transform();public PlayerCamera cam=new PlayerCamera();public float healthFast=100;}
 public static class GlobalTexting {public static bool IsTexting;}
 public static class DeveloperConsole {public static bool Opened;}
 public class NoClip {public Rigidbody targetBody=new Rigidbody();public bool enabled;public float speed=10;public Transform transform=new Transform();public int originalCalls;[MethodImpl(MethodImplOptions.NoInlining)]public void Update(){++originalCalls;}}

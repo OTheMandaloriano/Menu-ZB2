@@ -214,6 +214,7 @@ namespace Config {
     extern float fThirdDist;        // 1-10m
     extern bool  bAntiAfk;
     extern bool  bNoClip;
+    extern int iNoClipKey;
     extern float fNoClipSpeed;      // 1.3x padrao; Space sobe, Ctrl desce
     extern bool  bNoFall;
 }

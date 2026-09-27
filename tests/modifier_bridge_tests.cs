@@ -2,16 +2,21 @@ using System;
 using System.Collections.Generic;
 using Zb2Menu;
 namespace Zb2Menu {
+    public static class MagnetBridge {public static string Status="";public static bool Active=false;public static void Reset(){}public static void Apply(PlayerMain p,bool e,bool i,float r){}}
     public static class SlotsBridge {public static string Status="";public static bool Pending=false;public static bool Restore(){return true;}public static void Apply(PlayerMain p,bool enabled){}}
     public static class NoClipBridge {public static string Status="";public static bool Active=false;public static void Restore(){}public static void Apply(PlayerMain p,bool e,float v,bool input){}}
 }
 namespace UnityEngine {
+    public static class Application {public static bool isFocused=true;}
+    public static class Time {public static float timeScale=1;}
     public class Object { public bool Destroyed; public static bool operator ==(Object a,Object b) { return ReferenceEquals(a,b) || (ReferenceEquals(b,null) && !ReferenceEquals(a,null) && a.Destroyed); } public static bool operator !=(Object a,Object b){return !(a==b);} public override bool Equals(object v){return ReferenceEquals(this,v);} public override int GetHashCode(){return base.GetHashCode();} }
     public struct Vector2 { public float x,y; public Vector2(float a,float b){x=a;y=b;} public static Vector2 zero {get{return new Vector2();}} }
     public struct Vector3 { public float x,y,z; public static Vector3 operator *(Vector3 v,float m){return new Vector3{x=v.x*m,y=v.y*m,z=v.z*m};} }
     public class Transform : Object { public Vector3 localScale {get;set;} }
 }
 public class PlayerHUD : UnityEngine.Object { public static PlayerHUD instance=new PlayerHUD(); public UnityEngine.Transform innerCrossHairTransform=new UnityEngine.Transform {localScale=new UnityEngine.Vector3{x=1,y=1,z=1}}; }
+public static class GlobalTexting {public static bool IsTexting;}
+public static class DeveloperConsole {public static bool Opened;}
 public class DatabaseGun : UnityEngine.Object { public float rof=8,spread=4,recoilRandomness=.5f; public UnityEngine.Vector2 recoil=new UnityEngine.Vector2(2,3); public bool fullAuto; public int burstCount=3; }
 public class InventoryItem { public DatabaseGun Gun=new DatabaseGun(); public object GetDataBaseItem(){return Gun;} }
 public class PlayerEquippedItems { public List<InventoryItem> weapons=new List<InventoryItem>(); }
@@ -24,7 +29,7 @@ public class MeleeAttackBase : UnityEngine.Object { public static MeleeAttackBas
 class Tests {
     static int checks;
     static void Check(bool ok,string name){if(!ok)throw new Exception(name+" "+ModifierBridge.LastError());++checks;}
-    static void Apply(PlayerMain p,int flags,float rapid=2,float speed=2,float jump=2,float roll=2,float knife=2){ModifierBridge.Apply(p,flags,rapid,speed,jump,roll,knife,1);Check(ModifierBridge.LastError()=="","no adapter failure");}
+    static void Apply(PlayerMain p,int flags,float rapid=2,float speed=2,float jump=2,float roll=2,float knife=2){ModifierBridge.Apply(p,flags,rapid,speed,jump,roll,knife,1,50);Check(ModifierBridge.LastError()=="","no adapter failure");}
     static void Main(){
         var p=new PlayerMain(); var item=new InventoryItem(); p.inventory.equippedItems.weapons.Add(item); var g=item.Gun;
         Apply(p,16,5); Check(g.rof==40,"rapid 5x");

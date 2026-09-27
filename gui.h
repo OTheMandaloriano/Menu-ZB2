@@ -14,6 +14,7 @@
 namespace GUI {
     void Initialize(HWND hWindow, ID3D11Device* pDevice, ID3D11DeviceContext* pContext);
     void Render();
+    void ProcessFeatureHotkeys();
     void RenderOverlay();   // ESP/watermark/debug (fora da janela do menu)
     void Shutdown();
 

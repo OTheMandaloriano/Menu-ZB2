@@ -6,6 +6,7 @@ static MonoMethod* s_bridgeStart = nullptr;
 static MonoMethod* s_bridgeVisible = nullptr;
 static MonoMethod* s_modifierApply = nullptr;
 static MonoMethod* s_modifierStatus = nullptr;
+static MonoMethod* s_featureKeys = nullptr;
 static MonoMethod* s_modifierReset = nullptr;
 static MonoMethod* s_modifierError = nullptr;
 static MonoMethod* s_worldCollect = nullptr;
@@ -67,8 +68,9 @@ static bool LoadAimBridge() {
         s_rangeError = pMethodFrom(ranges, "LastError", 0);
         s_rangeStats = pMethodFrom(ranges, "Statistics", 0);
         if (!s_rangeConfigure || !s_rangeCollect) return false;
-        s_modifierApply = pMethodFrom(modifiers, "Apply", 8);
+        s_modifierApply = pMethodFrom(modifiers, "Apply", 9);
         s_modifierStatus = pMethodFrom(modifiers, "Status", 0);
+        s_featureKeys = pMethodFrom(modifiers, "CanUseKeys", 0);
         s_modifierReset = pMethodFrom(modifiers, "Reset", 0);
         s_modifierError = pMethodFrom(modifiers, "LastError", 0);
         s_worldCollect = pMethodFrom(world, "Collect", 10);

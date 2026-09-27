@@ -2,6 +2,11 @@
 
 Formato baseado em Keep a Changelog. O projeto ainda não tem release estável numerada.
 
+## [Não lançado]
+
+- Atalhos configuráveis para NoClip e Magnet.
+- Magnet em lotes, restrito à autoridade solo/host e destinos livres.
+
 ## [0.2.0] - 2026-09-26
 
 Prévia privada, validação em partida ainda pendente.
