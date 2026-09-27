@@ -27,7 +27,7 @@ public class InventoryItem {public bool empty;public IntVec2 pos;public bool rot
 public class ItemContainer {public IntVec2 TotalSize=new IntVec2(6,8),UsableSize=new IntVec2(6,4);public List<InventoryItem> items=new List<InventoryItem>();public void SetUsableSize(int x,int y){UsableSize=new IntVec2(x,y);}}
 public class PlayerEquippedItems {public List<InventoryItem> misc=new List<InventoryItem>{new InventoryItem{empty=true},new InventoryItem{empty=true},new InventoryItem{empty=true},new InventoryItem{empty=true}};public int UnlockedMiscSlotsCount=2;public int MiscCount{get{return misc.Count;}}public InventoryItem GetMisc(int i){return misc[i];}public void SetUnlockedMiscSlotsCount(int n){if(n>misc.Count)throw new Exception("out of bounds");UnlockedMiscSlotsCount=n;}}
 public class PlayerInventory {public ItemContainer storage=new ItemContainer();public PlayerEquippedItems equippedItems=new PlayerEquippedItems();public bool TotalStorageUnlocked{get;private set;}public bool TotalMiscSlotsUnlocked{get;private set;}public int updates;public void OnEquipmentChanged(){++updates;}}
-public class PlayerMovement {public Collider hitbox=new Collider();}
+public class PlayerMovement {public float walkSpeed=3.5f;public Collider hitbox=new Collider();}
 public class PlayerCamera {public Transform CameraTransform=new Transform();}
 public class PlayerMain {public bool HasLocalControl=true;public PlayerInventory inventory=new PlayerInventory();public NoClip noClip=new NoClip();public PlayerMovement movement=new PlayerMovement();public Transform transform=new Transform();public PlayerCamera cam=new PlayerCamera();public float healthFast=100;}
 public static class GlobalTexting {public static bool IsTexting;}
@@ -47,13 +47,15 @@ class FeatureTests {
         SlotsBridge.Apply(p,true);SlotsBridge.Apply(p,false);Check(!inv.TotalStorageUnlocked && !inv.TotalMiscSlotsUnlocked,"repeat toggle restores flags");
         var h=new Harmony("features.tests");NoClipBridge.Install(h);
         NoClipBridge.Apply(p,true,2,true);Check(p.noClip.enabled && p.noClip.targetBody.isKinematic && !p.noClip.targetBody.detectCollisions,"noclip physics enabled");
-        Input.keys.Add(KeyCode.W);p.noClip.Update();Check(p.noClip.originalCalls==0 && p.noClip.transform.position.z==2,"owned update moves once");
-        NoClipBridge.Apply(p,true,1,true);p.noClip.Update();Check(p.noClip.transform.position.z==3 && p.noClip.speed==10,"speed reduction uses original");
-        NoClipBridge.Apply(p,true,1,false);p.noClip.Update();Check(p.noClip.transform.position.z==3,"menu blocks movement");
-        NoClipBridge.Apply(p,true,1,true);GlobalTexting.IsTexting=true;p.noClip.Update();Check(p.noClip.transform.position.z==3,"chat blocks movement");GlobalTexting.IsTexting=false;
+        Input.keys.Add(KeyCode.W);p.noClip.Update();Check(p.noClip.originalCalls==0 && Math.Abs(p.noClip.transform.position.z-.7f)<.001f,"owned update moves once");
+        NoClipBridge.Apply(p,true,1,true);p.noClip.Update();Check(Math.Abs(p.noClip.transform.position.z-1.05f)<.001f && p.noClip.speed==3.5f,"speed reduction uses original");
+        NoClipBridge.Apply(p,true,1,false);p.noClip.Update();Check(Math.Abs(p.noClip.transform.position.z-1.05f)<.001f,"menu blocks movement");
+        NoClipBridge.Apply(p,true,1,true);GlobalTexting.IsTexting=true;p.noClip.Update();Check(Math.Abs(p.noClip.transform.position.z-1.05f)<.001f,"chat blocks movement");GlobalTexting.IsTexting=false;
+        Input.keys.Add(KeyCode.LeftShift);NoClipBridge.Apply(p,true,1,true);float before=p.noClip.transform.position.z;p.noClip.Update();Check(Math.Abs(p.noClip.transform.position.z-before-.35f)<.001f,"shift has no hidden 4x boost");Input.keys.Remove(KeyCode.LeftShift);p.noClip.transform.position=new Vector3(0,0,1.05f);NoClipBridge.Apply(p,true,1,true);Input.keys.Clear();p.noClip.Update();
+        Check(NoClipBridge.Status=="","no persistent active label");
         NoClipBridge.Apply(p,false,1,true);Check(!p.noClip.enabled && !p.noClip.targetBody.isKinematic && p.noClip.targetBody.detectCollisions,"physics restored");
         var other=new NoClip();other.Update();Check(other.originalCalls==1,"unowned noclip untouched");
-        NoClipBridge.Apply(p,true,2,true);Physics.blocked=true;p.noClip.transform.position=new Vector3(99,99,99);NoClipBridge.Restore();Check(p.noClip.transform.position.z==3,"exit inside obstacle returns to safe position");Physics.blocked=false;
+        NoClipBridge.Apply(p,true,2,true);Physics.blocked=true;p.noClip.transform.position=new Vector3(99,99,99);NoClipBridge.Restore();Check(Math.Abs(p.noClip.transform.position.z-1.05f)<.001f,"exit inside obstacle returns to safe position");Physics.blocked=false;
         NoClipBridge.Apply(p,true,1,true);Time.unscaledTime=1;p.noClip.Update();Check(!p.noClip.enabled,"stale callback restores physics");
         h.UnpatchAll("features.tests");Console.WriteLine(checks+" player feature checks passed");
     }

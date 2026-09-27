@@ -17,7 +17,7 @@ namespace Zb2Menu {
         public static void Install(Harmony harmony) {
             harmony.Patch(AccessTools.Method(typeof(NoClip),"Update"),prefix:new HarmonyMethod(typeof(NoClipBridge),"BeforeUpdate"));
         }
-        public static void Apply(PlayerMain owner,bool enabled,float multiplier,bool allowInput) {
+        public static void Apply(PlayerMain owner,bool enabled,float multiplier,bool allowInput,float normalWalk=0) {
             if(active!=null && (owner!=player || !enabled))Restore();
             if(!enabled || owner==null || owner.noClip==null || owner.noClip.targetBody==null)return;
             if(active==null) {
@@ -27,9 +27,11 @@ namespace Zb2Menu {
                 wasKinematic=active.targetBody.isKinematic;detected=active.targetBody.detectCollisions;
                 originalSpeed=active.speed;
             }
-            active.speed=originalSpeed*Mathf.Clamp(float.IsNaN(multiplier)?1:multiplier,.5f,5);
+            if(!(normalWalk>0) && owner.movement!=null)normalWalk=owner.movement.walkSpeed;
+            if(!(normalWalk>0) || float.IsInfinity(normalWalk)){Restore();Status="Velocidade normal indisponivel";return;}
+            active.speed=normalWalk*Mathf.Clamp(float.IsNaN(multiplier)||float.IsInfinity(multiplier)?1:multiplier,.5f,5);
             active.enabled=true;active.targetBody.isKinematic=true;active.targetBody.detectCollisions=false;
-            inputAllowed=allowInput;published=Time.unscaledTime;Status="NoClip ativo";
+            inputAllowed=allowInput;published=Time.unscaledTime;Status="";
         }
         public static void Restore() {
             if(active!=null) {
@@ -48,7 +50,7 @@ namespace Zb2Menu {
                 (Input.GetKey(KeyCode.W)?1:0)-(Input.GetKey(KeyCode.S)?1:0));
             if(direction.sqrMagnitude>1)direction.Normalize();
             var basis=player.cam!=null ? player.cam.CameraTransform : active.transform;
-            active.transform.position+=basis.TransformDirection(direction)*active.speed*Time.deltaTime*(Input.GetKey(KeyCode.LeftShift)?4:1);
+            active.transform.position+=basis.TransformDirection(direction)*active.speed*Time.deltaTime;
             if(!Blocked(player))safePosition=active.transform.position;
             return false;
         }

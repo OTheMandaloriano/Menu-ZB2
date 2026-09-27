@@ -10,7 +10,7 @@ Uma sessão já alterada pela versão antiga precisa ser reiniciada antes do tes
 
 ## NoClip
 
-Usa o componente existente `NoClip`, preservando `enabled`, velocidade, `Rigidbody.isKinematic` e `detectCollisions`. Somente o componente do jogador local controlado recebe o prefixo de entrada. Não habilita `DebugEnabled` global. WASD movimenta; Space sobe; Ctrl desce; Shift acelera. Vetor diagonal é normalizado.
+Usa o componente existente `NoClip`, preservando `enabled`, velocidade, `Rigidbody.isKinematic` e `detectCollisions`. Somente o componente do jogador local controlado recebe o prefixo de entrada. Não habilita `DebugEnabled` global. WASD movimenta; Space sobe; Ctrl desce; Shift não acrescenta multiplicador oculto. O padrão é 1× da caminhada original. Vetor diagonal é normalizado.
 
 Menu aberto, perda de foco e pausa bloqueiam o movimento. Solicitação expirada e morte restauram a física. Se a desativação ocorrer dentro de um obstáculo, retorna à última posição livre antes de restaurar colisões. O teste de sobreposição usa uma aproximação conservadora do hitbox. Correções de posição impostas pelo servidor continuam possíveis no modo cliente.
 

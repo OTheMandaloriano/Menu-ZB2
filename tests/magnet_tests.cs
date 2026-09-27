@@ -19,10 +19,11 @@ class MagnetTests {
         MagnetBridge.Apply(p,true,true,50);Check(Calls()==4,"four moves per batch");MagnetBridge.Apply(p,true,true,50);Check(Calls()==4,"throttle");
         Time.unscaledTime=1;MagnetBridge.Apply(p,true,true,50);Check(Calls()==8,"next batch");Time.unscaledTime=2;MagnetBridge.Apply(p,true,true,50);Check(Calls()==10,"loaded eligible enemies gathered");
         Time.unscaledTime=3;MagnetBridge.Apply(p,true,true,50);Check(Calls()==10,"no repeated teleports");
+        p.transform.position=new Vector3(0,0,10);Time.unscaledTime=3.5f;MagnetBridge.Apply(p,true,true,50);Check(Calls()==14,"anchor follows moving player continuously");
         MagnetBridge.Apply(p,false,true,50);Check(!MagnetBridge.Active,"disable clears activation");
-        Physics.ground=false;Time.unscaledTime=4;MagnetBridge.Apply(p,true,true,50);Check(Calls()==10,"no unsafe destination without ground");Physics.ground=true;
-        Physics.blocked=true;Time.unscaledTime=5;MagnetBridge.Apply(p,true,true,50);Check(Calls()==10,"occupied destination rejected");Physics.blocked=false;
-        p.healthFast=0;Time.unscaledTime=6;MagnetBridge.Apply(p,true,true,50);Check(!MagnetBridge.Active && Calls()==10,"dead player clears magnet");
+        Physics.ground=false;Time.unscaledTime=4;MagnetBridge.Apply(p,true,true,50);Check(Calls()==14,"no unsafe destination without ground");Physics.ground=true;
+        Physics.blocked=true;Time.unscaledTime=5;MagnetBridge.Apply(p,true,true,50);Check(Calls()==14,"occupied destination rejected");Physics.blocked=false;
+        p.healthFast=0;Time.unscaledTime=6;MagnetBridge.Apply(p,true,true,50);Check(!MagnetBridge.Active && Calls()==14,"dead player clears magnet");
         Console.WriteLine(checks+" magnet checks passed");
     }
 }

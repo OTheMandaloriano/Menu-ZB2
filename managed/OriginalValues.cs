@@ -23,6 +23,10 @@ namespace Zb2Menu {
         long generation;
         public int Count { get { return entries.Count; } }
         public void Begin() { ++generation; }
+        public T ReadOriginal<T>(object target,string name,Func<T> read) {
+            Entry entry;
+            return entries.TryGetValue(new Key{Target=target,Name=name},out entry) ? (T)entry.Original : read();
+        }
         public void Apply<T>(object target, string name, Func<T> read, Action<T> write, Func<T,T> change) {
             var key = new Key {Target=target, Name=name};
             Entry entry;

@@ -13,7 +13,13 @@ namespace Zb2Menu {
         static string lastError = "";
         public static string LastError() { return lastError; }
         public static bool CanUseKeys() {return !GlobalTexting.IsTexting && !DeveloperConsole.Opened && Application.isFocused && Time.timeScale>0;}
-        public static string Status() {return MagnetBridge.Status+" | "+SlotsBridge.Status+ (NoClipBridge.Status.Length==0 ? "" : " | "+NoClipBridge.Status);}
+        public static string Status() {
+            var messages=new List<string>();
+            if(SlotsBridge.Status.StartsWith("Para restaurar:"))messages.Add(SlotsBridge.Status);
+            if(NoClipBridge.Status.Length>0)messages.Add(NoClipBridge.Status);
+            if(MagnetBridge.Status.Length>0)messages.Add(MagnetBridge.Status);
+            return string.Join(" | ",messages.ToArray());
+        }
         static bool Exists(object target) {
             return target != null && (!(target is UnityEngine.Object) || (UnityEngine.Object)target != null);
         }
@@ -61,7 +67,8 @@ namespace Zb2Menu {
                 bool alive=player!=null && player.HasLocalControl && player.healthFast>0;
                 MagnetBridge.Apply(alive?player:null,alive && (flags&8192)!=0,(flags&4096)==0,magnetRadius);
                 SlotsBridge.Apply(alive?player:null,alive && (flags&1024)!=0);
-                NoClipBridge.Apply(alive?player:null,alive && (flags&2048)!=0,noclip,(flags&4096)==0);
+                float normalWalk=alive && player.movement!=null ? values.ReadOriginal(player.movement,"walkSpeed",()=>player.movement.walkSpeed) : 0;
+                NoClipBridge.Apply(alive?player:null,alive && (flags&2048)!=0,noclip,(flags&4096)==0,normalWalk);
                 if (player != null && player.HasLocalControl && player.healthFast > 0) {
                     Movement(player, flags, Mult(speed,5), Mult(jump,10), Mult(roll,5));
                     Weapons(player, flags, Mult(rapid,5));

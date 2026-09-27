@@ -4,7 +4,7 @@ using Zb2Menu;
 namespace Zb2Menu {
     public static class MagnetBridge {public static string Status="";public static bool Active=false;public static void Reset(){}public static void Apply(PlayerMain p,bool e,bool i,float r){}}
     public static class SlotsBridge {public static string Status="";public static bool Pending=false;public static bool Restore(){return true;}public static void Apply(PlayerMain p,bool enabled){}}
-    public static class NoClipBridge {public static string Status="";public static bool Active=false;public static void Restore(){}public static void Apply(PlayerMain p,bool e,float v,bool input){}}
+    public static class NoClipBridge {public static string Status="";public static bool Active=false;public static void Restore(){}public static float LastWalk;public static void Apply(PlayerMain p,bool e,float v,bool input,float walk){LastWalk=walk;}}
 }
 namespace UnityEngine {
     public static class Application {public static bool isFocused=true;}
@@ -44,7 +44,7 @@ class Tests {
         Apply(p,1|2);Check(PlayerHUD.instance.innerCrossHairTransform.localScale.x==1,"crosshair restored");Check(g.spread==0 && g.recoil.x==0,"overlapping owners");
         Apply(p,0); Check(g.spread==4 && g.recoil.x==2 && g.recoil.y==3,"vector restore");
         Apply(p,32|64|128); Check(p.movement.walkSpeed==7 && p.movement.jumpSpeed==12 && p.movement.fallDamageThreshold==-20 && p.movement.rollSpeed==18,"movement enabled");
-        Apply(p,32|64|128,2,3,3,3); Check(p.movement.walkSpeed==10.5f && p.movement.jumpSpeed==18,"movement sliders");
+        Apply(p,32|64|128,2,3,3,3); Check(NoClipBridge.LastWalk==3.5f,"noclip base ignores active speed multiplier"); Check(p.movement.walkSpeed==10.5f && p.movement.jumpSpeed==18,"movement sliders");
         var old=p.movement; p.movement=new PlayerMovement(); Apply(p,32|64|128); Check(old.walkSpeed==3.5f && old.jumpSpeed==6,"replace object restores old");
         Apply(p,0);Check(p.movement.jumpSpeed==6 && p.movement.fallDamageThreshold==-10,"jump disabled");
         Apply(p,4);Check(WeaponBase.instance.gunSway==0,"sway enabled");Apply(p,0);Check(WeaponBase.instance.gunSway==.7f,"sway restored");

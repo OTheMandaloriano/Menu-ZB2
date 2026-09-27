@@ -4,6 +4,13 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+### Ajustes de velocidade e Magnet
+
+- NoClip e Speed Hack iniciam em 1×; NoClip usa caminhada original sem aceleração oculta de Shift.
+- Removidas mensagens permanentes de ativação. Avisos acionáveis permanecem.
+- Magnet segue um ponto compacto continuamente, com limites de trabalho e autoridade do host preservados.
+
+
 ### Removido
 
 - Launcher, atualizador, empacotador e testes exclusivos do launcher, por decisão do proprietário. Distribuição volta ao injetor.

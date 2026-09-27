@@ -82,7 +82,7 @@ namespace Config {
     int  iItemAmount = 1;
 
     bool  bSpeedHack = false;
-    float fSpeedMult = 1.5f;
+    float fSpeedMult = 1.0f;
     bool  bSuperJump = false;
     float fJumpMult = 1.5f;
     bool  bRollSpeed = false;
@@ -214,7 +214,7 @@ namespace Config {
     bool  bAntiAfk = false;
     bool  bNoClip = false;
     int iNoClipKey = 0x4E;
-    float fNoClipSpeed = 1.3f;
+    float fNoClipSpeed = 1.0f;
     bool  bNoFall = false;
 }
 
