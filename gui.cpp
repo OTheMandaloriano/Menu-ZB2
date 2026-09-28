@@ -1377,15 +1377,17 @@ namespace GUI {
                 ImGui::Checkbox("Magnet de zumbis (solo/host)", &Config::bEnemyMagnet);
                 HotkeyButton("Tecla Magnet", &Config::iMagnetKey, "Alterna o Magnet. Reune zumbis carregados dentro do raio, em lotes. Padrao H.");
                 const char* targets[]={"Zumbis e bosses","Somente zumbis","Somente bosses"};
-                const char* destinations[]={"Seguir minha posicao","Fixar no ponto da mira"};
-                ImGui::Combo("Destino Magnet",&Config::iMagnetDestination,destinations,2);
-                Tip("Ponto fixo: mire no chao e ative H. H novamente libera; proxima ativacao marca outro ponto. Congelar impede que os atraidos saiam.");
+                const char* destinations[]={"Seguir minha posicao","Fixar no ponto da mira","Fixar a minha frente"};
+                ImGui::Combo("Destino Magnet",&Config::iMagnetDestination,destinations,3);
+                Tip("Ponto fixo: H captura o destino uma vez e prende os atraidos apos a animacao de nascimento. H novamente libera. A frente dispensa apontar para o chao.");
                 ImGui::Combo("Alvos Magnet", &Config::iMagnetTargets,targets,3);
                 ImGui::TextDisabled("Bosses existentes ignoram o raio de busca.");
                 ImGui::SliderFloat("Distancia frontal",&Config::fMagnetFront,1.5f,10,"%.1fm");
                 ImGui::SliderFloat("Distancia bosses",&Config::fMagnetBoss,6,20,"%.1fm");
                 ImGui::SliderFloat("Raio Magnet", &Config::fMagnetRadius, 10, 300, "%.0fm");
-                ImGui::Checkbox("Congelar atraidos", &Config::bMagnetFreeze);Tip("Suspende atualizacao dos zumbis reunidos e restaura fisica/animacao ao desligar.");
+                if(Config::iMagnetDestination==0) {
+                    ImGui::Checkbox("Congelar atraidos", &Config::bMagnetFreeze);Tip("Suspende atualizacao dos zumbis reunidos e restaura fisica/animacao ao desligar.");
+                } else ImGui::TextDisabled("Ponto fixo: mantem os atraidos ate desligar.");
                 ImGui::Separator();
                 ImGui::Checkbox("Item Magnet", &Config::bItemMagnet);Tip("Move loot permitido ao chao perto de voce, sem coleta automatica. Solo/host. Filtros proprios de loot.");
                 HotkeyButton("Tecla Item Magnet", &Config::iItemMagnetKey,"Pressione uma vez para iniciar; outra vez para parar. Padrao X; presets antigos preservam sua tecla.");

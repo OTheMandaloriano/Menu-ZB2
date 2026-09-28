@@ -4,6 +4,10 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Modos fixos do Magnet retêm os atraídos automaticamente, esperam o nascimento e restauram ao desligar.
+- Novo destino Fixar à minha frente captura chão próximo uma vez; seguir mantém congelamento opcional.
+- Reauditoria de HP documenta que a barra/% real de aliados segue sem fonte numérica sincronizada.
+
 - Silhueta independente do Chams: borda externa, cores visível/oculta e espessura persistida.
 - Shader validado em D3D11 WARP; integração com profundidade do jogo ainda pendente de teste em partida, sem suporte inicial a MSAA.
 - Auditoria documenta a ausência de caminho confirmado para Magnet de amigos e cliente sem host.

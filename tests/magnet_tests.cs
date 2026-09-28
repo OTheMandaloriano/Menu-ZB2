@@ -45,6 +45,28 @@ class MagnetTests {
         p.transform.position=new Vector3(0,0,10);p.cam.CameraTransform.position=new Vector3(0,3,60);Time.unscaledTime=11;MagnetBridge.Apply(p,true,true,100,1,2.5f,8,true,1);
         Check(normal.calls==fixedCalls && normal.obj.transform.position.z==fixedZ,"fixed anchor does not follow movement or view");
         MagnetBridge.Reset();Time.unscaledTime=12;MagnetBridge.Apply(p,true,true,100,1,2.5f,8,true,1);Check(normal.calls>fixedCalls,"reactivation captures a new point");MagnetBridge.Reset();
+        p.transform.position=new Vector3();p.cam.CameraTransform.position=new Vector3(0,3,20);
+        normal.obj.transform.position=new Vector3(0,0,40);Time.unscaledTime=13;
+        MagnetBridge.Apply(p,true,true,100,1,2.5f,8,false,1);
+        Check(normal.obj.body.isKinematic && normal.obj.animator.speed==0,"fixed point retains without optional freeze checkbox");
+        MagnetBridge.Apply(p,false,true,100,1,2.5f,8,false,1);
+        Check(!normal.obj.body.isKinematic && normal.obj.animator.speed==1,"disabling fixed point restores body and animation");
+        normal.obj.transform.position=new Vector3(0,0,40);Time.unscaledTime=14;
+        MagnetBridge.Apply(p,true,true,100,1,2.5f,8,false,2);float nearZ=normal.obj.transform.position.z;int nearCalls=normal.calls;
+        Check(nearZ<10 && normal.obj.body.isKinematic,"fixed front captures nearby destination rather than view hit");
+        p.transform.position=new Vector3(0,0,30);Time.unscaledTime=15;MagnetBridge.Apply(p,true,true,100,1,2.5f,8,false,2);
+        Check(normal.calls==nearCalls && normal.obj.transform.position.z==nearZ,"fixed front stays after player moves");
+        Time.unscaledTime=16;MagnetBridge.Apply(p,true,true,100,1,2.5f,8,false,0);
+        Check(!normal.obj.body.isKinematic && normal.obj.animator.speed==1,"switching to follow releases automatic fixed freeze");
+        MagnetBridge.Reset();normal.state=ZombieState.Spawning;normal.obj.transform.position=new Vector3(0,0,50);int spawnCalls=normal.calls;
+        Time.unscaledTime=17;MagnetBridge.Apply(p,true,true,100,1,2.5f,8,false,2);
+        Check(normal.calls==spawnCalls && !normal.obj.body.isKinematic,"fixed mode waits for spawn before moving or freezing");
+        normal.state=ZombieState.Aware;Time.unscaledTime=18;MagnetBridge.Apply(p,true,true,100,1,2.5f,8,false,2);
+        Check(normal.calls>spawnCalls && normal.obj.body.isKinematic,"fixed mode collects after spawn finishes");
+        MagnetBridge.Reset();Physics.ground=false;Time.unscaledTime=19;int beforeInvalid=normal.calls;
+        MagnetBridge.Apply(p,true,true,100,1,2.5f,8,false,2);
+        Check(normal.calls==beforeInvalid && MagnetBridge.Status.Contains("chao seguro"),"fixed front rejects absent ground");
+        Physics.ground=true;MagnetBridge.Reset();
         Console.WriteLine(checks+" magnet checks passed");
     }
 }

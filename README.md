@@ -106,3 +106,5 @@ Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. 
 [Uso do Item Magnet e limites cooperativos](docs/LOOT_USO_E_COOPERACAO.md)
 
 [Silhueta e limites de autoridade do Magnet](docs/SILHUETA_E_AUTORIDADE.md)
+
+[Auditoria de HP dos aliados e Magnet fixo](docs/AUDITORIA_HP_MAGNET_FIXO.md)

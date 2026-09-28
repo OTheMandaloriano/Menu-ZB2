@@ -27,6 +27,10 @@ namespace Zb2Menu {
             var current=ZombieLoader.Instance;
             if(current==null || player.cam==null || player.cam.CameraTransform==null)return;
             if(!previous || owner!=player || loader!=current){Reset();owner=player;loader=current;previous=true;}
+            if(mode<0 || mode>2)mode=0;
+            bool fixedPoint=mode!=0;
+            // Fixed modes retain captured enemies until the toggle is disabled.
+            freeze=freeze || fixedPoint;
             if(!freeze)MagnetFreeze.Clear();
             else MagnetFreeze.Pulse();
             if(!inputAllowed || !Application.isFocused || GlobalTexting.IsTexting || DeveloperConsole.Opened || Time.timeScale<=0)return;
@@ -46,7 +50,12 @@ namespace Zb2Menu {
                 if(!Physics.Raycast(view.position,view.forward,out hit,1000,~0,QueryTriggerInteraction.Ignore) || hit.normal.y<.6f){Status="Magnet: mire em um ponto de chao livre";return;}
                 center=hit.point;
             }
-            bool relocated=!anchorSet || (mode!=1 && Vector3.Distance(anchor,center)>2);
+            if(mode==2 && !anchorSet){
+                RaycastHit nearby;
+                if(!Physics.Raycast(center+Vector3.up*3,Vector3.down,out nearby,7,~0,QueryTriggerInteraction.Ignore) || nearby.normal.y<.6f){Status="Magnet: sem chao seguro a frente";return;}
+                center=nearby.point;
+            }
+            bool relocated=!anchorSet || (!fixedPoint && Vector3.Distance(anchor,center)>2);
             if(relocated){anchor=center;anchorForward=forward;anchorSet=true;placed.Clear();}
             int count=0;
             int total=current.zombies.Count;
