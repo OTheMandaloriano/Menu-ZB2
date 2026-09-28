@@ -135,6 +135,9 @@ namespace Config {
     extern float colAllyVis[4];     // azul por padrao (unica cor — aliado sempre visivel)
 
     // ---- VISUAL / Chams ----
+    extern bool bItemDistance,bItemLine,bItemBox,bPoiDistance,bPoiLine,bPoiBox;
+    extern int iItemLineFrom,iPoiLineFrom;
+    extern int iPyreSelection, iPyreRequest;
     extern bool bSilhouette;
     extern float fSilhouetteWidth, colSilhouetteVis[4], colSilhouetteInv[4];
     extern bool  bChams;

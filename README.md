@@ -108,3 +108,5 @@ Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. 
 [Silhueta e limites de autoridade do Magnet](docs/SILHUETA_E_AUTORIDADE.md)
 
 [Auditoria de HP dos aliados e Magnet fixo](docs/AUDITORIA_HP_MAGNET_FIXO.md)
+
+[Auditoria CE/dnSpy, ESP e navegação dos braseiros](docs/AUDITORIA_ESP_BRASEIROS.md)

@@ -4,6 +4,12 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- ESP de braseiros passa a usar o registro completo, incluindo não descobertos e acesos.
+- Navegação por braseiro com teleporte local, chão/colisão validados e clique consumido uma vez.
+- Itens e Pontos/Mundo ganham controles independentes de distância, box e linha.
+- HP de zumbi comum não sincronizado no cliente deixa de ser apresentado como 100% real.
+- Revisão ESP-PYRE-1 identificada na aba VISUAL; CE confirmou os valores padrão dos aliados remotos.
+
 - Modos fixos do Magnet retêm os atraídos automaticamente, esperam o nascimento e restauram ao desligar.
 - Novo destino Fixar à minha frente captura chão próximo uma vez; seguir mantém congelamento opcional.
 - Reauditoria de HP documenta que a barra/% real de aliados segue sem fonte numérica sincronizada.

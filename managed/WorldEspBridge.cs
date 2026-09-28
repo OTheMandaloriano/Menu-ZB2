@@ -35,13 +35,14 @@ namespace Zb2Menu {
         public static string LastError() { return error; }
         // Kind bits: weapons, rare, ammo, supply, heli, boss, mission, wave,
         // fixed loot, bench, fire, shop, respawn, allies.
-        static void Add(int kind, string name, Vector3 position, bool limited) {
+        static void Add(int kind, string name, Vector3 position, bool limited, Bounds? bounds=null) {
             if (kind < 0 || (mask & (1 << kind))==0) return;
             float distance=Vector3.Distance(origin,position);
             if (float.IsNaN(distance) || float.IsInfinity(distance) || (limited && distance>(kind<4 ? radius : poiRadius))) return;
             var screen=camera.WorldToViewportPoint(position);
             if (!(screen.z > .01f && screen.x>=0 && screen.x<=1 && screen.y>=0 && screen.y<=1)) return;
             var entry=new Marker {Kind=kind, X=screen.x, Y=1-screen.y, Distance=distance,Corners=emptyCorners,Bones=emptyBones};
+            if(bounds.HasValue)ProjectBounds(ref entry,bounds.Value);
             entry.Name=new byte[96];
             string label=name ?? "?";
             // Truncate characters before UTF8 encoding, avoiding partial sequences.
@@ -70,6 +71,7 @@ namespace Zb2Menu {
             try {
                 if ((mask & 15)!=0) Items();
                 if ((mask & ~15)!=0) Points();
+                if ((mask & (1<<10))!=0) Pyres();
                 if ((mask & (1<<14))!=0) Team();
                 if ((mask & (1<<7))!=0) Wave();
             } catch(Exception ex) { error=ex.ToString(); }
@@ -89,14 +91,26 @@ namespace Zb2Menu {
                 RefreshItems(map);
             }
             foreach(var entry in lootCache)
-                if(entry.Loot!=null && entry.Loot.item!=null && ItemEligibility.Allowed(entry.Loot.item.GetDataBaseItem())) Add(entry.Kind,entry.Name,LootCenter(entry),true);
+                if(entry.Loot!=null && entry.Loot.item!=null && ItemEligibility.Allowed(entry.Loot.item.GetDataBaseItem())) {
+                    var bounds=LootBounds(entry);
+                    Add(entry.Kind,entry.Name,bounds.HasValue?bounds.Value.center:entry.Loot.transform.position,true,bounds);
+                }
         }
-        static Vector3 LootCenter(LootEntry entry) {
+        static Bounds? LootBounds(LootEntry entry) {
             Bounds bounds=new Bounds();bool found=false;
             foreach(var renderer in entry.Renderers)if(renderer!=null && renderer.enabled && renderer.gameObject.activeInHierarchy) {
                 if(!found){bounds=renderer.bounds;found=true;}else bounds.Encapsulate(renderer.bounds);
             }
-            return found?bounds.center:entry.Loot.transform.position;
+            return found?(Bounds?)bounds:null;
+        }
+        static void ProjectBounds(ref Marker marker,Bounds bounds) {
+            float left=1,right=0,top=1,bottom=0;int valid=0;
+            for(int i=0;i<8;++i){
+                var p=bounds.center+new Vector3((i&1)==0?-bounds.extents.x:bounds.extents.x,(i&2)==0?-bounds.extents.y:bounds.extents.y,(i&4)==0?-bounds.extents.z:bounds.extents.z);
+                var screen=camera.WorldToViewportPoint(p);if(!(screen.z>.01f))continue;
+                left=Math.Min(left,screen.x);right=Math.Max(right,screen.x);top=Math.Min(top,1-screen.y);bottom=Math.Max(bottom,1-screen.y);++valid;
+            }
+            if(valid>=2){marker.Left=Math.Max(0,left);marker.Right=Math.Min(1,right);marker.Top=Math.Max(0,top);marker.Bottom=Math.Min(1,bottom);}
         }
         static void RefreshItems(MapHash map) {
             lootCache.Clear();
@@ -155,7 +169,7 @@ namespace Zb2Menu {
                     case InterestPoint.Type.Food: kind=8; name="Area: comida"; break;
                     case InterestPoint.Type.ReloadingBench: kind=9; name="Bancada de recarga"; break;
                     case InterestPoint.Type.GunUpgradeTable: kind=9; name="Bancada de melhoria"; break;
-                    case InterestPoint.Type.ZumbiePyre: kind=10; name="Fogueira"; break;
+                    case InterestPoint.Type.ZumbiePyre: continue; // The full registry includes undiscovered and lit braziers.
                     case InterestPoint.Type.VendorVan: kind=11; name="Mercador"; break;
                     case InterestPoint.Type.StartingHouse: kind=12; name="Respawn"; break;
                     default: continue;
@@ -163,6 +177,13 @@ namespace Zb2Menu {
                 var position=point.objTransform!=null ? point.objTransform.position : point.pos3D;
                 Add(kind,name,position,kind>=8 && kind<=11);
             }
+        }
+        static void Pyres() {
+            int bit=(int)InterestPoint.Type.ZumbiePyre;
+            if(bit<0 || bit>=32 || ((uint)pointFilter & (1u<<bit))==0)return;
+            var all=PyreNavigation.All();
+            for(int i=0;i<all.Count;++i)if(all[i]!=null)
+                Add(10,"Braseiro "+(i+1)+(all[i].IsLit?" (aceso)":" (apagado)"),all[i].transform.position,true);
         }
         static void Team() {
             teamCount=0;

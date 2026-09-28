@@ -70,5 +70,14 @@ int main(){
     Config::bAllyPct=false;Config::bAllySkeleton=false;Config::bAllyHeadDot=false;
     Config::bAllyBoxShow=false;Config::bAllyName=false;Config::bAllyDist=false;Config::bAllyHp=false;Config::bAllySnap=false;Check(Frame()==0,"team master without elements draws nothing");
     Config::bAllyName=true;Check(Frame()>0,"team name independent");Config::fAllyDistance=10;Check(Frame()==0,"team range independent");
+    auto full=GUI::LayoutContent("Zombie",10,80,80);auto hurt=GUI::LayoutContent("Zombie",10,32,80);
+    Check(full.health==1.f && std::abs(hurt.health-.4f)<.001f && hurt.text[EspLayout::Percent]=="40%","enemy health and percent decrease with real damage");
+    Check(!GUI::LayoutContent("Zombie",10,80,0).healthAvailable,"unsynchronized HP is not shown as full health");
+    Mono::worldCount=1;Mono::marker.kind=0;Mono::marker.distance=10;Config::bItemEsp=Config::bItemWeapons=true;Config::bAllyEsp=false;
+    Config::bItemBox=Config::bItemLine=false;int plain=Frame();Config::bItemBox=true;Check(Frame()>plain,"item box independent");
+    Config::bItemBox=false;Config::bItemLine=true;Check(Frame()>plain,"item line independent");
+    Config::bItemBox=true;Config::bPoiLine=true;Config::bPoiBox=false;Config::iItemLineFrom=2;
+    GUI::SaveConfig("world-controls-test");Config::bItemBox=false;Config::bPoiLine=false;Config::iItemLineFrom=0;GUI::LoadConfig("world-controls-test");
+    Check(Config::bItemBox && Config::bPoiLine && !Config::bPoiBox && Config::iItemLineFrom==2,"world controls persist independently");
     ImGui::DestroyContext();std::printf("PASS: %d real ImGui overlay checks\n",checks);
 }

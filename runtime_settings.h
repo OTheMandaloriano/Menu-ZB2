@@ -18,6 +18,7 @@ struct Values {
     decltype(Config::fMagnetRadius) fMagnetRadius = {};
     decltype(Config::bAllyEsp) bAllyEsp = {};
     decltype(Config::iMagnetTargets) iMagnetTargets = {};
+    int iPyreSelection=0,iPyreRequest=0;
     bool bChams=false, bSilhouette=false;
     decltype(Config::bPoiWave) bPoiWave = {};
     int chamsVisible=0,chamsHidden=0;
@@ -107,6 +108,7 @@ inline Values Capture(float width,float height) {
     values.bEnemyMagnet=Config::bEnemyMagnet;
     values.fMagnetRadius=Config::fMagnetRadius;
     values.bAllyEsp=Config::bAllyEsp; values.iMagnetTargets=Config::iMagnetTargets;
+    values.iPyreSelection=Config::iPyreSelection;values.iPyreRequest=Config::iPyreRequest;
     values.bChams=Config::bChams; values.bSilhouette=Config::bSilhouette;
     values.bPoiWave=Config::bPoiWave;
     auto pack=[](const float* c){unsigned result=0;for(int i=0;i<4;++i){float value=c[i];if(!(value>=0))value=0;if(value>1)value=1;result|=static_cast<unsigned>(value*255)<<(i*8);}return static_cast<int>(result);};

@@ -21,6 +21,8 @@ namespace UnityEngine {
     public class Renderer {public bool enabled=true;public GameObject gameObject=new GameObject();public Bounds bounds;}
     public class Collider {public Bounds bounds=new Bounds{center=new Vector3(0,0,10),extents=new Vector3(1,1,1)};}
 }
+public class PyreInteractable {public bool IsLit;public UnityEngine.Transform transform=new UnityEngine.Transform();}
+namespace Zb2Menu {public static class PyreNavigation {public static List<PyreInteractable> entries=new List<PyreInteractable>();public static IList<PyreInteractable> All(){return entries;}}}
 public class LobbyPlayer {public string playerName="Friend";}
 public class PlayerMovement {public UnityEngine.Collider hitbox=new UnityEngine.Collider();}
 public class PlayerMain {public enum HealthState{Alive,Dying,Dead};public HealthState healthState;public float MaxHealth {get{return 100;}} public CharacterSkin SpawnedSkin;public bool HasLocalControl;public LobbyPlayer lobbyPlayer=new LobbyPlayer();public PlayerMovement movement=new PlayerMovement();public float healthFast=100;public UnityEngine.Transform transform=new UnityEngine.Transform();}
@@ -59,7 +61,7 @@ class WorldTests {
             InterestPointController.instance.points.Add(new InterestPoint{type=InterestPoint.Type.Helicopter});
             Check(Collect(16)==1,"POI independent of items/zombies");Check(Marshal.ReadInt32(buffer)==4,"marker category ABI");
             byte[] name=new byte[96];Marshal.Copy(IntPtr.Add(buffer,16),name,0,96);Check(System.Text.Encoding.UTF8.GetString(name).StartsWith("Helicoptero"),"UTF8 marker layout");
-            InterestPointController.instance.points.Add(new InterestPoint{type=InterestPoint.Type.ZumbiePyre});
+            InterestPointController.instance.points.Add(new InterestPoint{type=InterestPoint.Type.ZumbiePyre});PyreNavigation.entries.Add(new PyreInteractable{transform=new UnityEngine.Transform{position=new UnityEngine.Vector3(0,0,10)}});
             Check(Collect(1<<10)==1,"POI category isolated");Check(Collect(16|1024)==2,"multiple categories");
             InterestPointController.instance.points[0].pos3D=new UnityEngine.Vector3(0,0,-1);Check(Collect(16)==0,"behind camera rejected");
             InterestPointController.instance.points[0].pos3D=new UnityEngine.Vector3(100,0,10);Check(Collect(16)==0,"outside viewport rejected");
@@ -68,8 +70,8 @@ class WorldTests {
             Check(Collect(15,150,1)==1,"caller capacity honored");
             for(int i=0;i<300;++i)InterestPointController.instance.points.Add(new InterestPoint{type=InterestPoint.Type.Helicopter});
             Marshal.WriteInt32(buffer,436*256,1234567);Check(Collect(16)==256,"capacity bound");Check(Marshal.ReadInt32(buffer,436*256)==1234567,"no buffer overrun");
-            InterestPointController.instance.points.Clear();
-            InterestPointController.instance.points.Add(new InterestPoint{type=InterestPoint.Type.ZumbiePyre,pos3D=new UnityEngine.Vector3(0,0,100)});
+            InterestPointController.instance.points.Clear();PyreNavigation.entries.Clear();
+            InterestPointController.instance.points.Add(new InterestPoint{type=InterestPoint.Type.ZumbiePyre,pos3D=new UnityEngine.Vector3(0,0,100)});PyreNavigation.entries.Add(new PyreInteractable{transform=new UnityEngine.Transform{position=new UnityEngine.Vector3(0,0,100)}});
             Check(Collect(15|1024,11,256,150)==2,"short item radius keeps distant POI");
             Check(Collect(15|1024,150,256,20)==4,"short POI radius keeps all items");
             Check(Collect(15|1024,11,256,20)==1,"both radii independent");
@@ -80,7 +82,7 @@ class WorldTests {
             Check(WorldEspBridge.Collect(buffer,256,1024,150,150,-1,-1,-1,-1,0)==0,"individual point mask hides points");
             MapHash.instance.cell.loot.Add(Loot(0,15,new DatabaseGun(),(InventoryItem.ID)115));
             Check(WorldEspBridge.Collect(buffer,256,1,150,150,0,0,0,1<<19,-1)==1,"item filter covers IDs above 96");
-            InterestPointController.instance.points.Clear();InterestPointController.instance.points.Add(new InterestPoint{type=InterestPoint.Type.OtherPlayerDot});
+            InterestPointController.instance.points.Clear();PyreNavigation.entries.Clear();InterestPointController.instance.points.Add(new InterestPoint{type=InterestPoint.Type.OtherPlayerDot});
             Check(Collect(1<<14)==0,"map player marker does not masquerade as team ESP");
             var friend=new PlayerMain();PlayersController.instance.players.Add(friend);PlayersController.instance.players.Add(new PlayerMain{HasLocalControl=true});
             Check(Collect(1<<14)==1,"real teammate collected independently, self excluded");
@@ -94,6 +96,10 @@ class WorldTests {
             byte[] boneValid=new byte[4];Marshal.Copy(IntPtr.Add(buffer,136+24*4+2*4),boneValid,0,4);Check(BitConverter.ToSingle(boneValid,0)==1,"real head joint projected into team snapshot");
             MapHash.instance.cell.loot.Clear();var centered=Loot(0,10,new DatabaseGun());centered.renderers=new[]{new UnityEngine.Renderer{bounds=new UnityEngine.Bounds{center=new UnityEngine.Vector3(20,0,10)}}};MapHash.instance.cell.loot.Add(centered);UnityEngine.Time.unscaledTime+=1;
             Check(Collect(1)==1,"rendered item collected");byte[] scalar=new byte[4];Marshal.Copy(IntPtr.Add(buffer,4),scalar,0,4);Check(Math.Abs(BitConverter.ToSingle(scalar,0)-.7f)<.001f,"item anchor uses renderer center rather than root pivot");
+            PyreNavigation.entries.Clear();InterestPointController.instance.points.Clear();
+            PyreNavigation.entries.Add(new PyreInteractable{IsLit=true,transform=new UnityEngine.Transform{position=new UnityEngine.Vector3(0,0,10)}});
+            Check(Collect(1024)==1,"lit undiscovered pyre uses full registry independently of map points");
+            Check(WorldEspBridge.Collect(buffer,256,1024,150,150,-1,-1,-1,-1,0)==0,"full registry still respects pyre filter");
             Console.WriteLine(checks+" world ESP checks passed");
         } finally {Marshal.FreeHGlobal(buffer);}
     }

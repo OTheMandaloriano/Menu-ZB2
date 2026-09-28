@@ -11,6 +11,8 @@ static MonoMethod* s_catalogRead = nullptr;
 static MonoMethod* s_itemAllowed = nullptr;
 static MonoMethod* s_catalogIcon = nullptr;
 static MonoMethod* s_chamsApply = nullptr;
+static MonoMethod* s_pyreUpdate=nullptr;
+static MonoMethod* s_pyreStatus=nullptr;
 static MonoMethod* s_modifierReset = nullptr;
 static MonoMethod* s_modifierError = nullptr;
 static MonoMethod* s_worldCollect = nullptr;
@@ -71,6 +73,8 @@ static bool LoadAimBridge() {
         auto chams = pClassFrom(image,"Zb2Menu","VisualEffectsBridge");
         if(!catalog || !chams)return false;
         s_catalogRead=pMethodFrom(catalog,"Read",2);s_catalogIcon=pMethodFrom(catalog,"Icon",2);s_chamsApply=pMethodFrom(chams,"Apply",4);
+        auto pyres=pClassFrom(image,"Zb2Menu","PyreNavigation");
+        if(pyres){s_pyreUpdate=pMethodFrom(pyres,"Update",3);s_pyreStatus=pMethodFrom(pyres,"Status",0);}
         auto ranges = pClassFrom(image, "Zb2Menu", "RangeBridge");
         if (!modifiers || !world || !ranges) return false;
         s_rangeConfigure = pMethodFrom(ranges, "Configure", 6);

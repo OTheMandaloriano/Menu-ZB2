@@ -143,6 +143,9 @@ namespace Config {
     bool  bAllyHeadDot = false;
     float colAllyVis[4] = { 0.2f, 0.5f, 1.0f, 1 };
 
+    bool bItemDistance=true,bItemLine=false,bItemBox=false,bPoiDistance=true,bPoiLine=false,bPoiBox=false;
+    int iItemLineFrom=0,iPoiLineFrom=0;
+    int iPyreSelection=0, iPyreRequest=0;
     bool bSilhouette = false;
     float fSilhouetteWidth = 2.f;
     float colSilhouetteVis[4] = {0,1,0,1};
@@ -706,6 +709,7 @@ namespace GUI {
         JV(colZombieBox); JV(colZombieName); JV(colZombieDist); JV(colZombieHp); JB(bBossColor); JV(colBossBox);
         JB(bAllyEsp); JB(bAllyBoxShow); JB(bAllyPct); JS(szAllyLayout); JI(iAllySnapFrom); JI(iAllyLayout); JV(colAllyName); JV(colAllyDist); JV(colAllyHp); JV(colAllySkel); JV(colAllyLine); JV(colAllyDot);  JF(fAllyDistance); JI(iMagnetTargets); JI(iMagnetDestination); JB(bLootWholeMap); JI(iLootFilter0);JI(iLootFilter1);JI(iLootFilter2);JI(iLootFilter3); JF(fMagnetFront); JF(fMagnetBoss); JI(iAllyBox); JB(bAllyName); JB(bAllyDist); JB(bAllyHp);
         JB(bAllySkeleton); JB(bAllySnap); JB(bAllyHeadDot); JV(colAllyVis);
+        JB(bItemDistance);JB(bItemLine);JB(bItemBox);JB(bPoiDistance);JB(bPoiLine);JB(bPoiBox);JI(iItemLineFrom);JI(iPoiLineFrom);
         JB(bSilhouette); JF(fSilhouetteWidth); JV(colSilhouetteVis); JV(colSilhouetteInv);
         JB(bChams); JV(colChamsVis); JV(colChamsInv); JB(bItemEsp); JB(bItemWeapons);
         JB(bItemRare); JB(bItemAmmo); JB(bItemSupply); JV(colItem); JV(colItemRare); JV(colItemAmmo); JV(colItemSupply); JF(fItemRadius); JF(fPoiRadius); JI(iItemFilter0); JI(iItemFilter1); JI(iItemFilter2); JI(iItemFilter3); JI(iPoiFilter); JB(bPoiGraves); JB(bPoiPlayers);
@@ -794,6 +798,7 @@ namespace GUI {
         LV(colZombieBox); LV(colZombieName); LV(colZombieDist); LV(colZombieHp); LB(bBossColor); LV(colBossBox);
         LB(bAllyEsp); LB(bAllyBoxShow); LB(bAllyPct); LS(szAllyLayout); LI(iAllySnapFrom); LI(iAllyLayout); LV(colAllyName); LV(colAllyDist); LV(colAllyHp); LV(colAllySkel); LV(colAllyLine); LV(colAllyDot);  LF(fAllyDistance); LI(iMagnetTargets); LI(iMagnetDestination); LB(bLootWholeMap); LI(iLootFilter0);LI(iLootFilter1);LI(iLootFilter2);LI(iLootFilter3); LF(fMagnetFront); LF(fMagnetBoss); LI(iAllyBox); LB(bAllyName); LB(bAllyDist); LB(bAllyHp);
         LB(bAllySkeleton); LB(bAllySnap); LB(bAllyHeadDot); LV(colAllyVis);
+        LB(bItemDistance);LB(bItemLine);LB(bItemBox);LB(bPoiDistance);LB(bPoiLine);LB(bPoiBox);LI(iItemLineFrom);LI(iPoiLineFrom);
         LB(bSilhouette); LF(fSilhouetteWidth); LV(colSilhouetteVis); LV(colSilhouetteInv);
         LB(bChams); LV(colChamsVis); LV(colChamsInv); LB(bItemEsp); LB(bItemWeapons);
         LB(bItemRare); LB(bItemAmmo); LB(bItemSupply); LV(colItem); LV(colItemRare); LV(colItemAmmo); LV(colItemSupply); LF(fItemRadius); LF(fPoiRadius); LI(iItemFilter0); LI(iItemFilter1); LI(iItemFilter2); LI(iItemFilter3); LI(iPoiFilter); LB(bPoiGraves); LB(bPoiPlayers);
@@ -933,7 +938,21 @@ namespace GUI {
                 const float* color=colors[marker.kind];
                 ImU32 tint=ImGui::GetColorU32(ImVec4(color[0],color[1],color[2],color[3]));
                 ImVec2 position(marker.x*io.DisplaySize.x,marker.y*io.DisplaySize.y);
-                char label[128]; _snprintf_s(label,_TRUNCATE,"%s [%.0fm]",marker.name,marker.distance);
+                bool item=marker.kind<4;
+                bool distance=item?Config::bItemDistance:Config::bPoiDistance;
+                bool line=item?Config::bItemLine:Config::bPoiLine;
+                bool box=item?Config::bItemBox:Config::bPoiBox;
+                int from=item?Config::iItemLineFrom:Config::iPoiLineFrom;
+                if(line)dl->AddLine(ImVec2(io.DisplaySize.x*.5f,from==1?0.f:from==2?io.DisplaySize.y*.5f:io.DisplaySize.y),position,tint);
+                if(box){
+                    bool bounds=marker.right>marker.left && marker.bottom>marker.top;
+                    ImVec2 a=bounds?ImVec2(marker.left*io.DisplaySize.x,marker.top*io.DisplaySize.y):ImVec2(position.x-6,position.y-6);
+                    ImVec2 b=bounds?ImVec2(marker.right*io.DisplaySize.x,marker.bottom*io.DisplaySize.y):ImVec2(position.x+6,position.y+6);
+                    dl->AddRect(a,b,tint);
+                }
+                char label[128];
+                if(distance)_snprintf_s(label,_TRUNCATE,"%s [%.0fm]",marker.name,marker.distance);
+                else _snprintf_s(label,_TRUNCATE,"%s",marker.name);
                 dl->AddCircleFilled(position,3.0f,tint);
                 auto labelSize=ImGui::CalcTextSize(label);
                 dl->AddLine(position,ImVec2(position.x,position.y-5),tint);
@@ -1242,7 +1261,9 @@ namespace GUI {
                 static const char* kSnapFrom[] = { "Base", "Topo", "Centro" };
                 if (ImGui::BeginTable("visual_cols", 2)) {
                     ImGui::TableNextColumn();
+                    ImGui::TextDisabled("Revisao ESP-PYRE-1");
                     Section("Zumbis");
+                    if(Mono::Get().coopMode==2)ImGui::TextWrapped("Cliente: HP de zumbis comuns nao e sincronizado; barras numericas ficam ocultas.");
                     ImGui::Checkbox("Ativo##Z", &Config::bZombieEsp); Tip("Ativa o desenho do ESP. A coleta da mira e independente.");
                     if (Config::bZombieEsp) {
                         ImGui::Indent();
@@ -1308,6 +1329,11 @@ namespace GUI {
                     ImGui::Checkbox("Ativo##I", &Config::bItemEsp); Tip("Master do ESP de itens no chao.");
                     if (Config::bItemEsp) {
                         ImGui::Indent();
+                        ImGui::Checkbox("Distancia##Item",&Config::bItemDistance);
+                        ImGui::Checkbox("Linha##Item",&Config::bItemLine);
+                        const char* originsItem[]={"Base","Topo","Centro"};
+                        ImGui::Combo("Origem##Item",&Config::iItemLineFrom,originsItem,3);
+                        ImGui::Checkbox("Box##Item",&Config::bItemBox);Tip("Caixa do modelo quando disponivel; caso contrario, destaca o marcador.");
                         ImGui::Checkbox("Armas", &Config::bItemWeapons);
                         SwatchR("##CArma", Config::colItem, "Cor das armas.");
                         ImGui::Checkbox("Raros", &Config::bItemRare);
@@ -1325,6 +1351,11 @@ namespace GUI {
                     ImGui::Checkbox("Ativo##P", &Config::bPoiEsp); Tip("Master dos pontos de interesse.");
                     if (Config::bPoiEsp) {
                         ImGui::Indent();
+                        ImGui::Checkbox("Distancia##Poi",&Config::bPoiDistance);
+                        ImGui::Checkbox("Linha##Poi",&Config::bPoiLine);
+                        const char* originsPoi[]={"Base","Topo","Centro"};
+                        ImGui::Combo("Origem##Poi",&Config::iPoiLineFrom,originsPoi,3);
+                        ImGui::Checkbox("Box##Poi",&Config::bPoiBox);Tip("Caixa do modelo quando disponivel; caso contrario, destaca o marcador.");
                         ImGui::Checkbox("Helicoptero", &Config::bPoiHeli);
                         SwatchR("##PHeli", Config::colPoiHeli, "Sempre visivel (dinamico).");
                         ImGui::Checkbox("Chefao", &Config::bPoiBoss);
@@ -1400,6 +1431,18 @@ namespace GUI {
                 ImGui::SliderFloat("Raio Item Magnet", &Config::fItemMagnetRadius,10,1000,"%.0fm");
                 ImGui::EndDisabled();
                 Tip("Varre todos os itens permitidos ja existentes, em lotes. Nao cria loot de regioes ainda nao geradas.");
+                Section("Braseiros / Fogueiras");
+                const auto& pyres=Mono::Get();
+                ImGui::TextWrapped("%s",pyres.pyreStatus);
+                ImGui::BeginDisabled(!pyres.inMap || pyres.pyreCount<=0);
+                if(Config::iPyreSelection>=pyres.pyreCount)Config::iPyreSelection=(std::max)(0,pyres.pyreCount-1);
+                int pyreNumber=Config::iPyreSelection+1;
+                if(ImGui::SliderInt("Braseiro",&pyreNumber,1,(std::max)(1,pyres.pyreCount)))Config::iPyreSelection=pyreNumber-1;
+                if(ImGui::Button("Anterior##Pyre"))Config::iPyreSelection=(std::max)(0,Config::iPyreSelection-1);
+                ImGui::SameLine();if(ImGui::Button("Proximo##Pyre"))Config::iPyreSelection=(std::min)((std::max)(0,pyres.pyreCount-1),Config::iPyreSelection+1);
+                if(ImGui::Button("Ir ao braseiro selecionado")){Config::iPyreRequest=Config::iPyreRequest>=2147483646?1:Config::iPyreRequest+1;}
+                Tip("Teleporta somente voce para um ponto livre ao lado do braseiro. Ative-o normalmente pelo jogo.");
+                ImGui::EndDisabled();
                 ImGui::TextDisabled("Auto-coleta, aliados e selecao Steam: nao implementados.");
                 ImGui::BeginDisabled();
                 ImGui::Separator();

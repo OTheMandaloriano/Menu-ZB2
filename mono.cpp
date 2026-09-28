@@ -1490,7 +1490,7 @@ namespace Mono {
                     en.has3d = true;
                     en.ent = e; en.ex = bb.extents.x; en.ey = bb.extents.y; en.ez = bb.extents.z;
                     en.headX = en.headY = en.footX = en.footY = 0;
-                    en.hp = hp; en.maxHp = mx;
+                    en.hp = hp; en.maxHp = (s.coopMode==2 && !tmpEn.isBoss) ? 0.f : mx;
                     en.onScreen = true; en.isAlly = false; en.isBoss = tmpEn.isBoss;
                     return;
                 }
@@ -1548,7 +1548,7 @@ namespace Mono {
             memcpy(en.skY, tmpEn.skY, sizeof(en.skY));
             memcpy(en.skV, tmpEn.skV, sizeof(en.skV));
             en.ent = e; en.ex = en.ey = en.ez = 0;
-            en.hp = hp; en.maxHp = mx;
+            en.hp = hp; en.maxHp = (s.coopMode==2 && !tmpEn.isBoss) ? 0.f : mx;
             en.onScreen = true; en.isAlly = false; en.isBoss = tmpEn.isBoss;
         }, gatherStart);
         // Publish only a completed frame; failures publish an empty frame.
@@ -1708,7 +1708,18 @@ namespace Mono {
         }
     }
 
+    static void UpdatePyres(bool ready) {
+        if(!s_pyreUpdate)return;
+        int active=ready?1:0;
+        void* args[]={&s_options.iPyreSelection,&s_options.iPyreRequest,&active};MonoObject* error=nullptr;
+        auto count=pInvoke(s_pyreUpdate,nullptr,args,&error);s.pyreCount=0;
+        if(count && !error){auto value=pUnbox(count);if(value)memcpy(&s.pyreCount,value,sizeof(int));}
+        if(s.pyreCount<0 || s.pyreCount>10000)s.pyreCount=0;
+        auto status=s_pyreStatus?pInvoke(s_pyreStatus,nullptr,nullptr,&error):nullptr;
+        if(status && !error){char* text=pStrUtf8(status);if(text){strncpy_s(s.pyreStatus,text,_TRUNCATE);pFree(text);}}
+    }
     static void ApplyVisuals(bool ready) {
+        UpdatePyres(ready);
         if(!s_chamsApply)return;
         int enabled=ready && s_options.bChams?1:0;
         int silhouette=ready && s_options.bSilhouette?1:0;
