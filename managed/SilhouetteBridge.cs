@@ -61,6 +61,7 @@ namespace Zb2Menu {
                     if (zombie==null || zombie.obj==null || zombie.health==null || !zombie.health.isAlive || zombie.health.amount<=0) continue;
                     var renderer=zombie.obj.meshRenderer;
                     if (renderer==null || !renderer.enabled || renderer.sharedMesh==null) continue;
+                    if(!EffectRange.InRange(zombie))continue;
                     if (count++>=128) break;
                     for (int sub=0; sub<Math.Min(renderer.sharedMesh.subMeshCount,8); ++sub) {
                         commands.DrawRenderer(renderer,hidden,sub,0);
@@ -101,7 +102,8 @@ namespace Zb2Menu {
     }
 
     public static class VisualEffectsBridge {
-        public static string Apply(int chams,int front,int behind,int silhouette) {
+        public static string Apply(int chams,int front,int behind,int silhouette,float distance) {
+            EffectRange.Distance=distance;
             string a=ChamsBridge.Apply(chams,front,behind), b=SilhouetteBridge.Apply(silhouette);
             return a.Length==0 ? b : (b.Length==0 ? a : a+" | "+b);
         }

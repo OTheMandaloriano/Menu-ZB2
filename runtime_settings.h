@@ -5,6 +5,7 @@
 // Render owns Config. Unity owns its copy; no game call holds the UI gate.
 namespace RuntimeSettings {
 struct Values {
+    bool bZombieHeadDot=false;
     decltype(Config::bNoClip) bNoClip = {};
     decltype(Config::fNoClipSpeed) fNoClipSpeed = {};
     decltype(Config::iItemFilter0) iItemFilter0 = {};
@@ -170,6 +171,7 @@ inline Values Capture(float width,float height) {
     values.bUnlockSlots=Config::bUnlockSlots;
     values.bZombieEsp=Config::bZombieEsp;
     values.bZombieSkeleton=Config::bZombieSkeleton;
+    values.bZombieHeadDot=Config::bZombieHeadDot;
     values.fAimDistance=Config::fAimDistance;
     values.fEspDistance=Config::fEspDistance;
     values.fFovAngle=Config::fFovAngle;

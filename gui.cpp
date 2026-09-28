@@ -988,7 +988,7 @@ namespace GUI {
                 // R4 (spec �1): Box tem flag propria � bZombieEsp e master,
                 // bZombieBoxShow desenha o retangulo. Desmarcar Box nao mata o ESP.
                 const bool showBox = Config::bZombieBoxShow;
-                bool is3d = (layout.boxStyle == 1 && es[i].has3d);
+                bool is3d = es[i].has3d;
                 if (is3d) {
                     // 3D real: bbox dos 8 cantos da AABB (labels ancoram nela).
                     float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
@@ -1127,7 +1127,7 @@ namespace GUI {
                 }
                 // Item 13 Head Dot: ponto na junta HEAD (projetada, nao fixa no box).
                 // Boss: skN vem do rig relativo (HEAD sempre mapeado quando existe).
-                if (showDot && es[i].skV[Mono::SK_HEAD] && (es[i].isBoss || es[i].skN == Mono::SK_COUNT)) {
+                if (showDot && es[i].skV[Mono::SK_HEAD]) {
                     ImVec2 hp = ImVec2(es[i].skX[Mono::SK_HEAD], H - es[i].skY[Mono::SK_HEAD]);
                     if (hp.x > -10000 && hp.x < 10000 && hp.y > -10000 && hp.y < 10000) {
                         float hr = h * 0.03f; if (hr < 2.0f) hr = 2.0f; if (hr > 6.0f) hr = 6.0f;
@@ -1269,7 +1269,7 @@ namespace GUI {
                 static const char* kSnapFrom[] = { "Base", "Topo", "Centro" };
                 if (ImGui::BeginTable("visual_cols", 2)) {
                     ImGui::TableNextColumn();
-                    ImGui::TextDisabled("Revisao GROUP-MELEE-7");
+                    ImGui::TextDisabled("Revisao ESP-RANGE-8");
                     Section("Zumbis");
                     if(Mono::Get().coopMode==2)ImGui::TextWrapped("Cliente: HP de zumbis comuns nao e sincronizado; barras numericas ficam ocultas.");
                     ImGui::Checkbox("Ativo##Z", &Config::bZombieEsp); Tip("Ativa o desenho do ESP. A coleta da mira e independente.");
@@ -1300,21 +1300,7 @@ namespace GUI {
                         ImGui::SliderFloat("Dist. maxima", &Config::fEspDistance, 10, 500, "%.0fm"); Tip("Alcance do ESP. Modelos carregados usam box/ossos; distantes conhecidos usam losango e nome/distancia, sem vida inventada. Independente do AIM.");
                         ImGui::Unindent();
                     }
-                    Section("Equipe");
-                    ImGui::Checkbox("Ativo##A", &Config::bAllyEsp);
-                    if(Config::bAllyEsp) {
-                        ImGui::Checkbox("Box##A", &Config::bAllyBoxShow);ImGui::SameLine();ImGui::SetNextItemWidth(110);ImGui::Combo("Tipo##A",&Config::iAllyBox,kBoxType,3);
-                        SwatchR("##ABox",Config::colAllyVis,"Cor do box");
-                        ImGui::Checkbox("Nome##A", &Config::bAllyName);SwatchR("##AName",Config::colAllyName,"Cor do nome");
-                        ImGui::Checkbox("Distancia##A", &Config::bAllyDist);SwatchR("##ADist",Config::colAllyDist,"Cor da distancia");
-                        ImGui::TextDisabled("Aliados: estado sincronizado; HP numerico indisponivel.");
-                        ImGui::Checkbox("Barra de vida##A", &Config::bAllyHp);ImGui::SameLine();ImGui::Checkbox("%##A",&Config::bAllyPct);SwatchR("##AHp",Config::colAllyHp,"Cor do percentual");
-                        ImGui::Checkbox("Esqueleto##A", &Config::bAllySkeleton);SwatchR("##ASkel",Config::colAllySkel,"Ossos reais do rig humano");
-                        ImGui::Checkbox("Linha##A", &Config::bAllySnap);ImGui::SameLine();ImGui::SetNextItemWidth(90);ImGui::Combo("Origem##A",&Config::iAllySnapFrom,kSnapFrom,3);SwatchR("##ALine",Config::colAllyLine,"Cor da linha");
-
-                        ImGui::SliderFloat("Raio equipe", &Config::fAllyDistance,10,500,"%.0fm");
-                    }
-
+                    ImGui::BeginDisabled(!Config::bZombieEsp);
                     Section("Silhueta");
                     ImGui::Checkbox("Contorno do corpo", &Config::bSilhouette);
                     Tip("Borda do modelo, sem preencher o corpo. Requer D3D11 sem MSAA. Validacao em partida pendente.");
@@ -1332,6 +1318,22 @@ namespace GUI {
                         ImGui::TextDisabled("Oculto"); SwatchR("##ChInv", Config::colChamsInv, "Cor atras de parede.");
                         ImGui::Unindent();
                     }
+                    ImGui::EndDisabled();
+                    Section("Equipe");
+                    ImGui::Checkbox("Ativo##A", &Config::bAllyEsp);
+                    if(Config::bAllyEsp) {
+                        ImGui::Checkbox("Box##A", &Config::bAllyBoxShow);ImGui::SameLine();ImGui::SetNextItemWidth(110);ImGui::Combo("Tipo##A",&Config::iAllyBox,kBoxType,3);
+                        SwatchR("##ABox",Config::colAllyVis,"Cor do box");
+                        ImGui::Checkbox("Nome##A", &Config::bAllyName);SwatchR("##AName",Config::colAllyName,"Cor do nome");
+                        ImGui::Checkbox("Distancia##A", &Config::bAllyDist);SwatchR("##ADist",Config::colAllyDist,"Cor da distancia");
+                        ImGui::TextDisabled("Aliados: estado sincronizado; HP numerico indisponivel.");
+                        ImGui::Checkbox("Barra de vida##A", &Config::bAllyHp);ImGui::SameLine();ImGui::Checkbox("%##A",&Config::bAllyPct);SwatchR("##AHp",Config::colAllyHp,"Cor do percentual");
+                        ImGui::Checkbox("Esqueleto##A", &Config::bAllySkeleton);SwatchR("##ASkel",Config::colAllySkel,"Ossos reais do rig humano");
+                        ImGui::Checkbox("Linha##A", &Config::bAllySnap);ImGui::SameLine();ImGui::SetNextItemWidth(90);ImGui::Combo("Origem##A",&Config::iAllySnapFrom,kSnapFrom,3);SwatchR("##ALine",Config::colAllyLine,"Cor da linha");
+
+                        ImGui::SliderFloat("Raio equipe", &Config::fAllyDistance,10,500,"%.0fm");
+                    }
+
                     ImGui::TableNextColumn();
                     Section("Itens");
                     ImGui::Checkbox("Ativo##I", &Config::bItemEsp); Tip("Master do ESP de itens no chao.");

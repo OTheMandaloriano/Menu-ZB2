@@ -35,6 +35,7 @@ namespace Zb2Menu {
                     if(zombie==null || zombie.obj==null || zombie.health==null || !zombie.health.isAlive || zombie.health.amount<=0)continue;
                     var renderer=zombie.obj.meshRenderer;
                     if(renderer==null || !renderer.enabled || renderer.sharedMesh==null)continue;
+                    if(!EffectRange.InRange(zombie))continue;
                     if(count++>=128)break;
                     for(int sub=0;sub<Math.Min(renderer.sharedMesh.subMeshCount,8);++sub){commands.DrawRenderer(renderer,hidden,sub,0);commands.DrawRenderer(renderer,visible,sub,0);}
                 }

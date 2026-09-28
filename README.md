@@ -122,3 +122,5 @@ Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. 
 [Auditoria do Magnet, mira e custo de atualização](docs/MAGNET_AUDIT_6.md)
 
 [Grupo único, rigs e Fast Knife](docs/GROUP_MELEE_7.md)
+
+[ESP, alcance e rigs](docs/ESP_RANGE_8.md)

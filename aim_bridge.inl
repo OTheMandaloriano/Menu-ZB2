@@ -11,6 +11,7 @@ static MonoMethod* s_catalogRead = nullptr;
 static MonoMethod* s_itemAllowed = nullptr;
 static MonoMethod* s_catalogIcon = nullptr;
 static MonoMethod* s_chamsApply = nullptr;
+static MonoMethod* s_rigBone=nullptr;static MonoMethod* s_rigBounds=nullptr;
 static MonoMethod* s_pyreUpdate=nullptr;
 static MonoMethod* s_pyreStatus=nullptr;
 static MonoMethod* s_modifierReset = nullptr;
@@ -72,9 +73,11 @@ static bool LoadAimBridge() {
         auto catalog = pClassFrom(image,"Zb2Menu","ItemCatalogBridge");
         auto chams = pClassFrom(image,"Zb2Menu","VisualEffectsBridge");
         if(!catalog || !chams)return false;
-        s_catalogRead=pMethodFrom(catalog,"Read",2);s_catalogIcon=pMethodFrom(catalog,"Icon",2);s_chamsApply=pMethodFrom(chams,"Apply",4);
+        s_catalogRead=pMethodFrom(catalog,"Read",2);s_catalogIcon=pMethodFrom(catalog,"Icon",2);s_chamsApply=pMethodFrom(chams,"Apply",5);
         auto pyres=pClassFrom(image,"Zb2Menu","PyreNavigation");
         if(pyres){s_pyreUpdate=pMethodFrom(pyres,"Update",3);s_pyreStatus=pMethodFrom(pyres,"Status",0);}
+        auto rig=pClassFrom(image,"Zb2Menu","ZombieRigBridge");
+        if(rig){s_rigBone=pMethodFrom(rig,"Bone",2);s_rigBounds=pMethodFrom(rig,"Bounds",2);}
         auto ranges = pClassFrom(image, "Zb2Menu", "RangeBridge");
         if (!modifiers || !world || !ranges) return false;
         s_rangeConfigure = pMethodFrom(ranges, "Configure", 6);
@@ -142,3 +145,14 @@ static void PublishAimBridge(void* local, const Aim::Target* target, int flags) 
 #include "catalog_runtime.inl"
 #include "world_esp.inl"
 #include "distance_runtime.inl"
+
+static void* ReadManagedRigBone(void* zo,int selection){
+    if(!s_rigBone)return nullptr;
+    void* args[]={zo,&selection};MonoObject* error=nullptr;
+    auto result=pInvoke(s_rigBone,nullptr,args,&error);return error?nullptr:result;
+}
+static bool ReadManagedRigBounds(void* zo,Bnd& bounds){
+    if(!s_rigBounds)return false;
+    void* buffer=&bounds;void* args[]={zo,&buffer};bool ok=false;
+    return InvokeAimBool(s_rigBounds,nullptr,args,ok) && ok;
+}

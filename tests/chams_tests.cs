@@ -2,6 +2,9 @@ using System;
 using System.Collections.Generic;
 using Zb2Menu;
 namespace UnityEngine {
+    public struct Vector3 {public float x,y,z;public static float Distance(Vector3 a,Vector3 b){return (float)Math.Sqrt((a.x-b.x)*(a.x-b.x)+(a.y-b.y)*(a.y-b.y)+(a.z-b.z)*(a.z-b.z));}}
+    public class Transform {public Vector3 position;}
+    public static class Mathf {public static float Clamp(float v,float min,float max){return Math.Max(min,Math.Min(max,v));}}
     public class Object {public static int destroyed;public static void Destroy(object o){if(o!=null)++destroyed;}}
     public enum HideFlags {HideAndDontSave}
     public struct Color {public static Color red,green,clear;}
@@ -20,7 +23,7 @@ namespace UnityEngine {
     public struct Matrix4x4 {}
     public struct Rect {public Rect(float x,float y,float w,float h){}}
     public static class GL {public static Matrix4x4 GetGPUProjectionMatrix(Matrix4x4 p,bool rt){return p;}}
-    public class Camera {public static Action<Camera> onPreRender;public Matrix4x4 worldToCameraMatrix,projectionMatrix;public bool allowMSAA,stereoEnabled;public RenderTexture targetTexture;public int pixelWidth=1280,pixelHeight=720;public int attached,removed;public Rendering.CommandBuffer buffer;public void AddCommandBuffer(Rendering.CameraEvent e,Rendering.CommandBuffer b){attached++;buffer=b;}public void RemoveCommandBuffer(Rendering.CameraEvent e,Rendering.CommandBuffer b){removed++;buffer=null;}}
+    public class Camera {public Transform transform=new Transform();public static Action<Camera> onPreRender;public Matrix4x4 worldToCameraMatrix,projectionMatrix;public bool allowMSAA,stereoEnabled;public RenderTexture targetTexture;public int pixelWidth=1280,pixelHeight=720;public int attached,removed;public Rendering.CommandBuffer buffer;public void AddCommandBuffer(Rendering.CameraEvent e,Rendering.CommandBuffer b){attached++;buffer=b;}public void RemoveCommandBuffer(Rendering.CameraEvent e,Rendering.CommandBuffer b){removed++;buffer=null;}}
 }
 namespace UnityEngine.Rendering {
     public enum CompareFunction {Greater,LessEqual}public enum BlendMode {SrcAlpha,OneMinusSrcAlpha,One}public enum CullMode {Off}public enum CameraEvent {AfterForwardAlpha}
@@ -32,7 +35,7 @@ namespace UnityEngine.Rendering {
 }
 public class MainCamera {public static MainCamera instance=new MainCamera();public UnityEngine.Camera cam=new UnityEngine.Camera();}
 public class ZombieHealth {public bool isAlive=true;public float amount=100;}
-public class ZombieObject {public UnityEngine.Renderer meshRenderer=new UnityEngine.Renderer();}
+public class ZombieObject {public UnityEngine.Transform transform=new UnityEngine.Transform();public UnityEngine.Renderer meshRenderer=new UnityEngine.Renderer();}
 public class Zombie {public ZombieHealth health=new ZombieHealth();public ZombieObject obj=new ZombieObject();}
 public class ZombieLoader {public static ZombieLoader Instance=new ZombieLoader();public List<Zombie> zombies=new List<Zombie>();}
 class ChamsTests {
@@ -42,6 +45,8 @@ class ChamsTests {
         var z=new Zombie();ZombieLoader.Instance.zombies.Add(z);var material=z.obj.meshRenderer.originalMaterial;var camera=MainCamera.instance.cam;
         Check(ChamsBridge.Apply(1,0,0)=="","initialize chams");Check(camera.attached==1 && camera.buffer.draws==4,"two depth passes for each submesh");
         ChamsBridge.Apply(1,1,2);Check(camera.attached==1 && camera.buffer.draws==4,"reuse command buffer");Check(ReferenceEquals(material,z.obj.meshRenderer.originalMaterial),"never overwrites game material");
+        z.obj.transform.position=new UnityEngine.Vector3{z=201};ChamsBridge.Apply(1,0,0);Check(camera.buffer.draws==0,"chams respects shared range");
+        z.obj.transform.position=new UnityEngine.Vector3{z=20};ChamsBridge.Apply(1,0,0);Check(camera.buffer.draws==4,"chams within range");
         z.health.isAlive=false;ChamsBridge.Apply(1,1,2);Check(camera.buffer.draws==0,"dead bodies removed");
         var buffer=camera.buffer;ChamsBridge.Apply(0,0,0);Check(camera.removed==1 && buffer.released,"disable removes and disposes buffer");
         UnityEngine.Shader.available=false;Check(ChamsBridge.Apply(1,0,0).Contains("shader"),"missing shader reports unsupported");UnityEngine.Shader.available=true;
@@ -66,3 +71,6 @@ class ChamsTests {
         Console.WriteLine(checks+" chams lifecycle checks passed");
     }
 }
+
+public class PlayersController {public static PlayersController instance;public PlayerMain MyPlayer(){return null;}}
+public class PlayerMain {public UnityEngine.Transform transform=new UnityEngine.Transform();}

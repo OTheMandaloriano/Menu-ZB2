@@ -1083,7 +1083,16 @@ namespace Mono {
         // Ciclo 2 (spec VISUAL Â§4.2): worker respeita s_options.bZombieSkeleton
         // (menu VISUAL manda; ReadLayout nao decide mais sozinho). Aliados usam
         // a mesma flag por enquanto (item 15 define a separacao).
-        if (!s_options.bZombieSkeleton) { out.skN = 0; return; }
+        if (!s_options.bZombieSkeleton) {
+            out.skN=0;
+            if(s_options.bZombieHeadDot){
+                Vec3 world,screen;void* eye=ReadP(zo,Off::ZO_eye);
+                if(eye && GetPos(eye,world) && W2S(cam,world,screen) && Sane2(screen.x,screen.y)){
+                    out.skX[SK_HEAD]=screen.x;out.skY[SK_HEAD]=screen.y;out.skV[SK_HEAD]=true;
+                }
+            }
+            return;
+        }
         void* arr = ReadP(zo, Off::ZO_armature);
         if (!arr) { out.skN = 0; return; }
         long long len = 0;
@@ -1415,13 +1424,13 @@ namespace Mono {
             for (int k = 0; k < 8; ++k) { tmpEn.pv[k] = false; tmpEn.px[k] = tmpEn.py[k] = 0; }
             tmpEn.has3d = false;
             // Box 3D real: AABB de mundo do corpo (sem hardcode de tamanho).
-            if (s_options.iZombieBox == 1 && mGetBounds) {
+            if ((s_options.iZombieBox == 1 || tmpEn.isBoss) && mGetBounds) {
                 void* mesh = ReadP(zo, Off::ZO_mesh);
                 // NOTA: sem filtro Renderer.enabled aqui - o LOD desliga renderers
                 // longe e filtrar sumiria com zumbis distantes. Spawn sem mesh cai
                 // no bounds invalido (extents 0/NaN rejeitado no GetBounds).
                 Bnd bb;
-                if (mesh && GetBounds(mesh, bb)) {
+                if ((tmpEn.isBoss && ReadManagedRigBounds(zo,bb)) || (mesh && GetBounds(mesh, bb))) {
                     if (!Fin(bb.center.x) || !Fin(bb.center.y) || !Fin(bb.center.z)) { s_ghostBad++; return; } // Fix C
                     float gl = bb.center.x * bb.center.x + bb.center.y * bb.center.y + bb.center.z * bb.center.z;
                     if (gl > 10000.0f * 10000.0f) { s_ghostBad++; return; }
@@ -1725,9 +1734,9 @@ namespace Mono {
     static void ApplyVisuals(bool ready) {
         UpdatePyres(ready);
         if(!s_chamsApply)return;
-        int enabled=ready && s_options.bChams?1:0;
-        int silhouette=ready && s_options.bSilhouette?1:0;
-        void* args[]={&enabled,&s_options.chamsVisible,&s_options.chamsHidden,&silhouette};MonoObject* exception=nullptr;
+        int enabled=ready && s_options.bZombieEsp && s_options.bChams?1:0;
+        int silhouette=ready && s_options.bZombieEsp && s_options.bSilhouette?1:0;
+        void* args[]={&enabled,&s_options.chamsVisible,&s_options.chamsHidden,&silhouette,&s_options.fEspDistance};MonoObject* exception=nullptr;
         auto message=pInvoke(s_chamsApply,nullptr,args,&exception);
         s.visualStatus[0]=0;
         if(message && !exception){char* text=pStrUtf8(message);if(text){strncpy_s(s.visualStatus,text,_TRUNCATE);pFree(text);}}

@@ -54,7 +54,7 @@ namespace Zb2Menu {
             radius=Mathf.Clamp(radius,10,300);
             if(targetMode<0 || targetMode>2)targetMode=0;
             Prune(current);
-            LoadOneCaptured(current,targetMode);
+            LoadOneCaptured(current,targetMode,player.transform.position,radius);
             if(targetMode!=1)LoadOneBoss(current);
             Vector3 origin=player.transform.position;
             Vector3 forward=player.cam.CameraTransform.forward;forward.y=0;
@@ -159,10 +159,10 @@ namespace Zb2Menu {
             foreach(var key in staleIds)map.Remove(key);
         }
         static float FiniteDistance(float value,float fallback,float min,float max){return float.IsNaN(value)||float.IsInfinity(value)?fallback:Mathf.Clamp(value,min,max);}
-        static void LoadOneCaptured(ZombieLoader current,int targetMode) {
+        static void LoadOneCaptured(ZombieLoader current,int targetMode,Vector3 origin,float radius) {
             int id=-1;
-            foreach(var z in current.unloadedZombies)if(z!=null && cohort.Contains(z.identity.id) && !requestedBosses.Contains(z.identity.id) && (targetMode==0 || z.identity.IsBoss==(targetMode==2))){id=z.identity.id;break;}
-            if(id<0)foreach(var z in current.zombieProps)if(z!=null && cohort.Contains(z.identity.id) && !requestedBosses.Contains(z.identity.id) && (targetMode==0 || z.identity.IsBoss==(targetMode==2))){id=z.identity.id;break;}
+            foreach(var z in current.unloadedZombies)if(z!=null && (cohort.Contains(z.identity.id) || Vector3.Distance(origin,z.transform.position)<=radius) && !requestedBosses.Contains(z.identity.id) && (targetMode==0 || z.identity.IsBoss==(targetMode==2))){id=z.identity.id;break;}
+            if(id<0)foreach(var z in current.zombieProps)if(z!=null && (cohort.Contains(z.identity.id) || Vector3.Distance(origin,z.transform.position)<=radius) && !requestedBosses.Contains(z.identity.id) && (targetMode==0 || z.identity.IsBoss==(targetMode==2))){id=z.identity.id;break;}
             if(id>=0){requestedBosses.Add(id);current.ForceLoadRealZombie(id);}
         }
         static void LoadOneBoss(ZombieLoader current) {

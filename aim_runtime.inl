@@ -31,6 +31,8 @@ static Aim::Policy AimPolicy() {
     policy.fullCircle = s_options.b360Mode;
     return policy;
 }
+static void* ReadManagedRigBone(void* zo,int selection);
+static bool ReadManagedRigBounds(void* zo,Bnd& bounds);
 static bool ReadAimBone(void* zo, Aim::Point& point, std::uintptr_t& boneIdentity) {
     auto eyeReference=[&]() {
         void* eye=ReadP(zo,Off::ZO_eye);Vec3 world;
@@ -41,12 +43,15 @@ static bool ReadAimBone(void* zo, Aim::Point& point, std::uintptr_t& boneIdentit
     static const char* names[] = { "head", "neck", "sp2", "hl" };
     const int selection = s_options.iAimBone >= 0 && s_options.iAimBone < 4 ? s_options.iAimBone : 0;
     void* array = ReadP(zo, Off::ZO_armature);
-    if (!array) return eyeReference();
+    if (!array) {void* bone=ReadManagedRigBone(zo,selection);Vec3 world;if(!bone || !GetPos(bone,world) || !Fin(world.x) || !Fin(world.y) || !Fin(world.z))return false;point={world.x,world.y,world.z};boneIdentity=reinterpret_cast<std::uintptr_t>(bone);return true;}
     long long count = 0;
     __try { memcpy(&count, (char*)array + Off::A_len, sizeof(count)); }
     __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
-    if (selection==0 && count!=19 && eyeReference())return true;
-    if (count <= 0 || count > 64) return eyeReference();
+    if(count!=19){
+        void* bone=ReadManagedRigBone(zo,selection);Vec3 world;
+        if(!bone || !GetPos(bone,world) || !Fin(world.x) || !Fin(world.y) || !Fin(world.z))return false;
+        point={world.x,world.y,world.z};boneIdentity=reinterpret_cast<std::uintptr_t>(bone);return true;
+    }
     for (int i = 0; i < count; ++i) {
         const int index = count == 19 ? kBoneIdx[joints[selection]] : i;
         void* bone = ReadP(array, Off::A_data + index * sizeof(void*));

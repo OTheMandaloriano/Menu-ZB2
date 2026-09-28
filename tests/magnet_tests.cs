@@ -9,7 +9,7 @@ public class ZombieHealth {public bool isAlive=true;public float amount=100;}
 public class ZombieDoll {}
 public class ZombieObject {public Zombie GetZombie;public Transform zombieFootRef,zombieEyeRef;public Rigidbody body=new Rigidbody();public Animator animator=new Animator();public Transform transform=new Transform();}
 public enum ZombieState {Aware,Spawning,Transition}
-public class Zombie {public ZombieState state,targetState;public int updates;[MethodImpl(MethodImplOptions.NoInlining)]public void UpdateStateMachine(int index){updates++;}[MethodImpl(MethodImplOptions.NoInlining)]public void UpdatePhysicsAndAnimation(){updates++;}[MethodImpl(MethodImplOptions.NoInlining)]public void UpdateBossBehaviour(){updates++;}public ZombieIdentity identity;public ZombieHealth health=new ZombieHealth();public ZombieObject obj=new ZombieObject();public int calls;public void TeleportTo(Vector3 p,Quaternion r){obj.transform.position=p;calls++;}}
+public class Zombie {public Transform transform {get{return obj.transform;}}public ZombieState state,targetState;public int updates;[MethodImpl(MethodImplOptions.NoInlining)]public void UpdateStateMachine(int index){updates++;}[MethodImpl(MethodImplOptions.NoInlining)]public void UpdatePhysicsAndAnimation(){updates++;}[MethodImpl(MethodImplOptions.NoInlining)]public void UpdateBossBehaviour(){updates++;}public ZombieIdentity identity;public ZombieHealth health=new ZombieHealth();public ZombieObject obj=new ZombieObject();public int calls;public void TeleportTo(Vector3 p,Quaternion r){obj.transform.position=p;calls++;}}
 public class ZombieLoader {public static ZombieLoader Instance=new ZombieLoader();public List<Zombie> zombies=new List<Zombie>();public List<Zombie> unloadedZombies=new List<Zombie>();public List<Zombie> zombieProps=new List<Zombie>();public void ForceLoadRealZombie(int id){var z=unloadedZombies.Find(v=>v.identity.id==id);if(z!=null){unloadedZombies.Remove(z);zombies.Add(z);}}}
 class MagnetTests {
     static int checks;
@@ -104,6 +104,11 @@ class MagnetTests {
         MagnetBridge.Apply(p,false,true,30);ZombieLoader.Instance.zombies.Remove(carried);ZombieLoader.Instance.unloadedZombies.Add(carried);p.transform.position=new Vector3(0,0,200);p.cam.CameraTransform.position=new Vector3(0,3,210);
         Time.unscaledTime=51;MagnetBridge.Apply(p,true,true,30,1,2.5f,8,false,5);
         Check(carried.calls>prior && carried.obj.transform.position.z>200,"reactivation at B recalls previous cohort outside capture radius");
+        MagnetBridge.Reset();
+        MagnetBridge.Reset();ZombieLoader.Instance=new ZombieLoader();p.transform.position=new Vector3();
+        var dormant=new Zombie{identity=new ZombieIdentity{id=700}};dormant.obj.transform.position=new Vector3(0,0,70);ZombieLoader.Instance.unloadedZombies.Add(dormant);
+        Time.unscaledTime=60;MagnetBridge.Apply(p,true,true,60,1);Check(dormant.calls==0,"dormant enemy beyond radius not promoted");
+        Time.unscaledTime=61;MagnetBridge.Apply(p,true,true,300,1);Check(dormant.calls==1,"ordinary dormant enemy inside configured radius promoted and gathered");
         MagnetBridge.Reset();
         harmony.UnpatchAll("magnet.freeze.tests");
         Console.WriteLine(checks+" magnet checks passed");

@@ -83,5 +83,8 @@ int main(){
     Check(Frame()>0,"FOV circle no longer requires legacy limit checkbox");
     Config::b360Mode=true;Check(Frame()==0,"360 does not draw a misleading restricted area");
     Config::colFov[0]=.25f;GUI::SaveConfig("fov-color-test");Config::colFov[0]=1;GUI::LoadConfig("fov-color-test");Check(Config::colFov[0]==.25f,"FOV color persists");
+    Config::bAimbot=Config::bDrawFov=false;Config::bZombieEsp=true;Config::bZombieBoxShow=Config::bZombieName=Config::bZombieDist=Config::bZombieHp=Config::bZombiePct=Config::bZombieSkeleton=Config::bZombieSnap=false;
+    Config::bZombieHeadDot=true;Config::fEspDistance=500;Mono::entry.onScreen=true;Mono::entry.dist=10;Mono::entry.skN=0;Mono::entry.skV[Mono::SK_HEAD]=true;Mono::entry.skX[Mono::SK_HEAD]=400;Mono::entry.skY[Mono::SK_HEAD]=400;
+    Check(Frame()>0,"head dot independent from skeleton count");Config::bZombieHeadDot=false;Check(Frame()==0,"head dot disable independent");
     ImGui::DestroyContext();std::printf("PASS: %d real ImGui overlay checks\n",checks);
 }

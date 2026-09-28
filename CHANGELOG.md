@@ -4,6 +4,11 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Magnet promove zumbis comuns descarregados dentro do raio, além do grupo anterior e bosses.
+- Chams/silhueta ficam no grupo ESP de zumbis, com master e distância compartilhados.
+- Ponto de cabeça funciona sem esqueleto; bosses usam envelope do modelo também em caixas 2D/cantos.
+- Rigs não padrão resolvem alvos separadamente, sem substituir pescoço/peito/pelve por olhos.
+
 - Grupo anterior do Magnet pode ser recolhido no novo ponto, mesmo fora do raio de captura; retenção fixa anterior é liberada.
 - NoClip permite capturar ponto 3D também no destino pela mira.
 - Fast Knife atua na velocidade da animação local de ataque e restaura ao sair dela.
