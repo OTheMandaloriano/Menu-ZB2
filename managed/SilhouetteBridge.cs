@@ -42,7 +42,6 @@ namespace Zb2Menu {
                 if (width<1 || height<1) { Clear(); return "Silhueta: camera sem tamanho"; }
                 if (camera!=next || mask==null || mask.width!=width || mask.height!=height) Clear();
                 if (commands==null) Initialize(next,width,height);
-                RefreshCommands();
                 Failure="";return "";
             } catch (Exception error) { Clear(); Failure="Silhueta: "+error.GetType().Name+" ("+error.Message+")";return Failure; }
         }

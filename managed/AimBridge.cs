@@ -123,7 +123,10 @@ namespace Zb2Menu {
         static bool FirstHit(Request state, Vector3 from, Vector3 direction, float distance, out Collider collider) {
             collider = null;
             if (hits == null) hits = new RaycastHit[64];
-            int count = Physics.RaycastNonAlloc(from, direction, hits, distance, ~0, QueryTriggerInteraction.Ignore);
+            int mask=state.Player.arms==null?~0:(int)state.Player.arms.shotLayerMask;
+            int count = Physics.RaycastNonAlloc(from, direction, hits, distance, mask, QueryTriggerInteraction.Ignore);
+            if(count==hits.Length && hits.Length<1024){hits=new RaycastHit[hits.Length==64?256:1024];count=Physics.RaycastNonAlloc(from,direction,hits,distance,mask,QueryTriggerInteraction.Ignore);}
+            if(count==hits.Length && hits.Length<1024){hits=new RaycastHit[1024];count=Physics.RaycastNonAlloc(from,direction,hits,distance,mask,QueryTriggerInteraction.Ignore);}
             if (count == hits.Length) return false;
             float nearest = float.PositiveInfinity;
             for (int i=0; i<count; ++i) {
@@ -147,7 +150,7 @@ namespace Zb2Menu {
             if (float.IsNaN(distance) || float.IsInfinity(distance) || distance < .01f || distance > state.Range) return false;
             Collider collider;
             return FirstHit(state, from, delta/distance, distance, out collider) &&
-                (collider == null || Belongs(collider.transform, state.Target.obj.transform));
+                (collider == null || Belongs(collider.transform, state.Target.obj.transform) || MagnetFreeze.ShareAnchor(state.Target,collider));
         }
         static bool SilentReady(Request state, ref ShotPath path) {
             if (!Alive(state.Target) || state.Bone == null || !Belongs(state.Bone, state.Target.obj.transform)) return false;

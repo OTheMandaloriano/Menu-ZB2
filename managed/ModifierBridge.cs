@@ -66,7 +66,7 @@ namespace Zb2Menu {
                 values.Begin();
                 GodModeBridge.Apply(player,(flags&65536)!=0);
                 bool alive=player!=null && player.HasLocalControl && player.healthFast>0;
-                MagnetBridge.Apply(alive?player:null,alive && (flags&8192)!=0,(flags&4096)==0,magnetRadius,magnetTargets,magnetFront,magnetBoss,(flags&16384)!=0,destinationMode);
+                MagnetBridge.Apply(alive?player:null,alive && (flags&8192)!=0,(flags&4096)==0,magnetRadius,magnetTargets,magnetFront,magnetBoss,(flags&16384)!=0,destinationMode,alive && (flags&2048)!=0 && NoClipBridge.Active);
                 LootMagnetBridge.Apply(alive?player:null,alive && (flags&32768)!=0,(flags&4096)==0,lootRadius,lootCategory,filter0,filter1,filter2,filter3,wholeMap!=0);
                 SlotsBridge.Apply(alive?player:null,alive && (flags&1024)!=0);
                 float normalWalk=alive && player.movement!=null ? values.ReadOriginal(player.movement,"walkSpeed",()=>player.movement.walkSpeed) : 0;

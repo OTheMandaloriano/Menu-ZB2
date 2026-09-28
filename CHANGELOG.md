@@ -4,6 +4,12 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Magnet compensa referência dos pés, ignora atores/cadáveres no chão e recolhe distribuídos que se afastam.
+- NoClip alinha os atraídos pela referência dos olhos em frente à câmera, com bloqueio por obstáculos.
+- Limita trabalho por passagem, reutiliza chão/cápsula do grupo e evita escritas de pose redundantes.
+- Consulta de mira usa a máscara do disparo, expande o buffer em hordas e trata alvos retidos na mesma âncora.
+- FOV/360 voltam a checkboxes mutuamente exclusivos; cor e Mostrar círculo permanecem separados.
+
 - Preparação de colisões dos braseiros usa bounds geométricos de meshes/boxes, não apenas o pivot do LOD.
 - Teleporte verifica 96 candidatos ao redor da interação e só aceita chegada a menos de 1,45 m, voltada ao braseiro.
 - Diagnóstico informa LODs preparados, máscara, ausência de chão, colisão e alcance.

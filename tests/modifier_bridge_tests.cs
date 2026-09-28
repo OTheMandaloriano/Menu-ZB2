@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Zb2Menu;
 namespace Zb2Menu {
  public static class LootMagnetBridge {public static string Status="";public static void Apply(PlayerMain p,bool a,bool b,float c,int d,int e,int f,int g,int h,bool all){}}
-    public static class MagnetBridge {public static string Status="";public static bool Active=false;public static void Reset(){}public static void Apply(PlayerMain p,bool e,bool i,float r,int t,float front,float boss,bool freeze,int mode){}}
+    public static class MagnetBridge {public static string Status="";public static bool Active=false;public static void Reset(){}public static void Apply(PlayerMain p,bool e,bool i,float r,int t,float front,float boss,bool freeze,int mode,bool noClip){}}
     public static class SlotsBridge {public static string Status="";public static bool Pending=false;public static bool Restore(){return true;}public static void Apply(PlayerMain p,bool enabled){}}
     public static class NoClipBridge {public static string Status="";public static bool Active=false;public static void Restore(){}public static float LastWalk;public static void Apply(PlayerMain p,bool e,float v,bool input,float walk){LastWalk=walk;}}
 }

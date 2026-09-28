@@ -7,9 +7,14 @@ namespace Zb2Menu {
         sealed class Saved {public bool Kinematic,RootMotion;public Vector3 Anchor;public Quaternion Rotation;public float Animation;public Rigidbody Body;public Animator Animator;}
         static readonly Dictionary<Zombie,Saved> owned=new Dictionary<Zombie,Saved>();
         static int heartbeatFrame;
+        static bool physicsDirty;
+        public static void MarkMoved(){physicsDirty=true;}
+        public static void FlushPhysics(){if(physicsDirty){Physics.SyncTransforms();physicsDirty=false;}}
+        static readonly List<Zombie> pending=new List<Zombie>();
         public static void Pulse(){
             heartbeatFrame=Time.frameCount;
-            foreach(var zombie in new List<Zombie>(owned.Keys)) {
+            pending.Clear();pending.AddRange(owned.Keys);
+            foreach(var zombie in pending) {
                 if(zombie.obj==null || zombie.health==null || !zombie.health.isAlive || zombie.health.amount<=0 || IsSpawning(zombie)){Release(zombie);continue;}
                 var saved=owned[zombie];
                 if(saved.Body!=zombie.obj.body || saved.Animator!=zombie.obj.animator){var point=saved.Anchor;Release(zombie);Hold(zombie,point);continue;}
@@ -44,9 +49,15 @@ namespace Zb2Menu {
             saved.Anchor=point;Pin(zombie,saved);
         }
         static void Pin(Zombie zombie,Saved saved) {
-            if(saved.Body!=null){if(!saved.Body.isKinematic)saved.Body.linearVelocity=Vector3.zero;saved.Body.isKinematic=true;}
-            if(saved.Animator!=null){saved.Animator.applyRootMotion=false;saved.Animator.speed=0;}
-            zombie.obj.transform.position=saved.Anchor;zombie.obj.transform.rotation=saved.Rotation;
+            if(saved.Body!=null){if(!saved.Body.isKinematic)saved.Body.linearVelocity=Vector3.zero;if(!saved.Body.isKinematic)saved.Body.isKinematic=true;}
+            if(saved.Animator!=null){if(saved.Animator.applyRootMotion)saved.Animator.applyRootMotion=false;if(saved.Animator.speed!=0)saved.Animator.speed=0;}
+            if(Vector3.Distance(zombie.obj.transform.position,saved.Anchor)>.001f){zombie.obj.transform.position=saved.Anchor;physicsDirty=true;}
+            if(!zombie.obj.transform.rotation.Equals(saved.Rotation)){zombie.obj.transform.rotation=saved.Rotation;physicsDirty=true;}
+        }
+        public static bool ShareAnchor(Zombie target,Collider collider) {
+            var other=collider==null?null:collider.GetComponentInParent<ZombieObject>();
+            Saved a,b;
+            return other!=null && other.GetZombie!=null && other.GetZombie.health!=null && other.GetZombie.health.isAlive && other.GetZombie.health.amount>0 && owned.TryGetValue(target,out a) && owned.TryGetValue(other.GetZombie,out b) && Vector3.Distance(a.Anchor,b.Anchor)<.1f;
         }
         public static bool IsSpawning(Zombie zombie){return zombie!=null && (zombie.state==ZombieState.Spawning || (zombie.state==ZombieState.Transition && zombie.targetState==ZombieState.Spawning));}
         public static void Release(Zombie zombie) {

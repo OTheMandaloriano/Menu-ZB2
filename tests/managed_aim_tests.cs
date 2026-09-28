@@ -6,7 +6,7 @@ using UnityEngine;
 namespace Zb2Menu {
     internal static class TestEnvironment { public static bool Focused = true; }
     internal static class MenuInputBridge {public static int flags;public static void Install(HarmonyLib.Harmony h){}public static void Update(int value){flags=value;}}
-    internal static class MagnetFreeze {public static void Install(HarmonyLib.Harmony h){}}
+    internal static class MagnetFreeze {public static bool ShareAnchor(Zombie z,UnityEngine.Collider c){return false;}public static void Install(HarmonyLib.Harmony h){}}
     internal static class NoClipBridge {public static void Install(HarmonyLib.Harmony h) {}}
     // Range/LOD has its own Harmony integration suite.
     internal static class RangeBridge { public static void Install(HarmonyLib.Harmony harmony) {} }
@@ -41,7 +41,7 @@ namespace UnityEngine {
             if(Fail) throw new InvalidOperationException("physics unavailable");
             if(Saturated) return hits.Length;
             int count=0;
-            foreach(var h in Results) if(h.distance<=distance) hits[count++]=h;
+            foreach(var h in Results) if(h.distance<=distance) {if(count==hits.Length)return count;hits[count++]=h;}
             return count;
         }
     }
@@ -58,7 +58,7 @@ public class PlayerCamera { public Transform CameraTransform=new Transform(); }
 public class ZBMain {
     [MethodImpl(MethodImplOptions.NoInlining)] public void Update() { }
 }
-public class PlayerArms {
+public class PlayerArms {public int shotLayerMask=-1;
     public PhysicalGun EquippedGun = new PhysicalGun();
     public PlayerMain Owner;
     public ShotPath InputPath;
@@ -135,6 +135,8 @@ static class ManagedAimTests {
               "same ShotPath reaches simulation and original synchronization exactly once");
         Physics.Results=new[]{new RaycastHit{collider=enemy,distance=4},new RaycastHit{collider=wall,distance=2}};
         Publish(1);Fire();Check(gun.Last.convergingDirection.z==1,"nearest unsorted obstacle prevents redirect");
+        Physics.Results=new RaycastHit[100];for(int crowd=0;crowd<100;++crowd)Physics.Results[crowd]=new RaycastHit{collider=enemy,distance=4};
+        Publish(1);Fire();Check(gun.Last.convergingDirection.z==-1,"dense crowd retries a larger ray buffer without disabling visibility");
         Physics.Saturated=true;Publish(1);Fire();Check(gun.Last.convergingDirection.z==1,"saturated query prevents redirect");Physics.Saturated=false;
         Physics.Fail=true;Publish(1);Fire();Check(gun.Last.convergingDirection.z==1,"physics exception leaves original shot intact");Physics.Fail=false;
         Physics.Results=new[]{new RaycastHit{collider=enemy,distance=4}};

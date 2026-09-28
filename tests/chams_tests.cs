@@ -37,6 +37,7 @@ public class Zombie {public ZombieHealth health=new ZombieHealth();public Zombie
 public class ZombieLoader {public static ZombieLoader Instance=new ZombieLoader();public List<Zombie> zombies=new List<Zombie>();}
 class ChamsTests {
     static int checks;static void Check(bool b,string text){if(!b)throw new Exception(text);checks++;}
+    static string DrawSilhouette(int enabled){var result=SilhouetteBridge.Apply(enabled);if(UnityEngine.Camera.onPreRender!=null)UnityEngine.Camera.onPreRender(MainCamera.instance.cam);return result;}
     static void Main(){
         var z=new Zombie();ZombieLoader.Instance.zombies.Add(z);var material=z.obj.meshRenderer.originalMaterial;var camera=MainCamera.instance.cam;
         Check(ChamsBridge.Apply(1,0,0)=="","initialize chams");Check(camera.attached==1 && camera.buffer.draws==4,"two depth passes for each submesh");
@@ -49,19 +50,19 @@ class ChamsTests {
         UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline=null;
         int publications=0; SilhouetteBridge.PublishMask=ptr=>{publications++;return 1;};
         z.health.isAlive=true;
-        Check(SilhouetteBridge.Apply(1)=="","silhouette initialize");
+        Check(DrawSilhouette(1)=="","silhouette initialize");
         Check(camera.buffer.draws==4 && !camera.buffer.depthCleared,"silhouette does not clear scene depth");
         Check(publications==1,"publish only on allocation");
-        SilhouetteBridge.Apply(1);Check(publications==1,"no native pointer synchronization every frame");
-        camera.pixelWidth=1920;SilhouetteBridge.Apply(1);Check(publications==3,"resize releases then republishes");
-        z.health.isAlive=false;SilhouetteBridge.Apply(1);Check(camera.buffer.draws==0,"silhouette drops dead actors");
-        SilhouetteBridge.Apply(0);Check(camera.buffer==null && publications==4,"disable detaches and releases mask");
+        DrawSilhouette(1);Check(publications==1,"no native pointer synchronization every frame");
+        camera.pixelWidth=1920;DrawSilhouette(1);Check(publications==3,"resize releases then republishes");
+        z.health.isAlive=false;DrawSilhouette(1);Check(camera.buffer.draws==0,"silhouette drops dead actors");
+        DrawSilhouette(0);Check(camera.buffer==null && publications==4,"disable detaches and releases mask");
         camera.allowMSAA=true;UnityEngine.QualitySettings.antiAliasing=4;
-        Check(SilhouetteBridge.Apply(1).Contains("MSAA") && camera.buffer==null,"reject mismatched multisample target");
+        Check(DrawSilhouette(1).Contains("MSAA") && camera.buffer==null,"reject mismatched multisample target");
         camera.allowMSAA=false;
         var nextCamera=new UnityEngine.Camera();MainCamera.instance.cam=nextCamera;
-        SilhouetteBridge.Apply(1);Check(nextCamera.buffer!=null,"new camera receives buffer");
-        MainCamera.instance.cam=null;SilhouetteBridge.Apply(1);Check(nextCamera.buffer==null,"scene exit releases buffer");
+        DrawSilhouette(1);Check(nextCamera.buffer!=null,"new camera receives buffer");
+        MainCamera.instance.cam=null;DrawSilhouette(1);Check(nextCamera.buffer==null,"scene exit releases buffer");
         Console.WriteLine(checks+" chams lifecycle checks passed");
     }
 }

@@ -1214,9 +1214,9 @@ namespace GUI {
                 ImGui::Checkbox("Auto Fire", &Config::bAutoFire); Tip("Ativa a mira e solicita disparo quando alinhado. Com Silent, redireciona sem virar. Respeita municao e cooldown.");
                 ImGui::Checkbox("Triggerbot", &Config::bTriggerbot); Tip("Atira quando o raio central acerta um inimigo vivo. Sozinho nao move a camera nem redireciona o tiro.");
                 ImGui::Separator();
-                int aimArea=Config::b360Mode?1:0;
-                const char* aimAreas[]={"Circulo FOV","360 graus"};
-                if(ImGui::Combo("Area de mira",&aimArea,aimAreas,2))Config::b360Mode=aimArea==1;
+                bool fovMode=!Config::b360Mode;
+                if(ImGui::Checkbox("FOV",&fovMode))Config::b360Mode=!fovMode;
+                if(ImGui::Checkbox("360 graus",&Config::b360Mode))fovMode=!Config::b360Mode;
                 Config::bLimitFov=!Config::b360Mode;
                 ImGui::BeginDisabled(Config::b360Mode);
                 ImGui::Checkbox("Mostrar circulo",&Config::bDrawFov);
@@ -1269,7 +1269,7 @@ namespace GUI {
                 static const char* kSnapFrom[] = { "Base", "Topo", "Centro" };
                 if (ImGui::BeginTable("visual_cols", 2)) {
                     ImGui::TableNextColumn();
-                    ImGui::TextDisabled("Revisao BRAZIER-FIX-5");
+                    ImGui::TextDisabled("Revisao MAGNET-AUDIT-6");
                     Section("Zumbis");
                     if(Mono::Get().coopMode==2)ImGui::TextWrapped("Cliente: HP de zumbis comuns nao e sincronizado; barras numericas ficam ocultas.");
                     ImGui::Checkbox("Ativo##Z", &Config::bZombieEsp); Tip("Ativa o desenho do ESP. A coleta da mira e independente.");

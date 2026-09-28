@@ -6,7 +6,8 @@ using System.Runtime.CompilerServices;
 public class MultiplayerController {public static MultiplayerController instance=new MultiplayerController();public bool server=true;public bool IsServer(){return server;}}
 public struct ZombieIdentity {public int id;public bool IsBoss;}
 public class ZombieHealth {public bool isAlive=true;public float amount=100;}
-public class ZombieObject {public Rigidbody body=new Rigidbody();public Animator animator=new Animator();public Transform transform=new Transform();}
+public class ZombieDoll {}
+public class ZombieObject {public Zombie GetZombie;public Transform zombieFootRef,zombieEyeRef;public Rigidbody body=new Rigidbody();public Animator animator=new Animator();public Transform transform=new Transform();}
 public enum ZombieState {Aware,Spawning,Transition}
 public class Zombie {public ZombieState state,targetState;public int updates;[MethodImpl(MethodImplOptions.NoInlining)]public void UpdateStateMachine(int index){updates++;}[MethodImpl(MethodImplOptions.NoInlining)]public void UpdatePhysicsAndAnimation(){updates++;}[MethodImpl(MethodImplOptions.NoInlining)]public void UpdateBossBehaviour(){updates++;}public ZombieIdentity identity;public ZombieHealth health=new ZombieHealth();public ZombieObject obj=new ZombieObject();public int calls;public void TeleportTo(Vector3 p,Quaternion r){obj.transform.position=p;calls++;}}
 public class ZombieLoader {public static ZombieLoader Instance=new ZombieLoader();public List<Zombie> zombies=new List<Zombie>();public List<Zombie> unloadedZombies=new List<Zombie>();public List<Zombie> zombieProps=new List<Zombie>();public void ForceLoadRealZombie(int id){var z=unloadedZombies.Find(v=>v.identity.id==id);if(z!=null){unloadedZombies.Remove(z);zombies.Add(z);}}}
@@ -21,12 +22,12 @@ class MagnetTests {
         MagnetBridge.Apply(p,true,true,50);Check(Calls()==4,"four moves per batch");MagnetBridge.Apply(p,true,true,50);Check(Calls()==4,"throttle");
         Time.unscaledTime=1;MagnetBridge.Apply(p,true,true,50);Check(Calls()==8,"next batch");Time.unscaledTime=2;MagnetBridge.Apply(p,true,true,50);Check(Calls()==10,"loaded eligible enemies gathered");
         Time.unscaledTime=3;MagnetBridge.Apply(p,true,true,50);Check(Calls()==10,"no repeated teleports");
-        ZombieLoader.Instance.zombies[0].obj.transform.position=new Vector3(0,0,40);Time.unscaledTime=3.2f;MagnetBridge.Apply(p,true,true,50);Check(Calls()==10,"AI movement does not cause repeated teleport loop");
-        p.transform.position=new Vector3(0,0,10);Time.unscaledTime=3.5f;MagnetBridge.Apply(p,true,true,50);Check(Calls()==14,"anchor follows moving player continuously");
+        ZombieLoader.Instance.zombies[0].obj.transform.position=new Vector3(0,0,40);Time.unscaledTime=3.2f;MagnetBridge.Apply(p,true,true,50);Check(Calls()==11,"distributed mode reacquires an enemy that walked away");
+        p.transform.position=new Vector3(0,0,10);Time.unscaledTime=3.5f;MagnetBridge.Apply(p,true,true,50);Check(Calls()==15,"anchor follows moving player continuously");
         MagnetBridge.Apply(p,false,true,50);Check(!MagnetBridge.Active,"disable clears activation");
-        Physics.ground=false;Time.unscaledTime=4;MagnetBridge.Apply(p,true,true,50);Check(Calls()==14,"no unsafe destination without ground");Physics.ground=true;
-        Physics.blocked=true;Time.unscaledTime=5;MagnetBridge.Apply(p,true,true,50);Check(Calls()==14,"occupied destination rejected");Physics.blocked=false;
-        p.healthFast=0;Time.unscaledTime=6;MagnetBridge.Apply(p,true,true,50);Check(!MagnetBridge.Active && Calls()==14,"dead player clears magnet");
+        Physics.ground=false;Time.unscaledTime=4;MagnetBridge.Apply(p,true,true,50);Check(Calls()==15,"no unsafe destination without ground");Physics.ground=true;
+        Physics.blocked=true;Time.unscaledTime=5;MagnetBridge.Apply(p,true,true,50);Check(Calls()==15,"occupied destination rejected");Physics.blocked=false;
+        p.healthFast=0;Time.unscaledTime=6;MagnetBridge.Apply(p,true,true,50);Check(!MagnetBridge.Active && Calls()==15,"dead player clears magnet");
         p.healthFast=100;ZombieLoader.Instance=new ZombieLoader();var boss=new Zombie{identity=new ZombieIdentity{id=100,IsBoss=true}};boss.obj.transform.position=new Vector3(0,0,900);ZombieLoader.Instance.unloadedZombies.Add(boss);
         var normal=new Zombie{identity=new ZombieIdentity{id=101}};normal.obj.transform.position=new Vector3(0,0,900);ZombieLoader.Instance.zombies.Add(normal);
         Time.unscaledTime=7;MagnetBridge.Apply(p,true,true,10,2);Check(boss.calls==1 && normal.calls==0,"boss only loads distant existing boss and ignores source radius");
@@ -74,6 +75,9 @@ class MagnetTests {
         MagnetBridge.Apply(p,true,true,100,1,2.5f,8,false,4);
         Check(Vector3.Distance(one.obj.transform.position,two.obj.transform.position)<.001f,"stack mode uses one exact destination");
         Check(one.obj.body.isKinematic && two.obj.body.isKinematic,"stack holds bodies without disabling hit colliders");
+        one.obj.GetZombie=one;two.obj.GetZombie=two;
+        Check(MagnetFreeze.ShareAnchor(one,new Collider{zombie=two.obj}),"overlapping retained group can expose the common aim point");
+        Check(!MagnetFreeze.ShareAnchor(one,new Collider()),"wall does not count as shared magnet group");
         float previousZ=one.obj.transform.position.z;p.transform.position=new Vector3(0,0,2);Time.unscaledTime=21;
         MagnetBridge.Apply(p,true,true,100,1,2.5f,8,false,4);
         Check(one.obj.transform.position.z>previousZ && Vector3.Distance(one.obj.transform.position,two.obj.transform.position)<.001f,"stack follows while retaining common point");
@@ -83,6 +87,17 @@ class MagnetTests {
         Time.unscaledTime+=3;Time.frameCount++;one.UpdateStateMachine(0);Check(one.obj.body.isKinematic,"single stalled frame does not release an overlapping crowd");
         Time.frameCount+=61;one.UpdateStateMachine(0);Check(!one.obj.body.isKinematic,"missing heartbeat across many frames releases ownership");
         MagnetBridge.Reset();Check(!one.obj.body.isKinematic && !two.obj.body.isKinematic,"stack releases physics on disable");
+        ZombieLoader.Instance=new ZombieLoader();var probe=new Zombie{identity=new ZombieIdentity{id=400}};
+        probe.obj.transform.position=new Vector3(0,2,30);probe.obj.zombieFootRef=new Transform{position=new Vector3(0,0,30)};
+        ZombieLoader.Instance.zombies.Add(probe);p.transform.position=new Vector3();Time.unscaledTime=40;
+        Physics.RayResults=new[]{new RaycastHit{point=new Vector3(0,2,2.5f),normal=Vector3.up,distance=1,collider=new Collider{zombie=new ZombieDoll()}},new RaycastHit{point=new Vector3(0,0,2.5f),normal=Vector3.up,distance=3,collider=new Collider()}};
+        MagnetBridge.Apply(p,true,true,100,1,2.5f,8,false,4);
+        Check(Math.Abs(probe.obj.transform.position.y-2.08f)<.001f,"uses real foot offset and rejects corpse as ground");
+        MagnetBridge.Reset();Physics.RayResults=null;Physics.ground=false;probe.obj.transform.position=new Vector3(0,0,30);probe.obj.zombieEyeRef=new Transform{position=new Vector3(0,1.5f,30)};
+        p.cam.CameraTransform.position=new Vector3(0,8,0);Time.unscaledTime=41;
+        MagnetBridge.Apply(p,true,true,100,1,2.5f,8,false,4,true);
+        Check(Math.Abs(probe.obj.transform.position.y-6.5f)<.001f && probe.obj.body.isKinematic,"noclip follow aligns eye to camera point without dropping to floor");
+        MagnetBridge.Reset();Physics.ground=true;
         harmony.UnpatchAll("magnet.freeze.tests");
         Console.WriteLine(checks+" magnet checks passed");
     }
