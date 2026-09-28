@@ -43,6 +43,7 @@ namespace Config {
     extern float fFovAngle;         // 1-360
     extern bool  b360Mode;
     extern bool  bDrawFov;
+    extern float colFov[4];
     extern float fEspDistance;      // 10-500m (VISUAL: ate onde o ESP desenha)
     extern float fAimDistance;      // 10-500m (PLAYER: ate onde o AIM mira)
     extern bool  bPrediction;

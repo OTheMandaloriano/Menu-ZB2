@@ -79,5 +79,9 @@ int main(){
     Config::bItemBox=true;Config::bPoiLine=true;Config::bPoiBox=false;Config::iItemLineFrom=2;
     GUI::SaveConfig("world-controls-test");Config::bItemBox=false;Config::bPoiLine=false;Config::iItemLineFrom=0;GUI::LoadConfig("world-controls-test");
     Check(Config::bItemBox && Config::bPoiLine && !Config::bPoiBox && Config::iItemLineFrom==2,"world controls persist independently");
+    Config::bItemEsp=false;Mono::worldCount=0;Config::bZombieEsp=false;Config::bAimbot=true;Config::bDrawFov=true;Config::b360Mode=false;Config::bLimitFov=false;
+    Check(Frame()>0,"FOV circle no longer requires legacy limit checkbox");
+    Config::b360Mode=true;Check(Frame()==0,"360 does not draw a misleading restricted area");
+    Config::colFov[0]=.25f;GUI::SaveConfig("fov-color-test");Config::colFov[0]=1;GUI::LoadConfig("fov-color-test");Check(Config::colFov[0]==.25f,"FOV color persists");
     ImGui::DestroyContext();std::printf("PASS: %d real ImGui overlay checks\n",checks);
 }

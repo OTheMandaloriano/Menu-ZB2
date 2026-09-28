@@ -1,5 +1,7 @@
 from pathlib import Path
 import os,subprocess,shutil
+import ctypes
+ctypes.windll.kernel32.SetErrorMode(3)
 r=Path(__file__).resolve().parents[1];out=r/'build/player-features-tests';out.mkdir(parents=True,exist_ok=True)
 shutil.copy2(r/'build/Release_x64/0Harmony.dll',out/'0Harmony.dll')
 csc=Path(os.environ['WINDIR'])/'Microsoft.NET/Framework64/v4.0.30319/csc.exe';exe=out/'features.exe'

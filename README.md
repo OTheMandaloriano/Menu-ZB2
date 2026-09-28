@@ -114,3 +114,5 @@ Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. 
 [God Mode e diagnóstico da silhueta](docs/GOD_MODE_E_SILHUETA.md)
 
 [Magnet sobreposto, braseiros e alinhamento da silhueta](docs/MAGNET_SIL_3.md)
+
+[Organização do menu e retenção do Magnet](docs/MENU_FIX_4.md)

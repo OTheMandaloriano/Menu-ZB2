@@ -58,6 +58,7 @@ namespace Config {
     float fFovAngle = 90.0f;
     bool  b360Mode = false;
     bool  bDrawFov = true;
+    float colFov[4]={.47f,.86f,1.f,.78f};
     float fEspDistance = 200.0f;
     float fAimDistance = 120.0f;
     bool  bPrediction = false;
@@ -693,7 +694,7 @@ namespace GUI {
         JB(bGodMode); JB(bInfStamina); JB(bInfItems); JB(bInfMoney); JB(bUnlockSlots); JB(bUnlockLoadout);
         JB(bAimbot); JI(iAimKey); JI(iAimMode); JB(bAutoAim); JB(bSilentAim); JB(bAutoFire);
         JB(bTriggerbot); JI(iAimBone); JI(iAimPriority); JF(fSmoothing);
-        JB(bLimitFov); JF(fFovAngle); JB(b360Mode); JB(bDrawFov); JF(fEspDistance); JF(fAimDistance);
+        JB(bLimitFov); JF(fFovAngle); JB(b360Mode); JB(bDrawFov); JV(colFov); JF(fEspDistance); JF(fAimDistance);
         JB(bPrediction); JF(fLagComp);
         JB(bNoRecoil); JB(bNoSpread); JB(bNoSway); JB(bTightAim); JB(bRapidFire); JF(fRapidMult); JB(bFastKnife); JF(fKnifeMult);
         JB(bInfAmmo); JB(bInstantReload); JB(bFullAuto); JB(bSaitama); JF(fNadeTime);
@@ -784,7 +785,7 @@ namespace GUI {
         LB(bGodMode); LB(bInfStamina); LB(bInfItems); LB(bInfMoney); LB(bUnlockSlots); LB(bUnlockLoadout);
         LB(bAimbot); LI(iAimKey); LI(iAimMode); LB(bAutoAim); LB(bSilentAim); LB(bAutoFire);
         LB(bTriggerbot); LI(iAimBone); LI(iAimPriority); LF(fSmoothing);
-        LB(bLimitFov); LF(fFovAngle); LB(b360Mode); LB(bDrawFov); LF(fEspDistance); LF(fAimDistance);
+        LB(bLimitFov); LF(fFovAngle); LB(b360Mode); LB(bDrawFov); LV(colFov); LF(fEspDistance); LF(fAimDistance);
         LB(bPrediction); LF(fLagComp);
         LB(bNoRecoil); LB(bNoSpread); LB(bNoSway); LB(bTightAim); LB(bRapidFire); LF(fRapidMult); LB(bFastKnife); LF(fKnifeMult);
         LB(bInfAmmo); LB(bInstantReload); LB(bFullAuto); LB(bSaitama); LF(fNadeTime);
@@ -1152,10 +1153,10 @@ namespace GUI {
             }
         }
         // Circulo do raio (wohax show_aim_radius): so com raio > 0.
-        if (Config::bDrawFov && (Config::bAimbot || Config::bAutoAim || Config::bAutoFire || Config::bSilentAim) && Config::bLimitFov && !Config::b360Mode && Config::fFovAngle > 0.0f) {
+        if (Config::bDrawFov && (Config::bAimbot || Config::bAutoAim || Config::bAutoFire || Config::bSilentAim) && !Config::b360Mode && Config::fFovAngle > 0.0f) {
             ImVec2 sc = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
             float r = Config::fFovAngle * 4.0f;
-            dl->AddCircle(sc, r, IM_COL32(120, 220, 255, 200), 64, 1.2f);
+            dl->AddCircle(sc, r, ImGui::GetColorU32(ImVec4(Config::colFov[0],Config::colFov[1],Config::colFov[2],Config::colFov[3])), 64, 1.2f);
         }
     }
 
@@ -1213,9 +1214,15 @@ namespace GUI {
                 ImGui::Checkbox("Auto Fire", &Config::bAutoFire); Tip("Ativa a mira e solicita disparo quando alinhado. Com Silent, redireciona sem virar. Respeita municao e cooldown.");
                 ImGui::Checkbox("Triggerbot", &Config::bTriggerbot); Tip("Atira quando o raio central acerta um inimigo vivo. Sozinho nao move a camera nem redireciona o tiro.");
                 ImGui::Separator();
-                ImGui::Checkbox("Limit Radius", &Config::bLimitFov); Tip("Limita a selecao ao circulo FOV. O modo 360 ignora esse limite de tela, mas respeita Aim Distance.");
-                ImGui::Checkbox("360 Mode", &Config::b360Mode); Tip("Seleciona alvos ao redor, inclusive atras. Respeita obstaculos e distancia. Um alvo por vez; prioridade Crosshair usa o menor angulo 3D.");
-                ImGui::Checkbox("Draw Radius", &Config::bDrawFov); Tip("Mostra o circulo FOV. Oculto em 360, pois a selecao inclui alvos fora da tela.");
+                int aimArea=Config::b360Mode?1:0;
+                const char* aimAreas[]={"Circulo FOV","360 graus"};
+                if(ImGui::Combo("Area de mira",&aimArea,aimAreas,2))Config::b360Mode=aimArea==1;
+                Config::bLimitFov=!Config::b360Mode;
+                ImGui::BeginDisabled(Config::b360Mode);
+                ImGui::Checkbox("Mostrar circulo",&Config::bDrawFov);
+                SwatchR("##FovColor",Config::colFov,"Cor do circulo de selecao.");
+                ImGui::EndDisabled();
+                Tip("FOV seleciona um alvo dentro do circulo. 360 inclui alvos fora da tela. Ambos respeitam distancia e visibilidade.");
                 ImGui::Separator();
                 ImGui::Text("Weapon Mods");
                 ImGui::Checkbox("No Recoil", &Config::bNoRecoil);
@@ -1262,7 +1269,7 @@ namespace GUI {
                 static const char* kSnapFrom[] = { "Base", "Topo", "Centro" };
                 if (ImGui::BeginTable("visual_cols", 2)) {
                     ImGui::TableNextColumn();
-                    ImGui::TextDisabled("Revisao MAGNET-SIL-3");
+                    ImGui::TextDisabled("Revisao MENU-FIX-4");
                     Section("Zumbis");
                     if(Mono::Get().coopMode==2)ImGui::TextWrapped("Cliente: HP de zumbis comuns nao e sincronizado; barras numericas ficam ocultas.");
                     ImGui::Checkbox("Ativo##Z", &Config::bZombieEsp); Tip("Ativa o desenho do ESP. A coleta da mira e independente.");
@@ -1376,8 +1383,8 @@ namespace GUI {
                         ImGui::Checkbox("Respawn", &Config::bPoiRespawn);
                         SwatchR("##PResp", Config::colPoiRespawn, "Respawn conhecido nesta partida.");
                         ImGui::Checkbox("Sepulturas", &Config::bPoiGraves);
-                        ImGui::TextDisabled("Jogadores: use Equipe");
-                        DrawPointFilters();
+
+
                         ImGui::SliderFloat("Raio pontos fixos", &Config::fPoiRadius, 10, 500, "%.0fm");
                         ImGui::Unindent();
                     }
@@ -1392,7 +1399,7 @@ namespace GUI {
             // ---- 3 MISC (sempre 3a aba) ----
             if (ImGui::BeginTabItem("MISC")) {
                 ImGui::Text("Sobrevivencia");
-                ImGui::Checkbox("God Mode (HP travado)", &Config::bGodMode); Tip("Trava HP local em 100.");
+                ImGui::Checkbox("God Mode", &Config::bGodMode); Tip("Bloqueia dano no jogador local e usa a vida maxima com perks.");
                 ImGui::Checkbox("Infinite Stamina", &Config::bInfStamina); Tip("Stamina no maximo (correr sem cansar).");
                 ImGui::Checkbox("Infinite Ammo (pente+reserva)", &Config::bInfAmmo); Tip("Pente no maxAmmo + reserva do tipo no stackMax.");
                 ImGui::Checkbox("Infinite Items (por categoria)", &Config::bInfItems); Tip("Tudo no teto: bala, granada, bandagem, madeira 999x.");

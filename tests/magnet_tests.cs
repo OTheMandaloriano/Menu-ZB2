@@ -38,7 +38,7 @@ class MagnetTests {
         normal.state=ZombieState.Transition;normal.targetState=ZombieState.Spawning;MagnetFreeze.Hold(normal);normal.UpdateStateMachine(0);Check(normal.updates==3 && normal.obj.animator.speed==1,"transition into spawn is never frozen");
         normal.state=normal.targetState=ZombieState.Aware;MagnetFreeze.Hold(normal);normal.UpdateStateMachine(0);Check(normal.updates==3 && normal.obj.animator.speed==0,"freeze applies after spawn finishes");
         normal.state=ZombieState.Spawning;normal.UpdateStateMachine(0);Check(normal.updates==4 && normal.obj.animator.speed==1,"new spawn releases previously frozen entity");
-        MagnetFreeze.Clear();harmony.UnpatchAll("magnet.freeze.tests");
+        MagnetFreeze.Clear();
         MagnetBridge.Reset();p.healthFast=100;p.transform.position=new Vector3();p.cam.CameraTransform.position=new Vector3(0,3,20);normal.state=normal.targetState=ZombieState.Aware;
         ZombieLoader.Instance=new ZombieLoader();normal.obj.transform.position=new Vector3(0,0,40);ZombieLoader.Instance.zombies.Add(normal);
         Time.unscaledTime=10;MagnetBridge.Apply(p,true,true,100,1,2.5f,8,true,1);int fixedCalls=normal.calls;float fixedZ=normal.obj.transform.position.z;
@@ -77,7 +77,13 @@ class MagnetTests {
         float previousZ=one.obj.transform.position.z;p.transform.position=new Vector3(0,0,2);Time.unscaledTime=21;
         MagnetBridge.Apply(p,true,true,100,1,2.5f,8,false,4);
         Check(one.obj.transform.position.z>previousZ && Vector3.Distance(one.obj.transform.position,two.obj.transform.position)<.001f,"stack follows while retaining common point");
+        Vector3 retained=one.obj.transform.position;one.obj.transform.position=new Vector3(99,50,99);one.obj.body.isKinematic=false;one.obj.animator.applyRootMotion=true;
+        MagnetFreeze.Pulse();Check(Vector3.Distance(one.obj.transform.position,retained)<.001f && one.obj.body.isKinematic && !one.obj.animator.applyRootMotion,"external movement and root motion are corrected at the retained anchor");
+        one.obj.body=new Rigidbody();MagnetFreeze.Pulse();Check(one.obj.body.isKinematic && Vector3.Distance(one.obj.transform.position,retained)<.001f,"replacement rigidbody receives retained anchor");
+        Time.unscaledTime+=3;Time.frameCount++;one.UpdateStateMachine(0);Check(one.obj.body.isKinematic,"single stalled frame does not release an overlapping crowd");
+        Time.frameCount+=61;one.UpdateStateMachine(0);Check(!one.obj.body.isKinematic,"missing heartbeat across many frames releases ownership");
         MagnetBridge.Reset();Check(!one.obj.body.isKinematic && !two.obj.body.isKinematic,"stack releases physics on disable");
+        harmony.UnpatchAll("magnet.freeze.tests");
         Console.WriteLine(checks+" magnet checks passed");
     }
 }

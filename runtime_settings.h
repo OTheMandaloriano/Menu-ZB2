@@ -103,7 +103,7 @@ inline Values Capture(float width,float height) {
     values.iItemFilter1=Config::iItemFilter1;
     values.iItemFilter2=Config::iItemFilter2;
     values.iItemFilter3=Config::iItemFilter3;
-    values.iPoiFilter=Config::iPoiFilter;
+    values.iPoiFilter=-1; // Categories are the sole source of POI filtering.
     values.bPoiGraves=Config::bPoiGraves;
     values.bPoiPlayers=Config::bPoiPlayers;
     values.bEnemyMagnet=Config::bEnemyMagnet;
@@ -145,7 +145,7 @@ inline Values Capture(float width,float height) {
     values.bItemRare=Config::bItemRare;
     values.bItemSupply=Config::bItemSupply;
     values.bItemWeapons=Config::bItemWeapons;
-    values.bLimitFov=Config::bLimitFov;
+    values.bLimitFov=!Config::b360Mode;
     values.bMenuOpen=Config::bMenuOpen;
     values.bNoRecoil=Config::bNoRecoil;
     values.bNoSpread=Config::bNoSpread;

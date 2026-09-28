@@ -38,13 +38,3 @@ static void DrawItemFilters(bool loot=false) {
     if(count>0 && shown==0)ImGui::TextDisabled("Nenhum item corresponde a busca.");
     ImGui::EndChild();ImGui::Text("%d itens",shown);ImGui::SameLine();if(ImGui::Button("Fechar"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
 }
-static void DrawPointFilters() {
-    if(!ImGui::TreeNode("Personalizar por ponto"))return;
-    static const char* names[]={"Chefao","Equipe (separada)","Local","Sepultura","Municao","Armas","Corpo a corpo",
-        "Bancada recarga","Cura","Materiais","Comida","Ponto desconhecido","Casa inicial","Fogueira","Mercador","Bancada melhoria","Bomba","Helicoptero"};
-    if(ImGui::Button("Todos##points"))Config::iPoiFilter=-1;
-    ImGui::SameLine();if(ImGui::Button("Nenhum##points"))Config::iPoiFilter=0;
-    ImGui::BeginChild("PointNames",ImVec2(0,160),true);
-    for(int i=0;i<18;++i)if(i!=1 && i!=2)FilterCheckbox(names[i],Config::iPoiFilter,i);
-    ImGui::EndChild();ImGui::TreePop();
-}

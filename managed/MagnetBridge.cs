@@ -71,7 +71,7 @@ namespace Zb2Menu {
                 if(!boss && Vector3.Distance(origin,zombie.obj.transform.position)>radius)continue;
                 // One placement per stationary anchor. AI movement does not trigger
                 // another teleport every tick; only a new anchor does.
-                if(placed.ContainsKey(zombie.identity.id)){if(freeze)MagnetFreeze.Hold(zombie);continue;}
+                if(placed.ContainsKey(zombie.identity.id)){if(freeze)MagnetFreeze.Hold(zombie,placed[zombie.identity.id]);continue;}
                 var allocation=boss?bossSlots:slots;
                 int slot;if(!allocation.TryGetValue(zombie.identity.id,out slot)){slot=allocation.Count;allocation.Add(zombie.identity.id,slot);}
                 float spacing=boss?4:1.2f;
@@ -81,12 +81,12 @@ namespace Zb2Menu {
                 RaycastHit ground;
                 if(!FindGround(proposed,stacked,out ground) || ground.normal.y<.6f)continue;
                 Vector3 target=ground.point+Vector3.up*.15f;
-                if(Vector3.Distance(zombie.obj.transform.position,target)<(stacked?.03f:1.25f)){placed[zombie.identity.id]=target;if(freeze)MagnetFreeze.Hold(zombie);continue;}
+                if(Vector3.Distance(zombie.obj.transform.position,target)<(stacked?.03f:1.25f)){placed[zombie.identity.id]=target;if(freeze)MagnetFreeze.Hold(zombie,target);continue;}
                 float bodyRadius=boss?1.5f:.4f,bodyHeight=boss?4:1.6f;
                 if(stacked?StackBlocked(target,bodyRadius,bodyHeight):Physics.CheckCapsule(target+Vector3.up*bodyRadius,target+Vector3.up*bodyHeight,bodyRadius,~0,QueryTriggerInteraction.Ignore))continue;
-                zombie.TeleportTo(target,zombie.obj.transform.rotation);
+                zombie.TeleportTo(target,stacked?player.transform.rotation:zombie.obj.transform.rotation);
                 placed[zombie.identity.id]=target;
-                if(freeze)MagnetFreeze.Hold(zombie);
+                if(freeze)MagnetFreeze.Hold(zombie,target);
                 ++count;
             }
             Status="";

@@ -4,6 +4,12 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Área de mira unificada em Círculo FOV/360; exibição independente e cor persistida.
+- Pontos/Mundo usa somente categorias; remove a lista duplicada e ignora máscaras antigas ocultas.
+- Magnet retém âncora, desativa root motion enquanto preso e trata troca do corpo físico.
+- Teleporte usa a máscara de chão do jogador e informa o motivo das recusas.
+- Rótulo e ajuda do único God Mode corrigidos para refletir a proteção com perks.
+
 - Agrupamento sobreposto do Magnet compartilha destino entre os atraídos.
 - ESP omite braseiros acesos; teleporte prepara colisões próximas e respeita a altura do jogador.
 - Silhueta passa a definir viewport e matrizes explicitamente; confirmação visual pendente.

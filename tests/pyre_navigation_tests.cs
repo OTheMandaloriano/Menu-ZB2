@@ -15,7 +15,7 @@ namespace UnityEngine {
  }
  public class Transform {public Vector3 position;public bool IsChildOf(Transform t){return ReferenceEquals(this,t);}}
  public class Rigidbody {public bool isKinematic;public Vector3 linearVelocity;}
- public class Collider {public Transform transform=new Transform();}
+ public class Collider {public string name="Wall";public Transform transform=new Transform();}
  public struct RaycastHit {public Vector3 point,normal;}
  public enum QueryTriggerInteraction {Ignore}
  public static class Time {public static float unscaledTime;}
@@ -34,7 +34,8 @@ public class WorkbenchInteractions {
  readonly List<InteractableFurniture> allWorkbenches=new List<InteractableFurniture>();
  public void Add(InteractableFurniture item){allWorkbenches.Add(item);}
 }
-public class PlayerMain {
+public class PlayerMovement {public int groundMask=-1;}
+public class PlayerMain {public PlayerMovement movement=new PlayerMovement();
  public float defaultHeight=1.8f;public bool HasLocalControl=true;public float healthFast=100;
  public UnityEngine.Transform transform=new UnityEngine.Transform();public UnityEngine.Rigidbody body=new UnityEngine.Rigidbody();
  public T GetComponent<T>() where T:class {return body as T;}
@@ -50,7 +51,7 @@ class PyreTests {
   Check(PyreNavigation.Update(1,0,1)==2 && PyreNavigation.Status().Contains("aceso"),"selected status and count");
   PyreNavigation.Update(1,1,1);Check(player.transform.position.x==40 && player.transform.position.z>40,"selected destination rather than closest");
   player.transform.position=new UnityEngine.Vector3();PyreNavigation.Update(1,1,1);Check(player.transform.position.x==0,"request consumed once");
-  UnityEngine.Physics.ground=false;PyreNavigation.Update(0,2,1);Check(player.transform.position.x==0 && PyreNavigation.Status().Contains("Sem destino"),"no teleport into void");
+  UnityEngine.Physics.ground=false;PyreNavigation.Update(0,2,1);Check(player.transform.position.x==0 && PyreNavigation.Status().Contains("sem chao="),"no teleport into void");
   UnityEngine.Physics.ground=true;UnityEngine.Physics.obstacles=new[]{new UnityEngine.Collider()};PyreNavigation.Update(0,3,1);Check(player.transform.position.x==0,"blocked landing rejected");
   UnityEngine.Physics.obstacles=new[]{new UnityEngine.Collider{transform=player.transform}};PyreNavigation.Update(0,4,1);Check(player.transform.position.x==20,"own collider does not block landing");
   player.HasLocalControl=false;player.transform.position=new UnityEngine.Vector3();PyreNavigation.Update(0,5,1);Check(player.transform.position.x==0,"never moves remote player");
