@@ -98,6 +98,13 @@ class MagnetTests {
         MagnetBridge.Apply(p,true,true,100,1,2.5f,8,false,4,true);
         Check(Math.Abs(probe.obj.transform.position.y-6.5f)<.001f && probe.obj.body.isKinematic,"noclip follow aligns eye to camera point without dropping to floor");
         MagnetBridge.Reset();Physics.ground=true;
+        MagnetBridge.Reset();ZombieLoader.Instance=new ZombieLoader();p.transform.position=new Vector3();p.cam.CameraTransform.position=new Vector3(0,3,20);
+        var carried=new Zombie{identity=new ZombieIdentity{id=600}};carried.obj.transform.position=new Vector3(0,0,20);ZombieLoader.Instance.zombies.Add(carried);
+        Time.unscaledTime=50;MagnetBridge.Apply(p,true,true,30,1,2.5f,8,false,5);int prior=carried.calls;
+        MagnetBridge.Apply(p,false,true,30);ZombieLoader.Instance.zombies.Remove(carried);ZombieLoader.Instance.unloadedZombies.Add(carried);p.transform.position=new Vector3(0,0,200);p.cam.CameraTransform.position=new Vector3(0,3,210);
+        Time.unscaledTime=51;MagnetBridge.Apply(p,true,true,30,1,2.5f,8,false,5);
+        Check(carried.calls>prior && carried.obj.transform.position.z>200,"reactivation at B recalls previous cohort outside capture radius");
+        MagnetBridge.Reset();
         harmony.UnpatchAll("magnet.freeze.tests");
         Console.WriteLine(checks+" magnet checks passed");
     }

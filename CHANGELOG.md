@@ -4,6 +4,11 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Grupo anterior do Magnet pode ser recolhido no novo ponto, mesmo fora do raio de captura; retenção fixa anterior é liberada.
+- NoClip permite capturar ponto 3D também no destino pela mira.
+- Fast Knife atua na velocidade da animação local de ataque e restaura ao sair dela.
+- Mira usa a referência de olhos do jogo como fallback para rigs ausentes/diferentes; skeleton respeita prazo dentro dos loops.
+
 - Magnet compensa referência dos pés, ignora atores/cadáveres no chão e recolhe distribuídos que se afastam.
 - NoClip alinha os atraídos pela referência dos olhos em frente à câmera, com bloqueio por obstáculos.
 - Limita trabalho por passagem, reutiliza chão/cápsula do grupo e evita escritas de pose redundantes.

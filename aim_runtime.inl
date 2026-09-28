@@ -32,15 +32,21 @@ static Aim::Policy AimPolicy() {
     return policy;
 }
 static bool ReadAimBone(void* zo, Aim::Point& point, std::uintptr_t& boneIdentity) {
+    auto eyeReference=[&]() {
+        void* eye=ReadP(zo,Off::ZO_eye);Vec3 world;
+        if(!eye || !GetPos(eye,world) || !Fin(world.x) || !Fin(world.y) || !Fin(world.z))return false;
+        point={world.x,world.y,world.z};boneIdentity=reinterpret_cast<std::uintptr_t>(eye);return true;
+    };
     static const int joints[] = { SK_HEAD, SK_NECK, SK_SP2, SK_HL };
     static const char* names[] = { "head", "neck", "sp2", "hl" };
     const int selection = s_options.iAimBone >= 0 && s_options.iAimBone < 4 ? s_options.iAimBone : 0;
     void* array = ReadP(zo, Off::ZO_armature);
-    if (!array) return false;
+    if (!array) return eyeReference();
     long long count = 0;
     __try { memcpy(&count, (char*)array + Off::A_len, sizeof(count)); }
     __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
-    if (count <= 0 || count > 64) return false;
+    if (selection==0 && count!=19 && eyeReference())return true;
+    if (count <= 0 || count > 64) return eyeReference();
     for (int i = 0; i < count; ++i) {
         const int index = count == 19 ? kBoneIdx[joints[selection]] : i;
         void* bone = ReadP(array, Off::A_data + index * sizeof(void*));
@@ -49,7 +55,7 @@ static bool ReadAimBone(void* zo, Aim::Point& point, std::uintptr_t& boneIdentit
             if (count != 19) GetName(bone, name, sizeof(name));
             if (count == 19 || !strcmp(name, names[selection])) {
                 Vec3 world;
-                if (!GetPos(bone, world) || !Fin(world.x) || !Fin(world.y) || !Fin(world.z)) return false;
+                if (!GetPos(bone, world) || !Fin(world.x) || !Fin(world.y) || !Fin(world.z)) return eyeReference();
                 point = { world.x, world.y, world.z };
                 boneIdentity = reinterpret_cast<std::uintptr_t>(bone);
                 return true;
@@ -57,7 +63,7 @@ static bool ReadAimBone(void* zo, Aim::Point& point, std::uintptr_t& boneIdentit
         }
         if (count == 19) break;
     }
-    return false;
+    return eyeReference();
 }
 static void CollectAimTarget(void* entity, void* zo, void* camera, float hp) {
     if (!AimRequested() || !s_camWok || !s_aimForwardValid) return;

@@ -302,6 +302,7 @@ namespace Mono {
     // (ver crash 15/09 15:51). Estoura o teto? O resto do ciclo usa o
     // Ãºltimo valor conhecido (fail-open, sem flicker).
     static int  s_budgetLeft = 0;
+    static long long s_skeletonDeadline=0;
     static int  s_budgetMax = 64; // 64 invokes/ciclo p/ maos do skeleton.
     static bool s_budgetLogged = false;
     static inline bool BudgetTake(int n = 1) {
@@ -1102,6 +1103,7 @@ namespace Mono {
                 Log::Infof("[RIG] rig nao-padrao len=%d (mapeando por nome).", (int)len);
             }
             for (long long k = 0; k < len && k < 64; ++k) {
+                if(PiNow()>=s_skeletonDeadline)break;
                 void* bone = nullptr;
                 __try { memcpy(&bone, (char*)arr + Off::A_data + (size_t)k * 8, 8); }
                 __except (EXCEPTION_EXECUTE_HANDLER) { bone = nullptr; }
@@ -1186,6 +1188,7 @@ namespace Mono {
             out.skN = 0; return;
         }
         for (int k = 0; k < SkJoint::SK_PHYS; ++k) {
+            if(PiNow()>=s_skeletonDeadline)break;
             if (!bones[k]) continue;
             Vec3 w, s3;
             if (!GetPos(bones[k], w)) continue;
@@ -1330,6 +1333,7 @@ namespace Mono {
         static int gatherCursor = 0;
         const int gatherStart = gatherCursor;
         const long long gatherDeadline = PiNow() + 6000;
+        s_skeletonDeadline=gatherDeadline;
         WalkList(list, 512, [&](void* e, int index) {
             if (PiNow() >= gatherDeadline) return;
             gatherCursor = index + 1;

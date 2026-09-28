@@ -120,3 +120,5 @@ Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. 
 [Chegada ao alcance dos braseiros](docs/BRAZIER_FIX_5.md)
 
 [Auditoria do Magnet, mira e custo de atualização](docs/MAGNET_AUDIT_6.md)
+
+[Grupo único, rigs e Fast Knife](docs/GROUP_MELEE_7.md)

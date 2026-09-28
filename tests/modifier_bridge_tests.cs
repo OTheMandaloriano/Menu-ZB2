@@ -10,6 +10,8 @@ namespace Zb2Menu {
 namespace UnityEngine {
     public static class Application {public static bool isFocused=true;}
     public static class Time {public static float timeScale=1;}
+    public struct AnimatorStateInfo {public string name;public bool IsName(string n){return name==n;}}
+    public class Animator:Object {public float speed=1;public string clip="Slash";public AnimatorStateInfo GetCurrentAnimatorStateInfo(int layer){return new AnimatorStateInfo{name=clip};}}
     public class Object { public bool Destroyed; public static bool operator ==(Object a,Object b) { return ReferenceEquals(a,b) || (ReferenceEquals(b,null) && !ReferenceEquals(a,null) && a.Destroyed); } public static bool operator !=(Object a,Object b){return !(a==b);} public override bool Equals(object v){return ReferenceEquals(this,v);} public override int GetHashCode(){return base.GetHashCode();} }
     public struct Vector2 { public float x,y; public Vector2(float a,float b){x=a;y=b;} public static Vector2 zero {get{return new Vector2();}} }
     public struct Vector3 { public float x,y,z; public static Vector3 operator *(Vector3 v,float m){return new Vector3{x=v.x*m,y=v.y*m,z=v.z*m};} }
@@ -22,10 +24,10 @@ public class DatabaseGun : UnityEngine.Object { public float rof=8,spread=4,reco
 public class InventoryItem { public DatabaseGun Gun=new DatabaseGun(); public object GetDataBaseItem(){return Gun;} }
 public class PlayerEquippedItems { public List<InventoryItem> weapons=new List<InventoryItem>(); }
 public class PlayerInventory { public PlayerEquippedItems equippedItems=new PlayerEquippedItems(); }
-public class PlayerMovement : UnityEngine.Object { public float walkSpeed=3.5f,jumpSpeed=6,fallDamageThreshold=-10,rollSpeed=9; }
-public class PlayerMain : UnityEngine.Object { public PlayerMovement movement=new PlayerMovement(); public PlayerInventory inventory=new PlayerInventory(); public bool HasLocalControl=true; public float healthFast=100; }
+public class PlayerMovement : UnityEngine.Object {public PlayerMeleeAttack CurrentMeleeAttack; public float walkSpeed=3.5f,jumpSpeed=6,fallDamageThreshold=-10,rollSpeed=9; }
+public class PlayerMain : UnityEngine.Object {public UnityEngine.Animator MyAnimator=new UnityEngine.Animator(); public PlayerMovement movement=new PlayerMovement(); public PlayerInventory inventory=new PlayerInventory(); public bool HasLocalControl=true; public float healthFast=100; }
 public class WeaponBase : UnityEngine.Object { public static WeaponBase instance=new WeaponBase(); public float gunSway=.7f; }
-public class PlayerMeleeAttack : UnityEngine.Object { public float Duration {get;private set;} public PlayerMeleeAttack(){Duration=2;} }
+public class PlayerMeleeAttack : UnityEngine.Object {public class AnimationInfo {public string Name="Slash";}public AnimationInfo Animation=new AnimationInfo(); public float Duration {get;private set;} public PlayerMeleeAttack(){Duration=2;} }
 public class MeleeAttackBase : UnityEngine.Object { public static MeleeAttackBase Instance=new MeleeAttackBase(); public Dictionary<int,PlayerMeleeAttack> AllAttacks=new Dictionary<int,PlayerMeleeAttack>(); }
 class Tests {
     static int checks;
@@ -49,9 +51,10 @@ class Tests {
         var old=p.movement; p.movement=new PlayerMovement(); Apply(p,32|64|128); Check(old.walkSpeed==3.5f && old.jumpSpeed==6,"replace object restores old");
         Apply(p,0);Check(p.movement.jumpSpeed==6 && p.movement.fallDamageThreshold==-10,"jump disabled");
         Apply(p,4);Check(WeaponBase.instance.gunSway==0,"sway enabled");Apply(p,0);Check(WeaponBase.instance.gunSway==.7f,"sway restored");
-        MeleeAttackBase.Instance.AllAttacks[1]=new PlayerMeleeAttack();var attack=MeleeAttackBase.Instance.AllAttacks[1];
-        Apply(p,256,2,2,2,2,5); Check(Math.Abs(attack.Duration-.4f)<.001f,"knife multiplier");
-        Apply(p,256,2,2,2,2,2);Check(attack.Duration==1,"knife slider uses original");Apply(p,0);Check(attack.Duration==2,"knife restored");
+        MeleeAttackBase.Instance.AllAttacks[1]=new PlayerMeleeAttack();var attack=MeleeAttackBase.Instance.AllAttacks[1];p.movement.CurrentMeleeAttack=attack;
+        Apply(p,256,2,2,2,2,5); Check(p.MyAnimator.speed==5 && attack.Duration==2,"knife multiplier");
+        Apply(p,256,2,2,2,2,2);Check(p.MyAnimator.speed==2,"knife slider uses original");Apply(p,0);Check(p.MyAnimator.speed==1,"knife restored");
+        Apply(p,256);p.MyAnimator.clip="Walk";Apply(p,256);Check(p.MyAnimator.speed==1,"knife does not accelerate walking");
         for(int i=0;i<70;++i)p.inventory.equippedItems.weapons.Add(new InventoryItem());
         Apply(p,16,4);Apply(p,0);foreach(var weapon in p.inventory.equippedItems.weapons)Check(weapon.Gun.rof==8,"no 16-slot truncation");
         Apply(p,16,3);p.inventory.equippedItems.weapons.Clear();Apply(p,16,3);Check(g.rof==8,"removed equipment restored");

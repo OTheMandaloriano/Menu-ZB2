@@ -74,7 +74,7 @@ namespace Zb2Menu {
                 if (player != null && player.HasLocalControl && player.healthFast > 0) {
                     Movement(player, flags, Mult(speed,5), Mult(jump,10), Mult(roll,5));
                     Weapons(player, flags, Mult(rapid,5));
-                    if ((flags & 256) != 0) Melee(Mult(knife,5));
+                    if ((flags & 256) != 0) Melee(player,Mult(knife,5));
                     if ((flags & 4) != 0 && WeaponBase.instance != null)
                         Scale(WeaponBase.instance, "gunSway", 0);
                     if ((flags & 8) != 0) TightCrosshair();
@@ -115,12 +115,11 @@ namespace Zb2Menu {
                 }
             }
         }
-        static void Melee(float multiplier) {
-            var owner=MeleeAttackBase.Instance;
-            if (owner == null) return;
-            var attacks=Read(owner, Member(owner,"AllAttacks")) as IDictionary;
-            if (attacks == null) return;
-            foreach (object attack in attacks.Values) Scale(attack,"Duration",1/multiplier);
+        static void Melee(PlayerMain player,float multiplier) {
+            var attack=player.movement==null?null:player.movement.CurrentMeleeAttack;
+            var animator=player.MyAnimator;
+            if(attack==null || animator==null)return;
+            if(animator.GetCurrentAnimatorStateInfo(0).IsName(attack.Animation.Name))Scale(animator,"speed",multiplier);
         }
         static void TightCrosshair() {
             var hud=PlayerHUD.instance;
