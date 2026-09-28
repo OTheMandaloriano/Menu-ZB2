@@ -65,7 +65,7 @@ namespace Off {
     // PlayersController
     constexpr int PCS_players = 48;
     // PlayerMain (instancia) â€” offsets validados OFFSETS.md (CE MCP 12/09).
-    // healthFast/healthSlow: float, 100.0 cheio. stamina*: 100.0 cheio.
+    // Health pools are floats; their maximum depends on perks (not fixed at 100).
     constexpr int PM_healthFast = 204;
     constexpr int PM_healthSlow = 208;
     constexpr int PM_maxStamina = 224;
@@ -2867,14 +2867,7 @@ namespace Mono {
     // (local vivo dentro da partida). Sem hook, sem patch, custo zero desligado.
     static void ApplyDefense(void* local) {
         if (!local) return;
-        // God Mode: trava healthFast + healthSlow em 100.
-        if (s_options.bGodMode) {
-            float hp = ReadF(local, Off::PM_healthFast);
-            if (hp > 0.0f && hp < 100.0f) { // morto (<=0) nao ressuscita
-                WriteF(local, Off::PM_healthFast, 100.0f);
-                WriteF(local, Off::PM_healthSlow, 100.0f);
-            }
-        }
+        // God Mode runs before damage in GodModeBridge; no fixed-100 repair here.
         // Stamina: trava fast+slow no maxStamina (correr sem cansar).
         if (s_options.bInfStamina) {
             float mx = ReadF(local, Off::PM_maxStamina, 100.0f);
@@ -2899,7 +2892,7 @@ namespace Mono {
             (s_options.bRapidFire ? 16 : 0) | (s_options.bSpeedHack ? 32 : 0) |
             (s_options.bSuperJump ? 64 : 0) | (s_options.bRollSpeed ? 128 : 0) |
             (s_options.bFastKnife ? 256 : 0) | (s_options.bFullAuto ? 512 : 0) |
-            (s_options.bUnlockSlots ? 1024 : 0) | (s_options.bNoClip ? 2048 : 0) | (s_options.bMenuOpen ? 4096 : 0) | (s_options.bEnemyMagnet ? 8192 : 0) | (s_options.bMagnetFreeze?16384:0) | (s_options.bItemMagnet?32768:0);
+            (s_options.bUnlockSlots ? 1024 : 0) | (s_options.bNoClip ? 2048 : 0) | (s_options.bMenuOpen ? 4096 : 0) | (s_options.bEnemyMagnet ? 8192 : 0) | (s_options.bMagnetFreeze?16384:0) | (s_options.bItemMagnet?32768:0) | (s_options.bGodMode?65536:0);
         int lootWholeMap=s_options.bLootWholeMap?1:0;
         void* args[] = {local, &flags, &s_options.fRapidMult, &s_options.fSpeedMult,
             &s_options.fJumpMult, &s_options.fRollMult, &s_options.fKnifeMult, &s_options.fNoClipSpeed, &s_options.fMagnetRadius, &s_options.iMagnetTargets,&s_options.fMagnetFront,&s_options.fMagnetBoss,&s_options.fItemMagnetRadius,&s_options.iItemMagnetType,&s_options.iLootFilter0,&s_options.iLootFilter1,&s_options.iLootFilter2,&s_options.iLootFilter3,&s_options.iMagnetDestination,&lootWholeMap};

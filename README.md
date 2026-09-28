@@ -110,3 +110,5 @@ Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. 
 [Auditoria de HP dos aliados e Magnet fixo](docs/AUDITORIA_HP_MAGNET_FIXO.md)
 
 [Auditoria CE/dnSpy, ESP e navegação dos braseiros](docs/AUDITORIA_ESP_BRASEIROS.md)
+
+[God Mode e diagnóstico da silhueta](docs/GOD_MODE_E_SILHUETA.md)

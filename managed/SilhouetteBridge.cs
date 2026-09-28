@@ -9,6 +9,7 @@ namespace Zb2Menu {
         [DllImport("kiero-dx11-base.dll", CallingConvention=CallingConvention.Cdecl)]
         static extern int Zb2PublishOutlineMask(IntPtr texture);
         internal static Func<IntPtr,int> PublishMask=Zb2PublishOutlineMask;
+        public static string Failure="";
         static Camera camera;
         static RenderTexture mask;
         static CommandBuffer commands;
@@ -26,7 +27,7 @@ namespace Zb2Menu {
         }
 
         public static string Apply(int enabled) {
-            if (enabled==0) { Clear(); return ""; }
+            if (enabled==0) { Clear(); Failure=""; return ""; }
             try {
                 var next=MainCamera.instance==null ? null : MainCamera.instance.cam;
                 if (next==null || ZombieLoader.Instance==null) { Clear(); return "Silhueta: aguardando camera"; }
@@ -55,8 +56,8 @@ namespace Zb2Menu {
                         commands.DrawRenderer(renderer,visible,sub,0);
                     }
                 }
-                return "";
-            } catch (Exception error) { Clear(); return "Silhueta: "+error.GetType().Name; }
+                Failure="";return "";
+            } catch (Exception error) { Clear(); Failure="Silhueta: "+error.GetType().Name+" ("+error.Message+")";return Failure; }
         }
 
         static void Initialize(Camera next,int width,int height) {

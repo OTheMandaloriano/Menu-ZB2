@@ -55,15 +55,16 @@ namespace Zb2Menu {
             Change<float>(target, name, original => original * multiplier);
         }
         public static bool Reset() {
-            try { values.RestoreAll(); SlotsBridge.Restore(); NoClipBridge.Restore(); MagnetBridge.Reset(); previous=null; lastError=""; }
+            try { GodModeBridge.Clear(); values.RestoreAll(); SlotsBridge.Restore(); NoClipBridge.Restore(); MagnetBridge.Reset(); previous=null; lastError=""; }
             catch (Exception ex) { lastError=ex.ToString(); }
-            return values.Count != 0 || SlotsBridge.Pending || NoClipBridge.Active || MagnetBridge.Active;
+            return GodModeBridge.Active || values.Count != 0 || SlotsBridge.Pending || NoClipBridge.Active || MagnetBridge.Active;
         }
         // Called only by the native callback inside ZBMain.Update, including all-off frames.
         public static bool Apply(PlayerMain player, int flags, float rapid, float speed, float jump, float roll, float knife, float noclip,float magnetRadius,int magnetTargets,float magnetFront,float magnetBoss,float lootRadius,int lootCategory,int filter0,int filter1,int filter2,int filter3,int destinationMode,int wholeMap) {
             try {
                 if (!ReferenceEquals(previous, player)) { values.RestoreAll(); previous=player; }
                 values.Begin();
+                GodModeBridge.Apply(player,(flags&65536)!=0);
                 bool alive=player!=null && player.HasLocalControl && player.healthFast>0;
                 MagnetBridge.Apply(alive?player:null,alive && (flags&8192)!=0,(flags&4096)==0,magnetRadius,magnetTargets,magnetFront,magnetBoss,(flags&16384)!=0,destinationMode);
                 LootMagnetBridge.Apply(alive?player:null,alive && (flags&32768)!=0,(flags&4096)==0,lootRadius,lootCategory,filter0,filter1,filter2,filter3,wholeMap!=0);
@@ -85,7 +86,7 @@ namespace Zb2Menu {
                 // A failed chain must not leave other disabled features applied.
                 try { values.End(); } catch (Exception restore) { lastError += "\n" + restore; }
             }
-            return values.Count != 0 || SlotsBridge.Pending || NoClipBridge.Active || MagnetBridge.Active;
+            return GodModeBridge.Active || values.Count != 0 || SlotsBridge.Pending || NoClipBridge.Active || MagnetBridge.Active;
         }
         static void Movement(PlayerMain player, int flags, float speed, float jump, float roll) {
             var movement=player.movement;

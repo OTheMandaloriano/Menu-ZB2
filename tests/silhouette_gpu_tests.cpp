@@ -14,12 +14,13 @@ int main() {
     for(unsigned y=5;y<10;++y) for(unsigned x=3;x<6;++x) pixels[y*size+x]=0xff0000ff;
     for(unsigned y=5;y<10;++y) for(unsigned x=10;x<13;++x) pixels[y*size+x]=0xff00ff00;
     D3D11_TEXTURE2D_DESC desc={}; desc.Width=desc.Height=size; desc.MipLevels=desc.ArraySize=1;
-    desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM; desc.SampleDesc.Count=1; desc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
+    desc.Format=DXGI_FORMAT_R8G8B8A8_TYPELESS; desc.SampleDesc.Count=1; desc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
     D3D11_SUBRESOURCE_DATA initial={}; initial.pSysMem=pixels.data(); initial.SysMemPitch=size*4;
     ComPtr<ID3D11Texture2D> mask,target,readback;
     Check(SUCCEEDED(device->CreateTexture2D(&desc,&initial,&mask)),"create input mask");
     Check(Zb2PublishOutlineMask(mask.Get())==1,"publish mask");
     Check(Silhouette::published.Get()!=nullptr,"retained GPU view");
+    desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
     desc.BindFlags=D3D11_BIND_RENDER_TARGET;
     Check(SUCCEEDED(device->CreateTexture2D(&desc,nullptr,&target)),"create output");
     desc.BindFlags=0; desc.Usage=D3D11_USAGE_STAGING; desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;

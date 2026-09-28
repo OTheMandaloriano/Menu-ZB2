@@ -74,7 +74,15 @@ extern "C" __declspec(dllexport) int __cdecl Zb2PublishOutlineMask(ID3D11Resourc
     Silhouette::ComPtr<ID3D11ShaderResourceView> view;
     if(resource) {
         Silhouette::ComPtr<ID3D11Device> device; resource->GetDevice(&device);
-        if(FAILED(device->CreateShaderResourceView(resource,nullptr,&view))) return 0;
+        Silhouette::ComPtr<ID3D11Texture2D> texture;
+        if(FAILED(resource->QueryInterface(IID_PPV_ARGS(&texture))))return 0;
+        D3D11_TEXTURE2D_DESC textureDesc={};texture->GetDesc(&textureDesc);
+        if(textureDesc.SampleDesc.Count!=1)return 0;
+        D3D11_SHADER_RESOURCE_VIEW_DESC desc={};desc.Format=textureDesc.Format;
+        if(desc.Format==DXGI_FORMAT_R8G8B8A8_TYPELESS)desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+        if(desc.Format==DXGI_FORMAT_B8G8R8A8_TYPELESS)desc.Format=DXGI_FORMAT_B8G8R8A8_UNORM;
+        desc.ViewDimension=D3D11_SRV_DIMENSION_TEXTURE2D;desc.Texture2D.MipLevels=1;
+        if(FAILED(device->CreateShaderResourceView(resource,&desc,&view))) return 0;
     }
     AcquireSRWLockExclusive(&Silhouette::maskLock);
     Silhouette::published=std::move(view);

@@ -4,6 +4,10 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- God Mode bloqueia dano antes do desconto no jogador local e usa MaxHealth com perks.
+- Silhueta cria view explícita para textura typeless e preserva o motivo de falha.
+- Procedimento autorizado de atualização/injeção registrado na skill Mono.
+
 - ESP de braseiros passa a usar o registro completo, incluindo não descobertos e acesos.
 - Navegação por braseiro com teleporte local, chão/colisão validados e clique consumido uma vez.
 - Itens e Pontos/Mundo ganham controles independentes de distância, box e linha.

@@ -65,3 +65,5 @@ class Tests {
         Console.WriteLine(checks+" modifier checks passed");
     }
 }
+
+namespace Zb2Menu {public static class GodModeBridge {public static bool Active=false;public static void Install(HarmonyLib.Harmony h){}public static void Clear(){}public static void Apply(PlayerMain p,bool b){}}}

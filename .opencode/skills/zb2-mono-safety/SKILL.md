@@ -31,3 +31,13 @@ Aprendida em 10+ dumps reais (kill-window, LOD destroy, loading AV).
 
 - Não fala de desenho (ver `zb2-esp-patterns`) nem de orçamento
   (ver `zb2-horda-perf`).
+
+## Atualização da DLL nesta sessão autorizada
+
+O usuário autorizou encerrar e reabrir o jogo pelo terminal para atualizar o menu.
+Não pedir essa mesma permissão novamente. Nunca descarregar/reinjetar uma DLL já
+carregada: confirmar processo e artefatos, fechar o jogo, verificar que encerrou,
+copiar os binários compilados e conferir hashes, reabrir o jogo com seu diretório
+de trabalho e aguardar confirmação de entrada no mapa. Só então executar o
+injetor e confirmar módulo/log. Não controlar mouse, teclado nem telas do jogo.
+Uma compilação não equivale a implantação ou validação em partida.
