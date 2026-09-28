@@ -873,9 +873,9 @@ namespace GUI {
         auto down=[](int key){return key>0 && key<256 && (GetAsyncKeyState(key)&0x8000)!=0;};
         const bool noConflict=Config::iNoClipKey!=Config::iMenuKey && Config::iNoClipKey!=VK_DELETE;
         if(noclip.Pressed(Config::iNoClipKey,down(Config::iNoClipKey),allowed && noConflict))Config::bNoClip=!Config::bNoClip;
-        static bool itemHeld=false;
-        const bool hold=allowed && down(Config::iItemMagnetKey) && Config::iItemMagnetKey!=Config::iMenuKey && Config::iItemMagnetKey!=VK_DELETE;
-        if(hold){Config::bItemMagnet=true;itemHeld=true;}else if(itemHeld){Config::bItemMagnet=false;itemHeld=false;}
+        static Hotkeys::Toggle itemMagnet;
+        const bool itemConflict=Config::iItemMagnetKey==Config::iMenuKey || Config::iItemMagnetKey==VK_DELETE || Config::iItemMagnetKey==Config::iNoClipKey || Config::iItemMagnetKey==Config::iMagnetKey;
+        if(itemMagnet.Pressed(Config::iItemMagnetKey,down(Config::iItemMagnetKey),allowed && !itemConflict))Config::bItemMagnet=!Config::bItemMagnet;
         const bool magnetConflict=Config::iMagnetKey==Config::iNoClipKey || Config::iMagnetKey==Config::iMenuKey || Config::iMagnetKey==VK_DELETE;
         if(magnet.Pressed(Config::iMagnetKey,down(Config::iMagnetKey),allowed && !magnetConflict))Config::bEnemyMagnet=!Config::bEnemyMagnet;
     }
@@ -1374,7 +1374,7 @@ namespace GUI {
                 ImGui::Checkbox("Congelar atraidos", &Config::bMagnetFreeze);Tip("Suspende atualizacao dos zumbis reunidos e restaura fisica/animacao ao desligar.");
                 ImGui::Separator();
                 ImGui::Checkbox("Item Magnet", &Config::bItemMagnet);Tip("Move loot permitido ao chao perto de voce, sem coleta automatica. Solo/host. Filtros proprios de loot.");
-                HotkeyButton("Tecla Item Magnet", &Config::iItemMagnetKey,"Segure X por padrao para puxar; solte para parar.");
+                HotkeyButton("Tecla Item Magnet", &Config::iItemMagnetKey,"Pressione uma vez para iniciar; outra vez para parar. Padrao X; presets antigos preservam sua tecla.");
                 const char* lootCategories[]={"Armas","Municao","Suprimentos","Todos"};
                 if(Config::iItemMagnetType>3)Config::iItemMagnetType=3;
                 ImGui::Combo("Categoria loot", &Config::iItemMagnetType,lootCategories,4);
@@ -1423,7 +1423,7 @@ namespace GUI {
                 HotkeyButton("Aim Key", &Config::iAimKey, "Tecla do aimbot.");
                 HotkeyButton("NoClip", &Config::iNoClipKey, "Alterna NoClip, padrao N.");
                 HotkeyButton("Enemy Magnet", &Config::iMagnetKey, "Ativa/posiciona o magnet (H).");
-                HotkeyButton("Item Magnet", &Config::iItemMagnetKey, "Segure a tecla para Item Magnet (padrao X).");
+                HotkeyButton("Item Magnet", &Config::iItemMagnetKey, "Alterna Item Magnet ligado/desligado (padrao X).");
                 ImGui::Separator();
                 ImGui::Checkbox("Watermark", &Config::bWatermark);
                 ImGui::Checkbox("Debug Overlay", &Config::bDebugOverlay);

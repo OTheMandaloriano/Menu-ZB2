@@ -102,3 +102,5 @@ Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. 
 [Entrada do menu e animação de surgimento](docs/ENTRADA_E_SURGIMENTO.md)
 
 [Saúde remota, Item Magnet e ponto fixo](docs/MAPA_INTEIRO_E_SAUDE.md)
+
+[Uso do Item Magnet e limites cooperativos](docs/LOOT_USO_E_COOPERACAO.md)

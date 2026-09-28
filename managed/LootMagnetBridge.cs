@@ -10,10 +10,14 @@ namespace Zb2Menu {
         static int scanCell,scanItem;
         static bool active;
         static readonly HashSet<int> moved=new HashSet<int>();
+        static int failedGround,failedBounds;
+        static int scans;
+        static float nextReport;
+        static string report="";
         public static string Status="";
         public static void Apply(PlayerMain player,bool enabled,bool inputAllowed,float range,int category,int mask0,int mask1,int mask2,int mask3,bool wholeMap=false) {
-            Status="";
-            if(!enabled || player==null || !player.HasLocalControl || player.healthFast<=0){active=false;moved.Clear();return;}
+            Status=report;
+            if(!enabled || player==null || !player.HasLocalControl || player.healthFast<=0){active=false;moved.Clear();Status=report="";return;}
             var multiplayer=MultiplayerController.instance;
             if(multiplayer==null || !multiplayer.IsServer()){active=false;moved.Clear();Status="Item Magnet requer autoridade do host";return;}
             if(!inputAllowed || !Application.isFocused || GlobalTexting.IsTexting || DeveloperConsole.Opened || Time.timeScale<=0 || Time.unscaledTime<nextPass)return;
@@ -21,7 +25,7 @@ namespace Zb2Menu {
             var map=MapHash.instance;if(map==null || !map.IsCreated || LootController.Instance==null)return;
             int groundMask=player.movement==null?0:(int)player.movement.groundMask;
             if(groundMask==0){Status="Item Magnet: camada de chao indisponivel";return;}
-            if(!active || scanMap!=map){scanMap=map;scanCell=scanItem=0;moved.Clear();active=true;}
+            if(!active || scanMap!=map){scanMap=map;scanCell=scanItem=0;moved.Clear();active=true;failedGround=failedBounds=scans=0;report="";nextReport=0;}
             range=float.IsNaN(range)||float.IsInfinity(range)?50:Mathf.Clamp(range,10,1000);
             var origin=player.transform.position;var cell=map.GetCell(origin);if(cell==null || cell.loot==null || cell.lootHolder==null)return;
             int[] masks={mask0,mask1,mask2,mask3};candidates.Clear();candidateCells.Clear();
@@ -30,7 +34,7 @@ namespace Zb2Menu {
             while(visited<cells && candidates.Count<2 && budget-->0){
                 scanCell%=cells;
                 var source=map.GetCell(scanCell%map.width,scanCell/map.width);
-                if(source==null || source.loot==null || scanItem>=source.loot.Count){scanCell=(scanCell+1)%cells;scanItem=0;++visited;continue;}
+                if(source==null || source.loot==null || scanItem>=source.loot.Count){scanCell=(scanCell+1)%cells;if(scanCell==0)++scans;scanItem=0;++visited;continue;}
                 while(scanItem<source.loot.Count && candidates.Count<2 && budget-->0){
                     var loot=source.loot[scanItem++];
                     if(loot==null || loot.item==null || loot.IsSack || (loot.reservedPlayerID.HasValue && loot.reservedPlayerID.Value>=0))continue;
@@ -47,13 +51,20 @@ namespace Zb2Menu {
             for(int i=0;i<candidates.Count;++i){
                 var loot=candidates[i];if(loot==null || !ItemEligibility.Allowed(loot.item.GetDataBaseItem()))continue;
                 RaycastHit ground;var proposed=origin+player.transform.forward*1.5f+player.transform.right*(i==0?-.5f:.5f)+Vector3.up*2;
-                if(!Physics.Raycast(proposed,Vector3.down,out ground,4,groundMask,QueryTriggerInteraction.Ignore) || ground.normal.y<.6f)continue;
+                if(!Physics.Raycast(proposed,Vector3.down,out ground,4,groundMask,QueryTriggerInteraction.Ignore) || ground.normal.y<.6f){++failedGround;continue;}
                 float pivotHeight=0;
-                var renderers=loot.GetComponentsInChildren<Renderer>(true);bool hasBounds=false;Bounds bounds=new Bounds();
-                foreach(var renderer in renderers)if(renderer!=null){if(!hasBounds){bounds=renderer.bounds;hasBounds=true;}else bounds.Encapsulate(renderer.bounds);}
-                if(!hasBounds)continue; // No dimensions: don't guess an offset that may bury the item.
-                pivotHeight=loot.transform.position.y-bounds.min.y;
-                if(float.IsNaN(pivotHeight)||float.IsInfinity(pivotHeight)||Math.Abs(pivotHeight)>5)continue;
+                var renderers=loot.GetComponentsInChildren<Renderer>(true);float lowest=float.PositiveInfinity;
+                foreach(var renderer in renderers)if(renderer!=null){
+                    // Disabled LOD renderers can retain stale world bounds. Transform
+                    // local bounds explicitly, which also works for inactive loot models.
+                    var bounds=renderer.localBounds;
+                    for(int corner=0;corner<8;++corner){
+                        var point=bounds.center+new Vector3((corner&1)==0?-bounds.extents.x:bounds.extents.x,(corner&2)==0?-bounds.extents.y:bounds.extents.y,(corner&4)==0?-bounds.extents.z:bounds.extents.z);
+                        float y=renderer.transform.TransformPoint(point).y;if(!float.IsNaN(y)&&!float.IsInfinity(y))lowest=Math.Min(lowest,y);
+                    }
+                }
+                pivotHeight=loot.transform.position.y-lowest;
+                if(float.IsNaN(pivotHeight)||float.IsInfinity(pivotHeight)||Math.Abs(pivotHeight)>5){++failedBounds;continue;}
                 var old=candidateCells[i];int index=old.loot.IndexOf(loot);if(index<0)continue;
                 // Keep the identity and item; remove/reannounce its network representation
                 // using the game's own messages, and keep spatial cell ownership consistent.
@@ -69,6 +80,8 @@ namespace Zb2Menu {
                 if(multiplayer.IsOnlineServer())ServerController.instance.GetSpeaker.SendSingleLootSpawn(loot,destination);
                 moved.Add(loot.id);
             }
+            if(Time.unscaledTime>=nextReport){nextReport=Time.unscaledTime+1;report="Loot: "+moved.Count+" movidos | varreduras "+scans+" | tentativas sem chao "+failedGround+" / modelo "+failedBounds;}
+            Status=report;
         }
     }
 }

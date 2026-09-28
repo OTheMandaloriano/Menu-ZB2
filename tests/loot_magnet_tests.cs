@@ -4,9 +4,9 @@ using Zb2Menu;
 using UnityEngine;
 namespace UnityEngine {
  public struct Vector3 {public float x,y,z;public Vector3(float a,float b,float c){x=a;y=b;z=c;}public static Vector3 up{get{return new Vector3(0,1,0);}}public static Vector3 down{get{return new Vector3(0,-1,0);}}public static Vector3 operator +(Vector3 a,Vector3 b){return new Vector3(a.x+b.x,a.y+b.y,a.z+b.z);}public static Vector3 operator -(Vector3 a,Vector3 b){return new Vector3(a.x-b.x,a.y-b.y,a.z-b.z);}public static Vector3 operator *(Vector3 a,float v){return new Vector3(a.x*v,a.y*v,a.z*v);}public static float Distance(Vector3 a,Vector3 b){var d=a-b;return (float)Math.Sqrt(d.x*d.x+d.y*d.y+d.z*d.z);}}
- public class Transform {public Vector3 position,forward=new Vector3(0,0,1),right=new Vector3(1,0,0);public Transform parent;public void SetParent(Transform p,bool w){parent=p;}}
- public struct Bounds {public Vector3 min;public void Encapsulate(Bounds b){min.y=Math.Min(min.y,b.min.y);}}
- public class Renderer {public Bounds bounds;}
+ public class Transform {public Vector3 position,forward=new Vector3(0,0,1),right=new Vector3(1,0,0);public Vector3 TransformPoint(Vector3 p){return position+p;}public Transform parent;public void SetParent(Transform p,bool w){parent=p;}}
+ public struct Bounds {public Vector3 center,extents,min;public void Encapsulate(Bounds b){min.y=Math.Min(min.y,b.min.y);}}
+ public class Renderer {public Bounds bounds;public Transform transform=new Transform();public Bounds localBounds {get{return new Bounds{center=bounds.min,extents=new Vector3()};}}}
  public class GameObject {public Transform transform=new Transform();}
  public struct RaycastHit {public Vector3 point,normal;}
  public enum QueryTriggerInteraction {Ignore}
@@ -60,6 +60,12 @@ class LootTests {
   int sent=ServerController.instance.GetSpeaker.spawned;
   for(int i=0;i<8;++i){Time.unscaledTime+=1;LootMagnetBridge.Apply(p,true,true,50,3,-1,-1,-1,-1,true);}
   Check(ServerController.instance.GetSpeaker.spawned==sent,"full-map rescans do not duplicate moved item");
+  var offset=new DroppedLoot{id=1001};offset.transform.position=new Vector3(0,100,4000);
+  offset.renderers=new[]{new Renderer{transform=new Transform{position=new Vector3(0,100,4000)},bounds=new Bounds{min=new Vector3(0,-.4f,0)}}};
+  MapHash.instance.source.loot.Add(offset);
+  for(int i=0;i<8;++i){Time.unscaledTime+=1;LootMagnetBridge.Apply(p,true,true,50,3,-1,-1,-1,-1,true);}
+  Check(MapHash.instance.target.loot.Contains(offset) && Math.Abs(offset.transform.position.y-.42f)<.001f,"local bounds transformed for distant model instead of stale world coordinates");
+  Check(LootMagnetBridge.Status.Contains("movidos") && LootMagnetBridge.Status.Contains("modelo"),"scan diagnostics available");
   Console.WriteLine(checks+" loot magnet checks passed");
  }
 }

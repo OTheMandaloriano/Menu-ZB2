@@ -4,6 +4,12 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Item Magnet alterna por pressionamento, sem exigir segurar a tecla.
+- Modal de loot mostra quantidade selecionada e permite selecionar pela imagem; Todos permitidos inclui todas as categorias.
+- Limites locais transformados do renderer substituem bounds de mundo potencialmente antigos em loot distante.
+- Contadores de varredura e falhas de destino/modelo ajudam o diagnóstico em partida.
+
+
 - ESP deixa de tratar HP remoto não sincronizado como percentual real; informa o estado recebido.
 - Item Magnet ganha modal visual com filtros próprios, raio de até 1.000 m e modo mapa inteiro.
 - Varredura de loot usa cursor persistente e altura baseada no modelo para apoiar no chão.
