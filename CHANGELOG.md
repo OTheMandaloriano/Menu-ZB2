@@ -4,6 +4,10 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Preparação de colisões dos braseiros usa bounds geométricos de meshes/boxes, não apenas o pivot do LOD.
+- Teleporte verifica 96 candidatos ao redor da interação e só aceita chegada a menos de 1,45 m, voltada ao braseiro.
+- Diagnóstico informa LODs preparados, máscara, ausência de chão, colisão e alcance.
+
 - Área de mira unificada em Círculo FOV/360; exibição independente e cor persistida.
 - Pontos/Mundo usa somente categorias; remove a lista duplicada e ignora máscaras antigas ocultas.
 - Magnet retém âncora, desativa root motion enquanto preso e trata troca do corpo físico.

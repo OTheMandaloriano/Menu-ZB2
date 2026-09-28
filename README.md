@@ -116,3 +116,5 @@ Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. 
 [Magnet sobreposto, braseiros e alinhamento da silhueta](docs/MAGNET_SIL_3.md)
 
 [Organização do menu e retenção do Magnet](docs/MENU_FIX_4.md)
+
+[Chegada ao alcance dos braseiros](docs/BRAZIER_FIX_5.md)
