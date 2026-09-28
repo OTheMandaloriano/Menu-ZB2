@@ -11,11 +11,11 @@ namespace UnityEngine {
     public class Animator {public float speed=1;}
     public class Rigidbody {public Vector3 linearVelocity;public bool isKinematic,detectCollisions=true;}
     public struct Bounds {public Vector3 center,extents;}
-    public class Collider {public Transform transform=new Transform();public Bounds bounds;}
+    public class Collider {public object zombie;public T GetComponentInParent<T>() where T:class{return zombie as T;}public Transform transform=new Transform();public Bounds bounds;}
     public struct Quaternion {public static Quaternion identity {get{return new Quaternion();}}}
     public enum QueryTriggerInteraction {Ignore}
-    public struct RaycastHit {public Vector3 point,normal;}
-    public static class Physics {public static bool blocked;public static bool ground=true;public static bool Raycast(Vector3 p,Vector3 d,out RaycastHit hit,float range,int mask,QueryTriggerInteraction q){hit=new RaycastHit{point=new Vector3(p.x,0,p.z),normal=new Vector3(0,1,0)};return ground;}public static bool CheckCapsule(Vector3 a,Vector3 b,float radius,int mask,QueryTriggerInteraction q){return blocked;}public static int OverlapBoxNonAlloc(Vector3 a,Vector3 b,Collider[] c,Quaternion d,int e,QueryTriggerInteraction f){if(!blocked)return 0;c[0]=new Collider();return 1;}}
+    public struct RaycastHit {public Collider collider;public float distance;public Vector3 point,normal;}
+    public static class Physics {public static Collider[] OverlapCapsule(Vector3 a,Vector3 b,float r,int m,QueryTriggerInteraction q){return blocked?new[]{new Collider()}:new Collider[0];}public static RaycastHit[] RaycastAll(Vector3 p,Vector3 d,float range,int m,QueryTriggerInteraction q){return ground?new[]{new RaycastHit{point=new Vector3(p.x,0,p.z),normal=new Vector3(0,1,0),collider=new Collider(),distance=3}}:new RaycastHit[0];}public static bool blocked;public static bool ground=true;public static bool Raycast(Vector3 p,Vector3 d,out RaycastHit hit,float range,int mask,QueryTriggerInteraction q){hit=new RaycastHit{point=new Vector3(p.x,0,p.z),normal=new Vector3(0,1,0)};return ground;}public static bool CheckCapsule(Vector3 a,Vector3 b,float radius,int mask,QueryTriggerInteraction q){return blocked;}public static int OverlapBoxNonAlloc(Vector3 a,Vector3 b,Collider[] c,Quaternion d,int e,QueryTriggerInteraction f){if(!blocked)return 0;c[0]=new Collider();return 1;}}
     public static class Time {public static float unscaledTime,deltaTime=.1f,timeScale=1;}
     public static class Application {public static bool isFocused=true;}
     public enum KeyCode {W,A,S,D,Space,LeftControl,LeftShift}

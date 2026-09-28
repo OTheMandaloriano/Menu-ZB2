@@ -17,7 +17,10 @@ namespace UnityEngine {
     public class RenderTexture {public int width,height,antiAliasing;public string name;public HideFlags hideFlags;public FilterMode filterMode;public TextureWrapMode wrapMode;public bool released;public RenderTexture(int w,int h,int d,RenderTextureFormat f,RenderTextureReadWrite rw){width=w;height=h;}public bool Create(){return true;}public IntPtr GetNativeTexturePtr(){return new IntPtr(42);}public void Release(){released=true;}}
     public static class SystemInfo {public static Rendering.GraphicsDeviceType graphicsDeviceType=Rendering.GraphicsDeviceType.Direct3D11;}
     public static class QualitySettings {public static int antiAliasing;}
-    public class Camera {public bool allowMSAA,stereoEnabled;public RenderTexture targetTexture;public int pixelWidth=1280,pixelHeight=720;public int attached,removed;public Rendering.CommandBuffer buffer;public void AddCommandBuffer(Rendering.CameraEvent e,Rendering.CommandBuffer b){attached++;buffer=b;}public void RemoveCommandBuffer(Rendering.CameraEvent e,Rendering.CommandBuffer b){removed++;buffer=null;}}
+    public struct Matrix4x4 {}
+    public struct Rect {public Rect(float x,float y,float w,float h){}}
+    public static class GL {public static Matrix4x4 GetGPUProjectionMatrix(Matrix4x4 p,bool rt){return p;}}
+    public class Camera {public static Action<Camera> onPreRender;public Matrix4x4 worldToCameraMatrix,projectionMatrix;public bool allowMSAA,stereoEnabled;public RenderTexture targetTexture;public int pixelWidth=1280,pixelHeight=720;public int attached,removed;public Rendering.CommandBuffer buffer;public void AddCommandBuffer(Rendering.CameraEvent e,Rendering.CommandBuffer b){attached++;buffer=b;}public void RemoveCommandBuffer(Rendering.CameraEvent e,Rendering.CommandBuffer b){removed++;buffer=null;}}
 }
 namespace UnityEngine.Rendering {
     public enum CompareFunction {Greater,LessEqual}public enum BlendMode {SrcAlpha,OneMinusSrcAlpha,One}public enum CullMode {Off}public enum CameraEvent {AfterForwardAlpha}
@@ -25,7 +28,7 @@ namespace UnityEngine.Rendering {
     public enum BuiltinRenderTextureType {CameraTarget}
     public struct RenderTargetIdentifier {public RenderTargetIdentifier(object o){}}
     public static class GraphicsSettings {public static object currentRenderPipeline;}
-    public class CommandBuffer {public string name;public int draws;public bool depthCleared;public void SetRenderTarget(RenderTargetIdentifier c,RenderTargetIdentifier d){}public void ClearRenderTarget(bool d,bool c,UnityEngine.Color color){depthCleared=d;}public bool released;public void DrawRenderer(UnityEngine.Renderer r,UnityEngine.Material m,int sub,int pass){draws++;}public void Clear(){draws=0;}public void Release(){released=true;}}
+    public class CommandBuffer {public string name;public int draws;public void SetViewport(UnityEngine.Rect r){}public void SetViewProjectionMatrices(UnityEngine.Matrix4x4 v,UnityEngine.Matrix4x4 p){}public bool depthCleared;public void SetRenderTarget(RenderTargetIdentifier c,RenderTargetIdentifier d){}public void ClearRenderTarget(bool d,bool c,UnityEngine.Color color){depthCleared=d;}public bool released;public void DrawRenderer(UnityEngine.Renderer r,UnityEngine.Material m,int sub,int pass){draws++;}public void Clear(){draws=0;}public void Release(){released=true;}}
 }
 public class MainCamera {public static MainCamera instance=new MainCamera();public UnityEngine.Camera cam=new UnityEngine.Camera();}
 public class ZombieHealth {public bool isAlive=true;public float amount=100;}

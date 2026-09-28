@@ -2,6 +2,9 @@ using System;
 using System.Collections.Generic;
 using Zb2Menu;
 namespace UnityEngine {
+ public enum FindObjectsInactive {Include}public enum FindObjectsSortMode {None}
+ public class Object {public static LODTarget[] targets=new LODTarget[0];public static T[] FindObjectsByType<T>(FindObjectsInactive a,FindObjectsSortMode b){return targets as T[];}}
+
  public struct Vector3 {
   public float x,y,z;public Vector3(float a,float b,float c){x=a;y=b;z=c;}
   public static Vector3 up=new Vector3(0,1,0),down=new Vector3(0,-1,0);
@@ -16,13 +19,15 @@ namespace UnityEngine {
  public struct RaycastHit {public Vector3 point,normal;}
  public enum QueryTriggerInteraction {Ignore}
  public static class Time {public static float unscaledTime;}
- public static class Physics {
+ public static class Physics {public static void SyncTransforms(){}
   public static bool ground=true;public static Collider[] obstacles=new Collider[0];
   public static bool Raycast(Vector3 p,Vector3 d,out RaycastHit hit,float range,int mask,QueryTriggerInteraction q){hit=new RaycastHit{point=new Vector3(p.x,0,p.z),normal=Vector3.up};return ground;}
   public static Collider[] OverlapCapsule(Vector3 a,Vector3 b,float r,int mask,QueryTriggerInteraction q){return obstacles;}
  }
 }
-public class InteractableFurniture {public UnityEngine.Transform transform=new UnityEngine.Transform();}
+public class LODCollider {public bool colliding;public void SetColliding(bool b,bool f){colliding=b;}}
+public class LODTarget {public UnityEngine.Transform transform=new UnityEngine.Transform();public LODCollider lodCollider=new LODCollider();}
+public class InteractableFurniture {public UnityEngine.Vector3 InteractionPoint {get{return transform.position;}}public UnityEngine.Transform transform=new UnityEngine.Transform();}
 public class PyreInteractable:InteractableFurniture {public bool IsLit;}
 public class WorkbenchInteractions {
  public static WorkbenchInteractions instance=new WorkbenchInteractions();
@@ -30,7 +35,7 @@ public class WorkbenchInteractions {
  public void Add(InteractableFurniture item){allWorkbenches.Add(item);}
 }
 public class PlayerMain {
- public bool HasLocalControl=true;public float healthFast=100;
+ public float defaultHeight=1.8f;public bool HasLocalControl=true;public float healthFast=100;
  public UnityEngine.Transform transform=new UnityEngine.Transform();public UnityEngine.Rigidbody body=new UnityEngine.Rigidbody();
  public T GetComponent<T>() where T:class {return body as T;}
 }
@@ -51,6 +56,11 @@ class PyreTests {
   player.HasLocalControl=false;player.transform.position=new UnityEngine.Vector3();PyreNavigation.Update(0,5,1);Check(player.transform.position.x==0,"never moves remote player");
   player.HasLocalControl=true;PyreNavigation.Update(0,6,0);PyreNavigation.Update(0,6,1);Check(player.transform.position.x==0,"request during scene transition not replayed");
   WorkbenchInteractions.instance=new WorkbenchInteractions();Check(PyreNavigation.All().Count==0,"map change clears registry");
+  var lod=new LODTarget();UnityEngine.Object.targets=new[]{lod};
+  using(var scope=new NearbyCollisionScope(new UnityEngine.Vector3())){Check(lod.lodCollider.colliding,"destination LOD prepared before query");}
+  Check(!lod.lodCollider.colliding,"failed query restores original collision LOD");
+  using(var scope=new NearbyCollisionScope(new UnityEngine.Vector3())){scope.Arrived();}
+  Check(lod.lodCollider.colliding,"arrival hands enabled nearby collision to normal LOD");
   Console.WriteLine(checks+" pyre navigation checks passed");
  }
 }

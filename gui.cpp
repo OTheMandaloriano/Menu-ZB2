@@ -145,6 +145,7 @@ namespace Config {
 
     bool bItemDistance=true,bItemLine=false,bItemBox=false,bPoiDistance=true,bPoiLine=false,bPoiBox=false;
     int iItemLineFrom=0,iPoiLineFrom=0;
+    int iMagnetArrangement=0;
     int iPyreSelection=0, iPyreRequest=0;
     bool bSilhouette = false;
     float fSilhouetteWidth = 2.f;
@@ -707,7 +708,7 @@ namespace GUI {
         JB(bZombieSkeleton); JB(bZombieSnap); JB(bZombieHeadDot); JV(colZombieSkel); JV(colZombieSnap); JV(colZombieDot);
         JI(iSnapFrom);
         JV(colZombieBox); JV(colZombieName); JV(colZombieDist); JV(colZombieHp); JB(bBossColor); JV(colBossBox);
-        JB(bAllyEsp); JB(bAllyBoxShow); JB(bAllyPct); JS(szAllyLayout); JI(iAllySnapFrom); JI(iAllyLayout); JV(colAllyName); JV(colAllyDist); JV(colAllyHp); JV(colAllySkel); JV(colAllyLine); JV(colAllyDot);  JF(fAllyDistance); JI(iMagnetTargets); JI(iMagnetDestination); JB(bLootWholeMap); JI(iLootFilter0);JI(iLootFilter1);JI(iLootFilter2);JI(iLootFilter3); JF(fMagnetFront); JF(fMagnetBoss); JI(iAllyBox); JB(bAllyName); JB(bAllyDist); JB(bAllyHp);
+        JB(bAllyEsp); JB(bAllyBoxShow); JB(bAllyPct); JS(szAllyLayout); JI(iAllySnapFrom); JI(iAllyLayout); JV(colAllyName); JV(colAllyDist); JV(colAllyHp); JV(colAllySkel); JV(colAllyLine); JV(colAllyDot);  JF(fAllyDistance); JI(iMagnetTargets); JI(iMagnetDestination);JI(iMagnetArrangement); JB(bLootWholeMap); JI(iLootFilter0);JI(iLootFilter1);JI(iLootFilter2);JI(iLootFilter3); JF(fMagnetFront); JF(fMagnetBoss); JI(iAllyBox); JB(bAllyName); JB(bAllyDist); JB(bAllyHp);
         JB(bAllySkeleton); JB(bAllySnap); JB(bAllyHeadDot); JV(colAllyVis);
         JB(bItemDistance);JB(bItemLine);JB(bItemBox);JB(bPoiDistance);JB(bPoiLine);JB(bPoiBox);JI(iItemLineFrom);JI(iPoiLineFrom);
         JB(bSilhouette); JF(fSilhouetteWidth); JV(colSilhouetteVis); JV(colSilhouetteInv);
@@ -796,7 +797,7 @@ namespace GUI {
         LB(bZombieSkeleton); LB(bZombieSnap); LB(bZombieHeadDot); LV(colZombieSkel); LV(colZombieSnap); LV(colZombieDot);
         LI(iSnapFrom);
         LV(colZombieBox); LV(colZombieName); LV(colZombieDist); LV(colZombieHp); LB(bBossColor); LV(colBossBox);
-        LB(bAllyEsp); LB(bAllyBoxShow); LB(bAllyPct); LS(szAllyLayout); LI(iAllySnapFrom); LI(iAllyLayout); LV(colAllyName); LV(colAllyDist); LV(colAllyHp); LV(colAllySkel); LV(colAllyLine); LV(colAllyDot);  LF(fAllyDistance); LI(iMagnetTargets); LI(iMagnetDestination); LB(bLootWholeMap); LI(iLootFilter0);LI(iLootFilter1);LI(iLootFilter2);LI(iLootFilter3); LF(fMagnetFront); LF(fMagnetBoss); LI(iAllyBox); LB(bAllyName); LB(bAllyDist); LB(bAllyHp);
+        LB(bAllyEsp); LB(bAllyBoxShow); LB(bAllyPct); LS(szAllyLayout); LI(iAllySnapFrom); LI(iAllyLayout); LV(colAllyName); LV(colAllyDist); LV(colAllyHp); LV(colAllySkel); LV(colAllyLine); LV(colAllyDot);  LF(fAllyDistance); LI(iMagnetTargets); LI(iMagnetDestination);LI(iMagnetArrangement); LB(bLootWholeMap); LI(iLootFilter0);LI(iLootFilter1);LI(iLootFilter2);LI(iLootFilter3); LF(fMagnetFront); LF(fMagnetBoss); LI(iAllyBox); LB(bAllyName); LB(bAllyDist); LB(bAllyHp);
         LB(bAllySkeleton); LB(bAllySnap); LB(bAllyHeadDot); LV(colAllyVis);
         LB(bItemDistance);LB(bItemLine);LB(bItemBox);LB(bPoiDistance);LB(bPoiLine);LB(bPoiBox);LI(iItemLineFrom);LI(iPoiLineFrom);
         LB(bSilhouette); LF(fSilhouetteWidth); LV(colSilhouetteVis); LV(colSilhouetteInv);
@@ -1261,7 +1262,7 @@ namespace GUI {
                 static const char* kSnapFrom[] = { "Base", "Topo", "Centro" };
                 if (ImGui::BeginTable("visual_cols", 2)) {
                     ImGui::TableNextColumn();
-                    ImGui::TextDisabled("Revisao GOD-SIL-2");
+                    ImGui::TextDisabled("Revisao MAGNET-SIL-3");
                     Section("Zumbis");
                     if(Mono::Get().coopMode==2)ImGui::TextWrapped("Cliente: HP de zumbis comuns nao e sincronizado; barras numericas ficam ocultas.");
                     ImGui::Checkbox("Ativo##Z", &Config::bZombieEsp); Tip("Ativa o desenho do ESP. A coleta da mira e independente.");
@@ -1411,14 +1412,19 @@ namespace GUI {
                 const char* destinations[]={"Seguir minha posicao","Fixar no ponto da mira","Fixar a minha frente"};
                 ImGui::Combo("Destino Magnet",&Config::iMagnetDestination,destinations,3);
                 Tip("Ponto fixo: H captura o destino uma vez e prende os atraidos apos a animacao de nascimento. H novamente libera. A frente dispensa apontar para o chao.");
+                const char* arrangements[]={"Distribuido","Sobreposto (mesmo ponto)"};
+                ImGui::Combo("Agrupamento",&Config::iMagnetArrangement,arrangements,2);
+                Tip("Sobreposto reune os corpos no mesmo destino. Nao altera penetracao ou dano dos tiros.");
                 ImGui::Combo("Alvos Magnet", &Config::iMagnetTargets,targets,3);
                 ImGui::TextDisabled("Bosses existentes ignoram o raio de busca.");
                 ImGui::SliderFloat("Distancia frontal",&Config::fMagnetFront,1.5f,10,"%.1fm");
+                ImGui::BeginDisabled(Config::iMagnetArrangement==1);
                 ImGui::SliderFloat("Distancia bosses",&Config::fMagnetBoss,6,20,"%.1fm");
+                ImGui::EndDisabled();
                 ImGui::SliderFloat("Raio Magnet", &Config::fMagnetRadius, 10, 300, "%.0fm");
-                if(Config::iMagnetDestination==0) {
+                if(Config::iMagnetDestination==0 && Config::iMagnetArrangement==0) {
                     ImGui::Checkbox("Congelar atraidos", &Config::bMagnetFreeze);Tip("Suspende atualizacao dos zumbis reunidos e restaura fisica/animacao ao desligar.");
-                } else ImGui::TextDisabled("Ponto fixo: mantem os atraidos ate desligar.");
+                } else ImGui::TextDisabled("Fixo/sobreposto: mantem os atraidos ate desligar.");
                 ImGui::Separator();
                 ImGui::Checkbox("Item Magnet", &Config::bItemMagnet);Tip("Move loot permitido ao chao perto de voce, sem coleta automatica. Solo/host. Filtros proprios de loot.");
                 HotkeyButton("Tecla Item Magnet", &Config::iItemMagnetKey,"Pressione uma vez para iniciar; outra vez para parar. Padrao X; presets antigos preservam sua tecla.");

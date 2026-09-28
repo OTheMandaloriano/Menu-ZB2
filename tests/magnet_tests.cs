@@ -67,6 +67,17 @@ class MagnetTests {
         MagnetBridge.Apply(p,true,true,100,1,2.5f,8,false,2);
         Check(normal.calls==beforeInvalid && MagnetBridge.Status.Contains("chao seguro"),"fixed front rejects absent ground");
         Physics.ground=true;MagnetBridge.Reset();
+        ZombieLoader.Instance=new ZombieLoader();p.transform.position=new Vector3();
+        Zombie one=new Zombie{identity=new ZombieIdentity{id=301}},two=new Zombie{identity=new ZombieIdentity{id=302}};
+        one.obj.transform.position=new Vector3(0,0,30);two.obj.transform.position=new Vector3(5,0,30);
+        ZombieLoader.Instance.zombies.Add(one);ZombieLoader.Instance.zombies.Add(two);Time.unscaledTime=20;
+        MagnetBridge.Apply(p,true,true,100,1,2.5f,8,false,4);
+        Check(Vector3.Distance(one.obj.transform.position,two.obj.transform.position)<.001f,"stack mode uses one exact destination");
+        Check(one.obj.body.isKinematic && two.obj.body.isKinematic,"stack holds bodies without disabling hit colliders");
+        float previousZ=one.obj.transform.position.z;p.transform.position=new Vector3(0,0,2);Time.unscaledTime=21;
+        MagnetBridge.Apply(p,true,true,100,1,2.5f,8,false,4);
+        Check(one.obj.transform.position.z>previousZ && Vector3.Distance(one.obj.transform.position,two.obj.transform.position)<.001f,"stack follows while retaining common point");
+        MagnetBridge.Reset();Check(!one.obj.body.isKinematic && !two.obj.body.isKinematic,"stack releases physics on disable");
         Console.WriteLine(checks+" magnet checks passed");
     }
 }

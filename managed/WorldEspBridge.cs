@@ -182,7 +182,7 @@ namespace Zb2Menu {
             int bit=(int)InterestPoint.Type.ZumbiePyre;
             if(bit<0 || bit>=32 || ((uint)pointFilter & (1u<<bit))==0)return;
             var all=PyreNavigation.All();
-            for(int i=0;i<all.Count;++i)if(all[i]!=null)
+            for(int i=0;i<all.Count;++i)if(all[i]!=null && !all[i].IsLit)
                 Add(10,"Braseiro "+(i+1)+(all[i].IsLit?" (aceso)":" (apagado)"),all[i].transform.position,true);
         }
         static void Team() {

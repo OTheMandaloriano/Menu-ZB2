@@ -98,7 +98,8 @@ class WorldTests {
             Check(Collect(1)==1,"rendered item collected");byte[] scalar=new byte[4];Marshal.Copy(IntPtr.Add(buffer,4),scalar,0,4);Check(Math.Abs(BitConverter.ToSingle(scalar,0)-.7f)<.001f,"item anchor uses renderer center rather than root pivot");
             PyreNavigation.entries.Clear();InterestPointController.instance.points.Clear();
             PyreNavigation.entries.Add(new PyreInteractable{IsLit=true,transform=new UnityEngine.Transform{position=new UnityEngine.Vector3(0,0,10)}});
-            Check(Collect(1024)==1,"lit undiscovered pyre uses full registry independently of map points");
+            Check(Collect(1024)==0,"lit pyre excluded immediately");
+            PyreNavigation.entries[0].IsLit=false;Check(Collect(1024)==1,"unlit undiscovered pyre included");
             Check(WorldEspBridge.Collect(buffer,256,1024,150,150,-1,-1,-1,-1,0)==0,"full registry still respects pyre filter");
             Console.WriteLine(checks+" world ESP checks passed");
         } finally {Marshal.FreeHGlobal(buffer);}

@@ -4,6 +4,10 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Agrupamento sobreposto do Magnet compartilha destino entre os atraídos.
+- ESP omite braseiros acesos; teleporte prepara colisões próximas e respeita a altura do jogador.
+- Silhueta passa a definir viewport e matrizes explicitamente; confirmação visual pendente.
+
 - God Mode bloqueia dano antes do desconto no jogador local e usa MaxHealth com perks.
 - Silhueta cria view explícita para textura typeless e preserva o motivo de falha.
 - Procedimento autorizado de atualização/injeção registrado na skill Mono.

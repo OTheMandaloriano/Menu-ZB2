@@ -112,3 +112,5 @@ Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. 
 [Auditoria CE/dnSpy, ESP e navegação dos braseiros](docs/AUDITORIA_ESP_BRASEIROS.md)
 
 [God Mode e diagnóstico da silhueta](docs/GOD_MODE_E_SILHUETA.md)
+
+[Magnet sobreposto, braseiros e alinhamento da silhueta](docs/MAGNET_SIL_3.md)

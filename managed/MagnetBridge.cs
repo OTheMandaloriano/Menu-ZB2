@@ -27,10 +27,11 @@ namespace Zb2Menu {
             var current=ZombieLoader.Instance;
             if(current==null || player.cam==null || player.cam.CameraTransform==null)return;
             if(!previous || owner!=player || loader!=current){Reset();owner=player;loader=current;previous=true;}
+            int requestedMode=mode;bool stacked=(mode&4)!=0;mode &= 3;
             if(mode<0 || mode>2)mode=0;
             bool fixedPoint=mode!=0;
             // Fixed modes retain captured enemies until the toggle is disabled.
-            freeze=freeze || fixedPoint;
+            freeze=freeze || fixedPoint || stacked;
             if(!freeze)MagnetFreeze.Clear();
             else MagnetFreeze.Pulse();
             if(!inputAllowed || !Application.isFocused || GlobalTexting.IsTexting || DeveloperConsole.Opened || Time.timeScale<=0)return;
@@ -44,7 +45,7 @@ namespace Zb2Menu {
             if(forward.sqrMagnitude<.01f)return;forward.Normalize();
             frontDistance=FiniteDistance(frontDistance,2.5f,1.5f,10);bossDistance=FiniteDistance(bossDistance,8,6,20);
             Vector3 center=origin+forward*frontDistance;
-            if(mode!=anchorMode){anchorSet=false;placed.Clear();anchorMode=mode;}
+            if(requestedMode!=anchorMode){anchorSet=false;placed.Clear();anchorMode=requestedMode;}
             if(mode==1 && !anchorSet){
                 RaycastHit hit;var view=player.cam.CameraTransform;
                 if(!Physics.Raycast(view.position,view.forward,out hit,1000,~0,QueryTriggerInteraction.Ignore) || hit.normal.y<.6f){Status="Magnet: mire em um ponto de chao livre";return;}
@@ -55,12 +56,12 @@ namespace Zb2Menu {
                 if(!Physics.Raycast(center+Vector3.up*3,Vector3.down,out nearby,7,~0,QueryTriggerInteraction.Ignore) || nearby.normal.y<.6f){Status="Magnet: sem chao seguro a frente";return;}
                 center=nearby.point;
             }
-            bool relocated=!anchorSet || (!fixedPoint && Vector3.Distance(anchor,center)>2);
+            bool relocated=!anchorSet || (!fixedPoint && Vector3.Distance(anchor,center)>(stacked?.05f:2f));
             if(relocated){anchor=center;anchorForward=forward;anchorSet=true;placed.Clear();}
             int count=0;
             int total=current.zombies.Count;
             for(int scanned=0;scanned<total;++scanned) {
-                if(count>=4)break;
+                if(count>=(stacked?16:4))break;
                 int index=cursor%total;cursor=(index+1)%total;
                 var zombie=current.zombies[index];
                 if(zombie==null || zombie.obj==null || zombie.health==null || !zombie.health.isAlive || zombie.health.amount<=0)continue;
@@ -74,21 +75,35 @@ namespace Zb2Menu {
                 var allocation=boss?bossSlots:slots;
                 int slot;if(!allocation.TryGetValue(zombie.identity.id,out slot)){slot=allocation.Count;allocation.Add(zombie.identity.id,slot);}
                 float spacing=boss?4:1.2f;
-                var destination=boss?anchor+anchorForward*(bossDistance-frontDistance):anchor;
+                var destination=boss && !stacked?anchor+anchorForward*(bossDistance-frontDistance):anchor;
                 int columns=boss?3:5;
-                var proposed=destination+new Vector3((slot%columns-columns/2)*spacing,3,(slot/columns)*spacing);
+                var proposed=stacked?destination+Vector3.up*3:destination+new Vector3((slot%columns-columns/2)*spacing,3,(slot/columns)*spacing);
                 RaycastHit ground;
-                if(!Physics.Raycast(proposed,Vector3.down,out ground,7,~0,QueryTriggerInteraction.Ignore) || ground.normal.y<.6f)continue;
+                if(!FindGround(proposed,stacked,out ground) || ground.normal.y<.6f)continue;
                 Vector3 target=ground.point+Vector3.up*.15f;
-                if(Vector3.Distance(zombie.obj.transform.position,target)<1.25f){placed[zombie.identity.id]=target;if(freeze)MagnetFreeze.Hold(zombie);continue;}
+                if(Vector3.Distance(zombie.obj.transform.position,target)<(stacked?.03f:1.25f)){placed[zombie.identity.id]=target;if(freeze)MagnetFreeze.Hold(zombie);continue;}
                 float bodyRadius=boss?1.5f:.4f,bodyHeight=boss?4:1.6f;
-                if(Physics.CheckCapsule(target+Vector3.up*bodyRadius,target+Vector3.up*bodyHeight,bodyRadius,~0,QueryTriggerInteraction.Ignore))continue;
+                if(stacked?StackBlocked(target,bodyRadius,bodyHeight):Physics.CheckCapsule(target+Vector3.up*bodyRadius,target+Vector3.up*bodyHeight,bodyRadius,~0,QueryTriggerInteraction.Ignore))continue;
                 zombie.TeleportTo(target,zombie.obj.transform.rotation);
                 placed[zombie.identity.id]=target;
                 if(freeze)MagnetFreeze.Hold(zombie);
                 ++count;
             }
             Status="";
+        }
+        static bool FindGround(Vector3 origin,bool stacked,out RaycastHit ground) {
+            if(!stacked)return Physics.Raycast(origin,Vector3.down,out ground,7,~0,QueryTriggerInteraction.Ignore);
+            ground=new RaycastHit();float nearest=float.PositiveInfinity;bool found=false;
+            foreach(var hit in Physics.RaycastAll(origin,Vector3.down,7,~0,QueryTriggerInteraction.Ignore)) {
+                if(hit.collider==null || hit.collider.GetComponentInParent<ZombieObject>()!=null || hit.distance>=nearest)continue;
+                nearest=hit.distance;ground=hit;found=true;
+            }
+            return found;
+        }
+        static bool StackBlocked(Vector3 target,float radius,float height) {
+            foreach(var collider in Physics.OverlapCapsule(target+Vector3.up*radius,target+Vector3.up*height,radius,~0,QueryTriggerInteraction.Ignore))
+                if(collider!=null && collider.GetComponentInParent<ZombieObject>()==null)return true;
+            return false;
         }
         static float FiniteDistance(float value,float fallback,float min,float max){return float.IsNaN(value)||float.IsInfinity(value)?fallback:Mathf.Clamp(value,min,max);}
         static void LoadOneBoss(ZombieLoader current) {

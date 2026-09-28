@@ -2894,8 +2894,9 @@ namespace Mono {
             (s_options.bFastKnife ? 256 : 0) | (s_options.bFullAuto ? 512 : 0) |
             (s_options.bUnlockSlots ? 1024 : 0) | (s_options.bNoClip ? 2048 : 0) | (s_options.bMenuOpen ? 4096 : 0) | (s_options.bEnemyMagnet ? 8192 : 0) | (s_options.bMagnetFreeze?16384:0) | (s_options.bItemMagnet?32768:0) | (s_options.bGodMode?65536:0);
         int lootWholeMap=s_options.bLootWholeMap?1:0;
+        int magnetDestination=s_options.iMagnetDestination+(s_options.iMagnetArrangement==1?4:0);
         void* args[] = {local, &flags, &s_options.fRapidMult, &s_options.fSpeedMult,
-            &s_options.fJumpMult, &s_options.fRollMult, &s_options.fKnifeMult, &s_options.fNoClipSpeed, &s_options.fMagnetRadius, &s_options.iMagnetTargets,&s_options.fMagnetFront,&s_options.fMagnetBoss,&s_options.fItemMagnetRadius,&s_options.iItemMagnetType,&s_options.iLootFilter0,&s_options.iLootFilter1,&s_options.iLootFilter2,&s_options.iLootFilter3,&s_options.iMagnetDestination,&lootWholeMap};
+            &s_options.fJumpMult, &s_options.fRollMult, &s_options.fKnifeMult, &s_options.fNoClipSpeed, &s_options.fMagnetRadius, &s_options.iMagnetTargets,&s_options.fMagnetFront,&s_options.fMagnetBoss,&s_options.fItemMagnetRadius,&s_options.iItemMagnetType,&s_options.iLootFilter0,&s_options.iLootFilter1,&s_options.iLootFilter2,&s_options.iLootFilter3,&magnetDestination,&lootWholeMap};
         InvokeAimBool(s_modifierApply, nullptr, args, s_modifiersPending);
         BridgeError(s_modifierError, "MODIFIERS");
         s.slotsOn=s_options.bUnlockSlots;

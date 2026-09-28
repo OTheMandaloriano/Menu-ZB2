@@ -64,7 +64,7 @@ inline void Draw(ID3D11Device* device,ID3D11DeviceContext* context,bool enabled,
     context->UpdateSubresource(constants.Get(),0,nullptr,&values,0,0); frameContext=context;
     auto* list=ImGui::GetBackgroundDrawList();
     list->AddCallback(Begin,nullptr);
-    list->AddImage((ImTextureID)frameMask.Get(),ImVec2(0,0),ImGui::GetIO().DisplaySize);
+    list->AddImage((ImTextureID)frameMask.Get(),ImVec2(0,0),ImGui::GetIO().DisplaySize,ImVec2(0,1),ImVec2(1,0));
     list->AddCallback(End,nullptr);
     list->AddCallback(ImDrawCallback_ResetRenderState,nullptr);
 }

@@ -40,22 +40,27 @@ namespace Zb2Menu {
         }
         static string Teleport(PlayerMain player,PyreInteractable target) {
             if(!player.HasLocalControl || player.healthFast<=0)return "Jogador local indisponivel";
+            using(var collision=new NearbyCollisionScope(target.transform.position)) {
             // Candidate destinations are beside the prop, never inside its origin.
-            for(int i=0;i<8;++i){
-                float angle=i*(float)Math.PI/4;
-                var offset=new Vector3((float)Math.Sin(angle),0,(float)Math.Cos(angle))*1.6f;
+            for(int i=0;i<24;++i){
+                float angle=(i%8)*(float)Math.PI/4;
+                var offset=new Vector3((float)Math.Sin(angle),0,(float)Math.Cos(angle))*(1.2f+(i/8)*.7f);
                 RaycastHit hit;
-                if(!Physics.Raycast(target.transform.position+offset+Vector3.up*2,Vector3.down,out hit,4,~0,QueryTriggerInteraction.Ignore) || hit.normal.y<.7f)continue;
-                var destination=hit.point+Vector3.up*.1f;
+                if(!Physics.Raycast(target.InteractionPoint+offset+Vector3.up*1.5f,Vector3.down,out hit,5,~0,QueryTriggerInteraction.Ignore) || hit.normal.y<.7f)continue;
+                float height=player.defaultHeight;
+                if(!(height>.5f && height<4))return "Altura do jogador invalida";
+                float radius=Math.Min(.35f,height*.25f);
+                var destination=hit.point+Vector3.up*(height*.5f+.08f);
                 bool blocked=false;
-                foreach(var collider in Physics.OverlapCapsule(destination+Vector3.up*.4f,destination+Vector3.up*1.4f,.35f,~0,QueryTriggerInteraction.Ignore))
+                foreach(var collider in Physics.OverlapCapsule(hit.point+Vector3.up*(radius+.08f),hit.point+Vector3.up*(height-radius+.08f),radius,~0,QueryTriggerInteraction.Ignore))
                     if(collider!=null && !collider.transform.IsChildOf(player.transform)){blocked=true;break;}
                 if(blocked)continue;
-                player.transform.position=destination;
+                player.transform.position=destination;collision.Arrived();
                 var body=player.GetComponent<Rigidbody>();if(body!=null && !body.isKinematic)body.linearVelocity=Vector3.zero;
                 return "Teleportado ao lado do braseiro; ative pelo jogo";
             }
             return "Sem destino livre e com chao junto ao braseiro";
+            }
         }
     }
 }

@@ -137,6 +137,7 @@ namespace Config {
     // ---- VISUAL / Chams ----
     extern bool bItemDistance,bItemLine,bItemBox,bPoiDistance,bPoiLine,bPoiBox;
     extern int iItemLineFrom,iPoiLineFrom;
+    extern int iMagnetArrangement;
     extern int iPyreSelection, iPyreRequest;
     extern bool bSilhouette;
     extern float fSilhouetteWidth, colSilhouetteVis[4], colSilhouetteInv[4];

@@ -42,9 +42,21 @@ namespace Zb2Menu {
                 if (width<1 || height<1) { Clear(); return "Silhueta: camera sem tamanho"; }
                 if (camera!=next || mask==null || mask.width!=width || mask.height!=height) Clear();
                 if (commands==null) Initialize(next,width,height);
+                RefreshCommands();
+                Failure="";return "";
+            } catch (Exception error) { Clear(); Failure="Silhueta: "+error.GetType().Name+" ("+error.Message+")";return Failure; }
+        }
+
+        static void RefreshCamera(Camera current) {
+            if(current!=camera || commands==null)return;
+            try {RefreshCommands();}catch(Exception error){Clear();Failure="Silhueta: "+error.Message;}
+        }
+        static void RefreshCommands() {
                 commands.Clear();
                 commands.SetRenderTarget(new RenderTargetIdentifier(mask), new RenderTargetIdentifier(BuiltinRenderTextureType.CameraTarget));
                 commands.ClearRenderTarget(false,true,Color.clear);
+                commands.SetViewport(new Rect(0,0,camera.pixelWidth,camera.pixelHeight));
+                commands.SetViewProjectionMatrices(camera.worldToCameraMatrix,camera.projectionMatrix);
                 int count=0;
                 foreach (var zombie in ZombieLoader.Instance.zombies) {
                     if (zombie==null || zombie.obj==null || zombie.health==null || !zombie.health.isAlive || zombie.health.amount<=0) continue;
@@ -56,10 +68,7 @@ namespace Zb2Menu {
                         commands.DrawRenderer(renderer,visible,sub,0);
                     }
                 }
-                Failure="";return "";
-            } catch (Exception error) { Clear(); Failure="Silhueta: "+error.GetType().Name+" ("+error.Message+")";return Failure; }
         }
-
         static void Initialize(Camera next,int width,int height) {
             var shader=Shader.Find("Hidden/Internal-Colored");
             if (shader==null || !shader.isSupported) throw new NotSupportedException("shader");
@@ -74,9 +83,11 @@ namespace Zb2Menu {
             camera=next;
             commands=new CommandBuffer { name="ZB2 silhouette mask" };
             camera.AddCommandBuffer(CameraEvent.AfterForwardAlpha,commands);
+            Camera.onPreRender+=RefreshCamera;
         }
 
         public static void Clear() {
+            Camera.onPreRender-=RefreshCamera;
             if (camera!=null && commands!=null) camera.RemoveCommandBuffer(CameraEvent.AfterForwardAlpha,commands);
             if (commands!=null) commands.Release();
             commands=null; camera=null;
