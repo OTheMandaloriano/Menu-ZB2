@@ -1711,7 +1711,8 @@ namespace Mono {
     static void ApplyVisuals(bool ready) {
         if(!s_chamsApply)return;
         int enabled=ready && s_options.bChams?1:0;
-        void* args[]={&enabled,&s_options.chamsVisible,&s_options.chamsHidden};MonoObject* exception=nullptr;
+        int silhouette=ready && s_options.bSilhouette?1:0;
+        void* args[]={&enabled,&s_options.chamsVisible,&s_options.chamsHidden,&silhouette};MonoObject* exception=nullptr;
         auto message=pInvoke(s_chamsApply,nullptr,args,&exception);
         s.visualStatus[0]=0;
         if(message && !exception){char* text=pStrUtf8(message);if(text){strncpy_s(s.visualStatus,text,_TRUNCATE);pFree(text);}}

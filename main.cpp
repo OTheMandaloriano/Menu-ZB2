@@ -3,6 +3,7 @@
 #include <atomic>
 #include "includes.h"
 #include "runtime_gate.h"
+#include "silhouette.h"
 
 // ============================================================================
 // MAIN.CPP - Ponto de entrada + hook D3D11 Present/ResizeBuffers (ZB2 Menu)
@@ -132,6 +133,7 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
     Mono::SetUiState(Config::bMenuOpen?(1|(input.WantCaptureMouse?2:0)|(input.WantCaptureKeyboard?4:0)):0);         // janela do menu (4 abas)
     Mono::SetViewport(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y);
     Mono::Tick(); // bootstrap only; never invokes Unity
+    Silhouette::Draw(g_pDevice,g_pContext,Config::bSilhouette,Config::colSilhouetteVis,Config::colSilhouetteInv,Config::fSilhouetteWidth);
     GUI::RenderOverlay();  // watermark/debug/FOV fora da janela
 
     ImGui::EndFrame();

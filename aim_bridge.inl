@@ -68,9 +68,9 @@ static bool LoadAimBridge() {
         auto eligible=pClassFrom(image,"Zb2Menu","ItemEligibility");
         if(eligible)s_itemAllowed=pMethodFrom(eligible,"AllowedId",1);
         auto catalog = pClassFrom(image,"Zb2Menu","ItemCatalogBridge");
-        auto chams = pClassFrom(image,"Zb2Menu","ChamsBridge");
+        auto chams = pClassFrom(image,"Zb2Menu","VisualEffectsBridge");
         if(!catalog || !chams)return false;
-        s_catalogRead=pMethodFrom(catalog,"Read",2);s_catalogIcon=pMethodFrom(catalog,"Icon",2);s_chamsApply=pMethodFrom(chams,"Apply",3);
+        s_catalogRead=pMethodFrom(catalog,"Read",2);s_catalogIcon=pMethodFrom(catalog,"Icon",2);s_chamsApply=pMethodFrom(chams,"Apply",4);
         auto ranges = pClassFrom(image, "Zb2Menu", "RangeBridge");
         if (!modifiers || !world || !ranges) return false;
         s_rangeConfigure = pMethodFrom(ranges, "Configure", 6);

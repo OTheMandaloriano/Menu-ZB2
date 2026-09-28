@@ -4,6 +4,10 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Silhueta independente do Chams: borda externa, cores visível/oculta e espessura persistida.
+- Shader validado em D3D11 WARP; integração com profundidade do jogo ainda pendente de teste em partida, sem suporte inicial a MSAA.
+- Auditoria documenta a ausência de caminho confirmado para Magnet de amigos e cliente sem host.
+
 - Item Magnet alterna por pressionamento, sem exigir segurar a tecla.
 - Modal de loot mostra quantidade selecionada e permite selecionar pela imagem; Todos permitidos inclui todas as categorias.
 - Limites locais transformados do renderer substituem bounds de mundo potencialmente antigos em loot distante.

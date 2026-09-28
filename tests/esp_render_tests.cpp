@@ -49,8 +49,11 @@ int main(){
     Config::iNoClipKey=118;Config::iMagnetKey=119;
     Config::iLootFilter0=456;Config::bLootWholeMap=true;Config::iMagnetDestination=1;
     Config::iItemFilter0=123;Config::iItemFilter3=1<<19;Config::iPoiFilter=1<<17;
+    Config::bSilhouette=true;Config::fSilhouetteWidth=4;Config::colSilhouetteInv[0]=0.25f;
     Check(GUI::SaveConfig("independent-ranges-test"),"save separate radii");
+    Config::bSilhouette=false;Config::fSilhouetteWidth=1;Config::colSilhouetteInv[0]=1;
     Config::fItemRadius=80;Config::fPoiRadius=90;GUI::LoadConfig("independent-ranges-test");
+    Check(Config::bSilhouette && Config::fSilhouetteWidth==4 && Config::colSilhouetteInv[0]==0.25f,"silhouette preset restores independent toggle, width and color");
     Check(Config::fItemRadius==35 && Config::fPoiRadius==280,"preset restores distinct radii");
     Check(Config::iNoClipKey==118 && Config::iMagnetKey==119,"preset restores custom NoClip and Magnet keys");
     Check(Config::iItemFilter0==123 && Config::iItemFilter3==(1<<19) && Config::iPoiFilter==(1<<17),"preset preserves individual item and POI masks");

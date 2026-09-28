@@ -58,3 +58,5 @@ See the maintained Portuguese references for [structure](../ESTRUTURA.md), [dist
 [Hotkeys and Magnet](../CONTROLES.md)
 
 [Visual catalog, team overlay and Magnet review](../REVISAO_VISUAL_MAGNET.md)
+
+- Independent silhouette rendering has visible/occluded colors and saved thickness. Its D3D11 WARP shader tests pass; live scene-depth integration is pending. Initial support excludes MSAA. See [silhouette and network authority](../SILHUETA_E_AUTORIDADE.md).

@@ -143,6 +143,10 @@ namespace Config {
     bool  bAllyHeadDot = false;
     float colAllyVis[4] = { 0.2f, 0.5f, 1.0f, 1 };
 
+    bool bSilhouette = false;
+    float fSilhouetteWidth = 2.f;
+    float colSilhouetteVis[4] = {0,1,0,1};
+    float colSilhouetteInv[4] = {1,0.3f,0,1};
     bool  bChams = false;
     float colChamsVis[4] = { 1, 0, 0, 1 };
     float colChamsInv[4] = { 1, 1, 0, 1 };
@@ -702,6 +706,7 @@ namespace GUI {
         JV(colZombieBox); JV(colZombieName); JV(colZombieDist); JV(colZombieHp); JB(bBossColor); JV(colBossBox);
         JB(bAllyEsp); JB(bAllyBoxShow); JB(bAllyPct); JS(szAllyLayout); JI(iAllySnapFrom); JI(iAllyLayout); JV(colAllyName); JV(colAllyDist); JV(colAllyHp); JV(colAllySkel); JV(colAllyLine); JV(colAllyDot);  JF(fAllyDistance); JI(iMagnetTargets); JI(iMagnetDestination); JB(bLootWholeMap); JI(iLootFilter0);JI(iLootFilter1);JI(iLootFilter2);JI(iLootFilter3); JF(fMagnetFront); JF(fMagnetBoss); JI(iAllyBox); JB(bAllyName); JB(bAllyDist); JB(bAllyHp);
         JB(bAllySkeleton); JB(bAllySnap); JB(bAllyHeadDot); JV(colAllyVis);
+        JB(bSilhouette); JF(fSilhouetteWidth); JV(colSilhouetteVis); JV(colSilhouetteInv);
         JB(bChams); JV(colChamsVis); JV(colChamsInv); JB(bItemEsp); JB(bItemWeapons);
         JB(bItemRare); JB(bItemAmmo); JB(bItemSupply); JV(colItem); JV(colItemRare); JV(colItemAmmo); JV(colItemSupply); JF(fItemRadius); JF(fPoiRadius); JI(iItemFilter0); JI(iItemFilter1); JI(iItemFilter2); JI(iItemFilter3); JI(iPoiFilter); JB(bPoiGraves); JB(bPoiPlayers);
         JB(bPoiEsp); JB(bPoiHeli); JB(bPoiBoss); JB(bPoiMission); JB(bPoiWave); JB(bPoiLootFix); JB(bPoiBench); JB(bPoiFire); JB(bPoiShop); JB(bPoiRespawn);
@@ -789,6 +794,7 @@ namespace GUI {
         LV(colZombieBox); LV(colZombieName); LV(colZombieDist); LV(colZombieHp); LB(bBossColor); LV(colBossBox);
         LB(bAllyEsp); LB(bAllyBoxShow); LB(bAllyPct); LS(szAllyLayout); LI(iAllySnapFrom); LI(iAllyLayout); LV(colAllyName); LV(colAllyDist); LV(colAllyHp); LV(colAllySkel); LV(colAllyLine); LV(colAllyDot);  LF(fAllyDistance); LI(iMagnetTargets); LI(iMagnetDestination); LB(bLootWholeMap); LI(iLootFilter0);LI(iLootFilter1);LI(iLootFilter2);LI(iLootFilter3); LF(fMagnetFront); LF(fMagnetBoss); LI(iAllyBox); LB(bAllyName); LB(bAllyDist); LB(bAllyHp);
         LB(bAllySkeleton); LB(bAllySnap); LB(bAllyHeadDot); LV(colAllyVis);
+        LB(bSilhouette); LF(fSilhouetteWidth); LV(colSilhouetteVis); LV(colSilhouetteInv);
         LB(bChams); LV(colChamsVis); LV(colChamsInv); LB(bItemEsp); LB(bItemWeapons);
         LB(bItemRare); LB(bItemAmmo); LB(bItemSupply); LV(colItem); LV(colItemRare); LV(colItemAmmo); LV(colItemSupply); LF(fItemRadius); LF(fPoiRadius); LI(iItemFilter0); LI(iItemFilter1); LI(iItemFilter2); LI(iItemFilter3); LI(iPoiFilter); LB(bPoiGraves); LB(bPoiPlayers);
         LB(bPoiEsp); LB(bPoiHeli); LB(bPoiBoss); LB(bPoiMission); LB(bPoiWave); LB(bPoiLootFix); LB(bPoiBench); LB(bPoiFire); LB(bPoiShop); LB(bPoiRespawn);
@@ -1280,6 +1286,14 @@ namespace GUI {
                         ImGui::SliderFloat("Raio equipe", &Config::fAllyDistance,10,500,"%.0fm");
                     }
 
+                    Section("Silhueta");
+                    ImGui::Checkbox("Contorno do corpo", &Config::bSilhouette);
+                    Tip("Borda do modelo, sem preencher o corpo. Requer D3D11 sem MSAA. Validacao em partida pendente.");
+                    if (Config::bSilhouette) {
+                        ImGui::SliderFloat("Espessura##Silhueta", &Config::fSilhouetteWidth, 1.f, 6.f, "%.0f px");
+                        ImGui::TextDisabled("Visivel"); SwatchR("##SilVis", Config::colSilhouetteVis, "Borda da parte visivel.");
+                        ImGui::TextDisabled("Oculto"); SwatchR("##SilInv", Config::colSilhouetteInv, "Borda da parte oculta.");
+                    }
                     Section("Chams");
                     if(Mono::Get().visualStatus[0])ImGui::TextWrapped("%s",Mono::Get().visualStatus);
                     ImGui::Checkbox("Corpo (XQZ)", &Config::bChams); Tip("Atravessa parede. O proprio checkbox e o enable.");
