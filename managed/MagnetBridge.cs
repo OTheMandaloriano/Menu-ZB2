@@ -47,6 +47,7 @@ namespace Zb2Menu {
                 int index=cursor%total;cursor=(index+1)%total;
                 var zombie=current.zombies[index];
                 if(zombie==null || zombie.obj==null || zombie.health==null || !zombie.health.isAlive || zombie.health.amount<=0)continue;
+                if(MagnetFreeze.IsSpawning(zombie)){MagnetFreeze.Release(zombie);continue;}
                 bool boss=zombie.identity.IsBoss;
                 if((targetMode==1 && boss) || (targetMode==2 && !boss)){MagnetFreeze.Release(zombie);continue;}
                 if(!boss && Vector3.Distance(origin,zombie.obj.transform.position)>radius)continue;

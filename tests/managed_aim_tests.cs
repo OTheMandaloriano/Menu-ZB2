@@ -5,6 +5,7 @@ using Zb2Menu;
 using UnityEngine;
 namespace Zb2Menu {
     internal static class TestEnvironment { public static bool Focused = true; }
+    internal static class MenuInputBridge {public static int flags;public static void Install(HarmonyLib.Harmony h){}public static void Update(int value){flags=value;}}
     internal static class MagnetFreeze {public static void Install(HarmonyLib.Harmony h){}}
     internal static class NoClipBridge {public static void Install(HarmonyLib.Harmony h) {}}
     // Range/LOD has its own Harmony integration suite.
@@ -119,10 +120,11 @@ static class ManagedAimTests {
         Check(AimBridge.Install(),"install is idempotent");
         int callbacks = 0, callbackThread = 0;
         AimBridge.NativeUpdate update = delegate { ++callbacks; callbackThread=System.Threading.Thread.CurrentThread.ManagedThreadId; };
-        Check(AimBridge.StartLoop(System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(update)),"register update callback");
+        int uiFlags=7;AimBridge.NativeUiState ui=delegate{return uiFlags;};
+        Check(AimBridge.StartLoop(System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(update),System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(ui)),"register update callback");
         var game = new ZBMain(); game.Update();
         Check(callbacks==1 && callbackThread==System.Threading.Thread.CurrentThread.ManagedThreadId,"runtime callback executes on game update thread");
-        Time.timeScale=0;game.Update();Check(callbacks==1,"paused update does no game memory work");Time.timeScale=1;
+        Time.timeScale=0;uiFlags=0;game.Update();Check(callbacks==1,"paused update does no game memory work");Check(MenuInputBridge.flags==0,"cursor ownership updates even while simulation paused");Time.timeScale=1;
         Physics.Results=new[]{new RaycastHit{collider=enemy,distance=4},new RaycastHit{collider=self,distance=.2f}};
         Publish(1);Fire();
         Check(gun.Last.convergingDirection.z == -1,"silent redirects real patched Shoot argument to rear enemy");
@@ -159,6 +161,7 @@ static class ManagedAimTests {
         AimBridge.Shutdown();Publish(1);Fire();Check(gun.Last.convergingDirection.z==1,"shutdown removes owned patches");
         game.Update();Check(callbacks==1,"shutdown disables native update callback");
         GC.KeepAlive(update);
+        GC.KeepAlive(ui);
         Console.WriteLine("PASS: "+checks+" managed/Harmony regression checks; "+AimBridge.Statistics());
     }
 }

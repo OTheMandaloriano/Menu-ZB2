@@ -98,3 +98,5 @@ Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. 
 [Catálogo visual, Chams e revisão do Magnet](docs/REVISAO_VISUAL_MAGNET.md)
 
 [Itens permitidos e estado dos módulos Magnet](docs/MAGNET_ITENS_PERMITIDOS.md)
+
+[Entrada do menu e animação de surgimento](docs/ENTRADA_E_SURGIMENTO.md)

@@ -1,3 +1,4 @@
+#include "ui_capture.h"
 #include "ui_input_queue.h"
 #include <atomic>
 #include "includes.h"
@@ -31,13 +32,13 @@ static HWND            g_hWindow = nullptr;
 static bool            g_bInit = false;
 static UiInput::Queue g_uiInput;
 static std::atomic<bool> g_uiOpen{false};
+static std::atomic<bool> g_wantMouse{false},g_wantKeyboard{false};
 static std::atomic<int> g_uiKey{VK_INSERT};
 static void DrainUiInput();
 
 static ID3D11Device*           g_pDevice = nullptr;
 static ID3D11DeviceContext*    g_pContext = nullptr;
 static ID3D11RenderTargetView* g_pRTV = nullptr;
-static void ApplyGameClip(); // forward (definida antes do hkWndProc)
 static LRESULT CALLBACK hkWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam); // forward
 static HWND GetProcessWindow(); // forward (fallback se GetDesc falhar)
 
@@ -123,11 +124,12 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
 
 
 
-    { static int s_clipTick = 0;
-      if (!Config::bMenuOpen && g_bInit && (++s_clipTick % 120 == 0)) ApplyGameClip(); }
     GUI::ProcessFeatureHotkeys();
     GUI::Render();
-    g_uiOpen.store(Config::bMenuOpen);g_uiKey.store(Config::iMenuKey);         // janela do menu (4 abas)
+    const auto& input=ImGui::GetIO();
+    g_uiOpen.store(Config::bMenuOpen);g_uiKey.store(Config::iMenuKey);
+    g_wantMouse.store(input.WantCaptureMouse);g_wantKeyboard.store(input.WantCaptureKeyboard);
+    Mono::SetUiState(Config::bMenuOpen?(1|(input.WantCaptureMouse?2:0)|(input.WantCaptureKeyboard?4:0)):0);         // janela do menu (4 abas)
     Mono::SetViewport(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y);
     Mono::Tick(); // bootstrap only; never invokes Unity
     GUI::RenderOverlay();  // watermark/debug/FOV fora da janela
@@ -148,31 +150,15 @@ static long __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, U
     return forward();
 }
 
-// WndProc: INSERT/DELETE alterna; cursor fix devolve controle ao jogo fechado.
-static bool s_cursorHiddenByUs = false; // guarda: par abre/fecha a prova de key-repeat
-
-// Prende o cursor na area cliente da janela (modo janela: sem isso a seta
-// escapa e cliques caem fora do jogo). So com menu fechado e jogo em foco.
-static void ApplyGameClip() {
-    if (!g_hWindow) return;
-    if (GetForegroundWindow() != g_hWindow) return;
-    RECT r;
-    if (!GetClientRect(g_hWindow, &r)) return;
-    POINT ul = { r.left, r.top }, lr = { r.right, r.bottom };
-    ClientToScreen(g_hWindow, &ul);
-    ClientToScreen(g_hWindow, &lr);
-    r.left = ul.x; r.top = ul.y; r.right = lr.x; r.bottom = lr.y;
-    ClipCursor(&r);
-}
-
+// ImGui owns queued UI input; Unity owns cursor lock/visibility on its Update thread.
 static void DrainUiInput() {
     UiInput::Event event;
     while(g_uiInput.Pop(event)) {
         if(event.message==WM_KEYDOWN && (event.wparam==static_cast<WPARAM>(Config::iMenuKey)||(event.wparam==VK_DELETE && !ImGui::GetIO().WantTextInput))) {
             if(!(event.lparam&(1LL<<30))) {
                 Config::bMenuOpen=!Config::bMenuOpen;
-                if(Config::bMenuOpen && !s_cursorHiddenByUs){ShowCursor(FALSE);s_cursorHiddenByUs=true;}
-                if(!Config::bMenuOpen){ApplyGameClip();if(s_cursorHiddenByUs){ShowCursor(TRUE);s_cursorHiddenByUs=false;}}
+                if(Config::bMenuOpen)ClipCursor(nullptr);
+                else {ReleaseCapture();ImGui::GetIO().ClearInputKeys();}
             }
         } else if(Config::bMenuOpen) ImGui_ImplWin32_WndProcHandler(event.window,event.message,event.wparam,event.lparam);
     }
@@ -183,7 +169,8 @@ static LRESULT CALLBACK hkWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
     const bool mouse=uMsg>=WM_MOUSEFIRST && uMsg<=WM_MOUSELAST;
     const bool toggle=uMsg==WM_KEYDOWN && (wParam==static_cast<WPARAM>(g_uiKey.load())||wParam==VK_DELETE);
     if(toggle || (open && (keyboard || mouse || uMsg==WM_SETFOCUS || uMsg==WM_KILLFOCUS))) {
-        if(g_uiInput.Push({hWnd,uMsg,wParam,lParam}) && (keyboard||mouse))return TRUE;
+        g_uiInput.Push({hWnd,uMsg,wParam,lParam});
+        if(UiCapture::Consume(open,toggle,keyboard,mouse,g_wantKeyboard.load(),g_wantMouse.load()))return TRUE;
     }
     return CallWindowProc(oWndProc,hWnd,uMsg,wParam,lParam);
 }

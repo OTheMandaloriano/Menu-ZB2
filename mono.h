@@ -97,6 +97,7 @@ namespace Mono {
 
     bool Init();
     void Tick();
+    void SetUiState(int flags);
     const State& Get();
     void SetViewport(float w, float h); // publish viewport + Config snapshot from Present
 

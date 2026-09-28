@@ -7,7 +7,8 @@ public class MultiplayerController {public static MultiplayerController instance
 public struct ZombieIdentity {public int id;public bool IsBoss;}
 public class ZombieHealth {public bool isAlive=true;public float amount=100;}
 public class ZombieObject {public Rigidbody body=new Rigidbody();public Animator animator=new Animator();public Transform transform=new Transform();}
-public class Zombie {public int updates;[MethodImpl(MethodImplOptions.NoInlining)]public void UpdateStateMachine(int index){updates++;}[MethodImpl(MethodImplOptions.NoInlining)]public void UpdatePhysicsAndAnimation(){updates++;}[MethodImpl(MethodImplOptions.NoInlining)]public void UpdateBossBehaviour(){updates++;}public ZombieIdentity identity;public ZombieHealth health=new ZombieHealth();public ZombieObject obj=new ZombieObject();public int calls;public void TeleportTo(Vector3 p,Quaternion r){obj.transform.position=p;calls++;}}
+public enum ZombieState {Aware,Spawning,Transition}
+public class Zombie {public ZombieState state,targetState;public int updates;[MethodImpl(MethodImplOptions.NoInlining)]public void UpdateStateMachine(int index){updates++;}[MethodImpl(MethodImplOptions.NoInlining)]public void UpdatePhysicsAndAnimation(){updates++;}[MethodImpl(MethodImplOptions.NoInlining)]public void UpdateBossBehaviour(){updates++;}public ZombieIdentity identity;public ZombieHealth health=new ZombieHealth();public ZombieObject obj=new ZombieObject();public int calls;public void TeleportTo(Vector3 p,Quaternion r){obj.transform.position=p;calls++;}}
 public class ZombieLoader {public static ZombieLoader Instance=new ZombieLoader();public List<Zombie> zombies=new List<Zombie>();public List<Zombie> unloadedZombies=new List<Zombie>();public List<Zombie> zombieProps=new List<Zombie>();public void ForceLoadRealZombie(int id){var z=unloadedZombies.Find(v=>v.identity.id==id);if(z!=null){unloadedZombies.Remove(z);zombies.Add(z);}}}
 class MagnetTests {
     static int checks;
@@ -32,7 +33,12 @@ class MagnetTests {
         Check(boss.obj.transform.position.z>=p.transform.position.z+8,"boss landing is separated from normal anchor");
         MagnetBridge.Reset();boss.obj.transform.position=new Vector3(0,0,900);normal.obj.transform.position=new Vector3(0,0,15);Time.unscaledTime=8;MagnetBridge.Apply(p,true,true,50,1);Check(boss.calls==1 && normal.calls==1,"zombies only excludes boss");
         var harmony=new HarmonyLib.Harmony("magnet.freeze.tests");MagnetFreeze.Install(harmony);MagnetFreeze.Hold(normal);normal.UpdateStateMachine(0);normal.UpdatePhysicsAndAnimation();normal.UpdateBossBehaviour();Check(normal.updates==0 && normal.obj.body.isKinematic && normal.obj.animator.speed==0,"freeze suspends updates physics and animation");
-        MagnetFreeze.Clear();normal.UpdateStateMachine(0);Check(normal.updates==1 && !normal.obj.body.isKinematic && normal.obj.animator.speed==1,"freeze restores exact body and animation state");harmony.UnpatchAll("magnet.freeze.tests");
+        MagnetFreeze.Clear();normal.UpdateStateMachine(0);Check(normal.updates==1 && !normal.obj.body.isKinematic && normal.obj.animator.speed==1,"freeze restores exact body and animation state");
+        normal.state=ZombieState.Spawning;MagnetFreeze.Hold(normal);normal.UpdateStateMachine(0);Check(normal.updates==2 && normal.obj.animator.speed==1 && !normal.obj.body.isKinematic,"spawn animation and physics remain active");
+        normal.state=ZombieState.Transition;normal.targetState=ZombieState.Spawning;MagnetFreeze.Hold(normal);normal.UpdateStateMachine(0);Check(normal.updates==3 && normal.obj.animator.speed==1,"transition into spawn is never frozen");
+        normal.state=normal.targetState=ZombieState.Aware;MagnetFreeze.Hold(normal);normal.UpdateStateMachine(0);Check(normal.updates==3 && normal.obj.animator.speed==0,"freeze applies after spawn finishes");
+        normal.state=ZombieState.Spawning;normal.UpdateStateMachine(0);Check(normal.updates==4 && normal.obj.animator.speed==1,"new spawn releases previously frozen entity");
+        MagnetFreeze.Clear();harmony.UnpatchAll("magnet.freeze.tests");
         Console.WriteLine(checks+" magnet checks passed");
     }
 }

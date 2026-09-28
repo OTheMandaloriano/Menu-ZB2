@@ -144,6 +144,9 @@ namespace Mono {
     static MonoMethod* mGetProjMat = nullptr; // Camera.get_projectionMatrix (VP proprio)
     static float s_vp[16];       // VP = P*V (column-major, padrao Unity)
     static bool  s_vpOk = false;
+    static std::atomic<int> s_uiFlags{0};
+    void SetUiState(int flags){s_uiFlags.store(flags,std::memory_order_release);}
+    static int __cdecl ReadUiState(){return s_uiFlags.load(std::memory_order_acquire);}
     static RuntimeSettings::Channel s_settings;
     static RuntimeSettings::Values s_options;
     static float s_vpW = 1920.0f, s_vpH = 1080.0f;
@@ -3197,7 +3200,8 @@ namespace Mono {
             if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
                 reinterpret_cast<LPCWSTR>(&GameUpdate), &pinned)) {
                 void* callback = reinterpret_cast<void*>(&GameUpdate);
-                void* args[] = { &callback };
+                void* uiCallback=reinterpret_cast<void*>(&ReadUiState);
+                void* args[] = { &callback, &uiCallback };
                 s_espRun.store(true, std::memory_order_release);
                 installed = InvokeAimBool(s_bridgeStart, nullptr, args, installed) && installed;
             }

@@ -16,7 +16,10 @@ namespace Zb2Menu {
         static readonly object InstallationGate = new object();
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate void NativeUpdate();
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int NativeUiState();
         static NativeUpdate nativeUpdate;
+        static NativeUiState nativeUi;
         [ThreadStatic] static RaycastHit[] hits;
         static Harmony harmony;
         static Request request;
@@ -49,6 +52,7 @@ namespace Zb2Menu {
                     RangeBridge.Install(candidate);
                     NoClipBridge.Install(candidate);
                     MagnetFreeze.Install(candidate);
+                    MenuInputBridge.Install(candidate);
                     harmony = candidate;
                     return true;
                 } catch (Exception ex) {
@@ -71,18 +75,22 @@ namespace Zb2Menu {
         public static void Clear() { lock (Gate) request = new Request(); }
         public static void Shutdown() {
             Clear();
-            lock (Gate) nativeUpdate = null;
+            lock (Gate) {nativeUpdate = null;nativeUi=null;}
+            MenuInputBridge.Update(0);
             lock (InstallationGate) { if (harmony != null) harmony.UnpatchAll(PatchId); harmony = null; }
         }
-        public static bool StartLoop(IntPtr callback) {
+        public static bool StartLoop(IntPtr callback,IntPtr uiCallback) {
             if (callback == IntPtr.Zero || !Install()) return false;
             var action = (NativeUpdate)Marshal.GetDelegateForFunctionPointer(callback, typeof(NativeUpdate));
-            lock (Gate) nativeUpdate = action;
+            var ui=uiCallback==IntPtr.Zero?null:(NativeUiState)Marshal.GetDelegateForFunctionPointer(uiCallback,typeof(NativeUiState));
+            lock (Gate) {nativeUpdate = action;nativeUi=ui;}
             return true;
         }
         static void AfterGameUpdate() {
             NativeUpdate action;
-            lock (Gate) action = nativeUpdate;
+            NativeUiState ui;
+            lock (Gate) {action = nativeUpdate;ui=nativeUi;}
+            try {MenuInputBridge.Update(ui==null?0:ui());}catch(Exception ex){RecordFailure(ex);}
             if (action == null || Time.timeScale <= 0) return;
             try { action(); }
             catch (Exception ex) { lock (Gate) nativeUpdate = null; RecordFailure(ex); }

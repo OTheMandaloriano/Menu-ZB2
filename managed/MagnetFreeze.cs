@@ -17,6 +17,7 @@ namespace Zb2Menu {
         }
         static bool AllowUpdate(Zombie __instance) {
             if(!owned.ContainsKey(__instance))return true;
+            if(IsSpawning(__instance)){Release(__instance);return true;}
             if(Time.unscaledTime-heartbeat>.5f){Clear();return true;}
             if(__instance.obj==null || __instance.health==null || !__instance.health.isAlive || __instance.health.amount<=0){Release(__instance);return true;}
             if(MultiplayerController.instance==null || !MultiplayerController.instance.IsServer()){Clear();return true;}
@@ -25,12 +26,14 @@ namespace Zb2Menu {
         public static void Hold(Zombie zombie) {
             Pulse();
             if(zombie==null || zombie.obj==null || owned.ContainsKey(zombie))return;
+            if(IsSpawning(zombie))return;
             var body=zombie.obj.body;var animator=zombie.obj.animator;
             var saved=new Saved{Body=body,Animator=animator,Kinematic=body!=null && body.isKinematic,Animation=animator==null?1:animator.speed};
             owned.Add(zombie,saved);
             if(body!=null){if(!body.isKinematic)body.linearVelocity=Vector3.zero;body.isKinematic=true;}
             if(animator!=null)animator.speed=0;
         }
+        public static bool IsSpawning(Zombie zombie){return zombie!=null && (zombie.state==ZombieState.Spawning || (zombie.state==ZombieState.Transition && zombie.targetState==ZombieState.Spawning));}
         public static void Release(Zombie zombie) {
             Saved saved;if(!owned.TryGetValue(zombie,out saved))return;
             if(saved.Body!=null)saved.Body.isKinematic=saved.Kinematic;

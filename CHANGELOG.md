@@ -4,6 +4,11 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Captura do overlay respeita a necessidade de mouse/teclado, preservando o acesso à UI do jogo fora da janela.
+- Cursor é coordenado pela Unity e restaurado ao fechar; o caminho de UI continua funcionando durante pausa.
+- Magnet e congelamento aguardam a conclusão do estado de surgimento dos inimigos.
+
+
 - Itens bloqueados pela edição, ocultos ou internos são excluídos do catálogo/ESP e das operações de loot.
 - Equipe mantém somente box, nome, distância, barra/percentual, esqueleto, linha e raio.
 - Congelamento de atraídos executa suspensão/restauração de física e animação com watchdog.

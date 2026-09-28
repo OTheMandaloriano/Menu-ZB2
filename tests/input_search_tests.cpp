@@ -1,10 +1,17 @@
 #include "../item_search.h"
 #include "../ui_input_queue.h"
+#include "../ui_capture.h"
 #include <cassert>
 #include <thread>
 #include <atomic>
 #include <iostream>
 int main(){
+    assert(!UiCapture::Consume(false,false,true,false,true,true));
+    assert(UiCapture::Consume(false,true,true,false,false,false));
+    assert(UiCapture::Consume(true,false,false,true,false,true));
+    assert(!UiCapture::Consume(true,false,false,true,false,false));
+    assert(!UiCapture::Consume(true,false,true,false,false,true));
+    assert(UiCapture::Consume(true,false,true,false,true,false));
     assert(ItemSearch::Matches("Muni\xc3\xa7\xc3\xa3o de pistola","PistolAmmo","municao"));
     assert(ItemSearch::Matches("Metralhadora","GreaseGun","grease gun"));
     assert(ItemSearch::Matches("P\xc3\xa9 de cabra","Crowbar","PE DE CABRA"));

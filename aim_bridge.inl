@@ -86,7 +86,7 @@ static bool LoadAimBridge() {
         s_worldCollect = pMethodFrom(world, "Collect", 10);
         s_worldError = pMethodFrom(world, "LastError", 0);
         if (!s_modifierApply || !s_modifierReset || !s_worldCollect) return false;
-        s_bridgeStart = pMethodFrom(bridge, "StartLoop", 1);
+        s_bridgeStart = pMethodFrom(bridge, "StartLoop", 2);
         if (!s_bridgeStart) return false;
         s_bridgePublish = publish; s_bridgeClear = clear;
         s_bridgeVisible = visible;
