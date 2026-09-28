@@ -18,6 +18,11 @@ static void DrawTeamMarker(ImDrawList* draw,const Mono::WorldMarker& marker,cons
     model.items[EspLayout::Name].enabled=Config::bAllyName;model.items[EspLayout::Distance].enabled=Config::bAllyDist;
     model.items[EspLayout::Health].enabled=Config::bAllyHp;model.items[EspLayout::Percent].enabled=Config::bAllyPct;
     auto content=LayoutContent(marker.name,marker.distance,marker.health,marker.maxHealth);auto style=LayoutStyle(content.health);
+    if(!content.healthAvailable && (Config::bAllyHp || Config::bAllyPct)) {
+        const char* state=marker.health==-2 ? "Caido" : "Vivo | HP nao sincronizado";
+        model.items[EspLayout::Health].enabled=false;model.items[EspLayout::Percent].enabled=true;
+        content.healthAvailable=true;content.text[EspLayout::Percent]=state;
+    }
     style.color[EspLayout::Name]=tint(Config::colAllyName);style.color[EspLayout::Distance]=tint(Config::colAllyDist);style.color[EspLayout::Percent]=tint(Config::colAllyHp);
     EspLayout::Rect envelope={a,b},viewport={ImVec2(0,0),io.DisplaySize};auto geometry=EspLayout::Resolve(model,envelope,viewport,content,style);EspLayout::Draw(draw,geometry,content,style);
 }

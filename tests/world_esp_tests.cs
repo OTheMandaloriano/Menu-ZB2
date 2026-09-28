@@ -23,7 +23,7 @@ namespace UnityEngine {
 }
 public class LobbyPlayer {public string playerName="Friend";}
 public class PlayerMovement {public UnityEngine.Collider hitbox=new UnityEngine.Collider();}
-public class PlayerMain {public float MaxHealth {get{return 100;}} public CharacterSkin SpawnedSkin;public bool HasLocalControl;public LobbyPlayer lobbyPlayer=new LobbyPlayer();public PlayerMovement movement=new PlayerMovement();public float healthFast=100;public UnityEngine.Transform transform=new UnityEngine.Transform();}
+public class PlayerMain {public enum HealthState{Alive,Dying,Dead};public HealthState healthState;public float MaxHealth {get{return 100;}} public CharacterSkin SpawnedSkin;public bool HasLocalControl;public LobbyPlayer lobbyPlayer=new LobbyPlayer();public PlayerMovement movement=new PlayerMovement();public float healthFast=100;public UnityEngine.Transform transform=new UnityEngine.Transform();}
 public class PlayersController {public List<PlayerMain> players=new List<PlayerMain>();public static PlayersController instance=new PlayersController(); public PlayerMain player=new PlayerMain();public PlayerMain MyPlayer(){return player;}}
 public class MainCamera {public static MainCamera instance=new MainCamera(); public UnityEngine.Camera cam=new UnityEngine.Camera();}
 public class InventoryItem {public enum ID{None=-1,RifleAmmo,SniperAmmo,ShotgunAmmo,PistolAmmo,Gun}; public ID id=ID.Gun; public DatabaseItem db=new DatabaseItem();public DatabaseItem GetDataBaseItem(){db.itemID=id;return db;}}
@@ -86,7 +86,10 @@ class WorldTests {
             Check(Collect(1<<14)==1,"real teammate collected independently, self excluded");
             Check(Marshal.ReadInt32(buffer)==14,"team category ABI");
             byte[] teamName=new byte[96];Marshal.Copy(IntPtr.Add(buffer,16),teamName,0,96);Check(System.Text.Encoding.UTF8.GetString(teamName).StartsWith("Friend"),"real teammate name");
-            friend.healthFast=0;Check(Collect(1<<14)==0,"dead teammate excluded");
+            friend.healthFast=50;Check(Collect(1<<14)==1,"stale numeric HP does not hide teammate");
+            byte[] hp=new byte[4];Marshal.Copy(IntPtr.Add(buffer,128),hp,0,4);Check(BitConverter.ToSingle(hp,0)==-1,"stale fifty HP not exported as real health");
+            friend.healthState=PlayerMain.HealthState.Dying;Collect(1<<14);Marshal.Copy(IntPtr.Add(buffer,128),hp,0,4);Check(BitConverter.ToSingle(hp,0)==-2,"downed state exported independently of numeric HP");
+            friend.healthState=PlayerMain.HealthState.Dead;Check(Collect(1<<14)==0,"dead teammate excluded");friend.healthState=PlayerMain.HealthState.Alive;
             friend.healthFast=87;friend.SpawnedSkin=new CharacterSkin();Check(Collect(1<<14)==1,"humanoid teammate collected");
             byte[] boneValid=new byte[4];Marshal.Copy(IntPtr.Add(buffer,136+24*4+2*4),boneValid,0,4);Check(BitConverter.ToSingle(boneValid,0)==1,"real head joint projected into team snapshot");
             MapHash.instance.cell.loot.Clear();var centered=Loot(0,10,new DatabaseGun());centered.renderers=new[]{new UnityEngine.Renderer{bounds=new UnityEngine.Bounds{center=new UnityEngine.Vector3(20,0,10)}}};MapHash.instance.cell.loot.Add(centered);UnityEngine.Time.unscaledTime+=1;

@@ -126,6 +126,12 @@ namespace Config {
 
     float fAllyDistance=200;
     float fMagnetFront=2.5f,fMagnetBoss=8.0f;
+    int iMagnetDestination=0;
+    bool bLootWholeMap=true;
+    int iLootFilter0=-1;
+    int iLootFilter1=-1;
+    int iLootFilter2=-1;
+    int iLootFilter3=-1;
     int iMagnetTargets=0; // 0 todos 1 zumbis 2 bosses
     bool  bAllyEsp = false;
     int   iAllyBox = 0;
@@ -694,7 +700,7 @@ namespace GUI {
         JB(bZombieSkeleton); JB(bZombieSnap); JB(bZombieHeadDot); JV(colZombieSkel); JV(colZombieSnap); JV(colZombieDot);
         JI(iSnapFrom);
         JV(colZombieBox); JV(colZombieName); JV(colZombieDist); JV(colZombieHp); JB(bBossColor); JV(colBossBox);
-        JB(bAllyEsp); JB(bAllyBoxShow); JB(bAllyPct); JS(szAllyLayout); JI(iAllySnapFrom); JI(iAllyLayout); JV(colAllyName); JV(colAllyDist); JV(colAllyHp); JV(colAllySkel); JV(colAllyLine); JV(colAllyDot);  JF(fAllyDistance); JI(iMagnetTargets); JF(fMagnetFront); JF(fMagnetBoss); JI(iAllyBox); JB(bAllyName); JB(bAllyDist); JB(bAllyHp);
+        JB(bAllyEsp); JB(bAllyBoxShow); JB(bAllyPct); JS(szAllyLayout); JI(iAllySnapFrom); JI(iAllyLayout); JV(colAllyName); JV(colAllyDist); JV(colAllyHp); JV(colAllySkel); JV(colAllyLine); JV(colAllyDot);  JF(fAllyDistance); JI(iMagnetTargets); JI(iMagnetDestination); JB(bLootWholeMap); JI(iLootFilter0);JI(iLootFilter1);JI(iLootFilter2);JI(iLootFilter3); JF(fMagnetFront); JF(fMagnetBoss); JI(iAllyBox); JB(bAllyName); JB(bAllyDist); JB(bAllyHp);
         JB(bAllySkeleton); JB(bAllySnap); JB(bAllyHeadDot); JV(colAllyVis);
         JB(bChams); JV(colChamsVis); JV(colChamsInv); JB(bItemEsp); JB(bItemWeapons);
         JB(bItemRare); JB(bItemAmmo); JB(bItemSupply); JV(colItem); JV(colItemRare); JV(colItemAmmo); JV(colItemSupply); JF(fItemRadius); JF(fPoiRadius); JI(iItemFilter0); JI(iItemFilter1); JI(iItemFilter2); JI(iItemFilter3); JI(iPoiFilter); JB(bPoiGraves); JB(bPoiPlayers);
@@ -781,7 +787,7 @@ namespace GUI {
         LB(bZombieSkeleton); LB(bZombieSnap); LB(bZombieHeadDot); LV(colZombieSkel); LV(colZombieSnap); LV(colZombieDot);
         LI(iSnapFrom);
         LV(colZombieBox); LV(colZombieName); LV(colZombieDist); LV(colZombieHp); LB(bBossColor); LV(colBossBox);
-        LB(bAllyEsp); LB(bAllyBoxShow); LB(bAllyPct); LS(szAllyLayout); LI(iAllySnapFrom); LI(iAllyLayout); LV(colAllyName); LV(colAllyDist); LV(colAllyHp); LV(colAllySkel); LV(colAllyLine); LV(colAllyDot);  LF(fAllyDistance); LI(iMagnetTargets); LF(fMagnetFront); LF(fMagnetBoss); LI(iAllyBox); LB(bAllyName); LB(bAllyDist); LB(bAllyHp);
+        LB(bAllyEsp); LB(bAllyBoxShow); LB(bAllyPct); LS(szAllyLayout); LI(iAllySnapFrom); LI(iAllyLayout); LV(colAllyName); LV(colAllyDist); LV(colAllyHp); LV(colAllySkel); LV(colAllyLine); LV(colAllyDot);  LF(fAllyDistance); LI(iMagnetTargets); LI(iMagnetDestination); LB(bLootWholeMap); LI(iLootFilter0);LI(iLootFilter1);LI(iLootFilter2);LI(iLootFilter3); LF(fMagnetFront); LF(fMagnetBoss); LI(iAllyBox); LB(bAllyName); LB(bAllyDist); LB(bAllyHp);
         LB(bAllySkeleton); LB(bAllySnap); LB(bAllyHeadDot); LV(colAllyVis);
         LB(bChams); LV(colChamsVis); LV(colChamsInv); LB(bItemEsp); LB(bItemWeapons);
         LB(bItemRare); LB(bItemAmmo); LB(bItemSupply); LV(colItem); LV(colItemRare); LV(colItemAmmo); LV(colItemSupply); LF(fItemRadius); LF(fPoiRadius); LI(iItemFilter0); LI(iItemFilter1); LI(iItemFilter2); LI(iItemFilter3); LI(iPoiFilter); LB(bPoiGraves); LB(bPoiPlayers);
@@ -1266,6 +1272,7 @@ namespace GUI {
                         SwatchR("##ABox",Config::colAllyVis,"Cor do box");
                         ImGui::Checkbox("Nome##A", &Config::bAllyName);SwatchR("##AName",Config::colAllyName,"Cor do nome");
                         ImGui::Checkbox("Distancia##A", &Config::bAllyDist);SwatchR("##ADist",Config::colAllyDist,"Cor da distancia");
+                        ImGui::TextDisabled("Aliados: estado sincronizado; HP numerico indisponivel.");
                         ImGui::Checkbox("Barra de vida##A", &Config::bAllyHp);ImGui::SameLine();ImGui::Checkbox("%##A",&Config::bAllyPct);SwatchR("##AHp",Config::colAllyHp,"Cor do percentual");
                         ImGui::Checkbox("Esqueleto##A", &Config::bAllySkeleton);SwatchR("##ASkel",Config::colAllySkel,"Ossos reais do rig humano");
                         ImGui::Checkbox("Linha##A", &Config::bAllySnap);ImGui::SameLine();ImGui::SetNextItemWidth(90);ImGui::Combo("Origem##A",&Config::iAllySnapFrom,kSnapFrom,3);SwatchR("##ALine",Config::colAllyLine,"Cor da linha");
@@ -1356,6 +1363,9 @@ namespace GUI {
                 ImGui::Checkbox("Magnet de zumbis (solo/host)", &Config::bEnemyMagnet);
                 HotkeyButton("Tecla Magnet", &Config::iMagnetKey, "Alterna o Magnet. Reune zumbis carregados dentro do raio, em lotes. Padrao H.");
                 const char* targets[]={"Zumbis e bosses","Somente zumbis","Somente bosses"};
+                const char* destinations[]={"Seguir minha posicao","Fixar no ponto da mira"};
+                ImGui::Combo("Destino Magnet",&Config::iMagnetDestination,destinations,2);
+                Tip("Ponto fixo: mire no chao e ative H. H novamente libera; proxima ativacao marca outro ponto. Congelar impede que os atraidos saiam.");
                 ImGui::Combo("Alvos Magnet", &Config::iMagnetTargets,targets,3);
                 ImGui::TextDisabled("Bosses existentes ignoram o raio de busca.");
                 ImGui::SliderFloat("Distancia frontal",&Config::fMagnetFront,1.5f,10,"%.1fm");
@@ -1363,12 +1373,17 @@ namespace GUI {
                 ImGui::SliderFloat("Raio Magnet", &Config::fMagnetRadius, 10, 300, "%.0fm");
                 ImGui::Checkbox("Congelar atraidos", &Config::bMagnetFreeze);Tip("Suspende atualizacao dos zumbis reunidos e restaura fisica/animacao ao desligar.");
                 ImGui::Separator();
-                ImGui::Checkbox("Item Magnet", &Config::bItemMagnet);Tip("Move loot permitido ao chao perto de voce, sem coleta automatica. Solo/host. Respeita filtros individuais do ESP.");
+                ImGui::Checkbox("Item Magnet", &Config::bItemMagnet);Tip("Move loot permitido ao chao perto de voce, sem coleta automatica. Solo/host. Filtros proprios de loot.");
                 HotkeyButton("Tecla Item Magnet", &Config::iItemMagnetKey,"Segure X por padrao para puxar; solte para parar.");
                 const char* lootCategories[]={"Armas","Municao","Suprimentos","Todos"};
                 if(Config::iItemMagnetType>3)Config::iItemMagnetType=3;
                 ImGui::Combo("Categoria loot", &Config::iItemMagnetType,lootCategories,4);
-                ImGui::SliderFloat("Raio Item Magnet", &Config::fItemMagnetRadius,10,200,"%.0fm");
+                DrawItemFilters(true);
+                ImGui::Checkbox("Mapa inteiro (sem limite de distancia)",&Config::bLootWholeMap);
+                ImGui::BeginDisabled(Config::bLootWholeMap);
+                ImGui::SliderFloat("Raio Item Magnet", &Config::fItemMagnetRadius,10,1000,"%.0fm");
+                ImGui::EndDisabled();
+                Tip("Varre todos os itens permitidos ja existentes, em lotes. Nao cria loot de regioes ainda nao geradas.");
                 ImGui::TextDisabled("Auto-coleta, aliados e selecao Steam: nao implementados.");
                 ImGui::BeginDisabled();
                 ImGui::Separator();

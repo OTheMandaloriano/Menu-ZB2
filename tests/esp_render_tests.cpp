@@ -47,12 +47,14 @@ int main(){
     Config::fEspDistance=200;Check(Frame()==0,"stale active snapshot filtered by new smaller limit");
     Config::fItemRadius=35;Config::fPoiRadius=280;
     Config::iNoClipKey=118;Config::iMagnetKey=119;
+    Config::iLootFilter0=456;Config::bLootWholeMap=true;Config::iMagnetDestination=1;
     Config::iItemFilter0=123;Config::iItemFilter3=1<<19;Config::iPoiFilter=1<<17;
     Check(GUI::SaveConfig("independent-ranges-test"),"save separate radii");
     Config::fItemRadius=80;Config::fPoiRadius=90;GUI::LoadConfig("independent-ranges-test");
     Check(Config::fItemRadius==35 && Config::fPoiRadius==280,"preset restores distinct radii");
     Check(Config::iNoClipKey==118 && Config::iMagnetKey==119,"preset restores custom NoClip and Magnet keys");
     Check(Config::iItemFilter0==123 && Config::iItemFilter3==(1<<19) && Config::iPoiFilter==(1<<17),"preset preserves individual item and POI masks");
+    Check(Config::iLootFilter0==456 && Config::iItemFilter0==123 && Config::bLootWholeMap && Config::iMagnetDestination==1,"independent loot filters and fixed mode persist");
     Config::fItemRadius=10;Check(Config::fPoiRadius==280,"item slider independent");
     Config::fPoiRadius=20;Check(Config::fItemRadius==10,"POI slider independent");
     Config::bZombieEsp=false;Mono::worldCount=1;Mono::marker.kind=10;Mono::marker.distance=100;

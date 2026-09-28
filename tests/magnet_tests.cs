@@ -39,6 +39,12 @@ class MagnetTests {
         normal.state=normal.targetState=ZombieState.Aware;MagnetFreeze.Hold(normal);normal.UpdateStateMachine(0);Check(normal.updates==3 && normal.obj.animator.speed==0,"freeze applies after spawn finishes");
         normal.state=ZombieState.Spawning;normal.UpdateStateMachine(0);Check(normal.updates==4 && normal.obj.animator.speed==1,"new spawn releases previously frozen entity");
         MagnetFreeze.Clear();harmony.UnpatchAll("magnet.freeze.tests");
+        MagnetBridge.Reset();p.healthFast=100;p.transform.position=new Vector3();p.cam.CameraTransform.position=new Vector3(0,3,20);normal.state=normal.targetState=ZombieState.Aware;
+        ZombieLoader.Instance=new ZombieLoader();normal.obj.transform.position=new Vector3(0,0,40);ZombieLoader.Instance.zombies.Add(normal);
+        Time.unscaledTime=10;MagnetBridge.Apply(p,true,true,100,1,2.5f,8,true,1);int fixedCalls=normal.calls;float fixedZ=normal.obj.transform.position.z;
+        p.transform.position=new Vector3(0,0,10);p.cam.CameraTransform.position=new Vector3(0,3,60);Time.unscaledTime=11;MagnetBridge.Apply(p,true,true,100,1,2.5f,8,true,1);
+        Check(normal.calls==fixedCalls && normal.obj.transform.position.z==fixedZ,"fixed anchor does not follow movement or view");
+        MagnetBridge.Reset();Time.unscaledTime=12;MagnetBridge.Apply(p,true,true,100,1,2.5f,8,true,1);Check(normal.calls>fixedCalls,"reactivation captures a new point");MagnetBridge.Reset();
         Console.WriteLine(checks+" magnet checks passed");
     }
 }

@@ -167,7 +167,7 @@ namespace Zb2Menu {
         static void Team() {
             teamCount=0;
             foreach(var player in PlayersController.instance.players) {
-                if(player==null || player.HasLocalControl || player.healthFast<=0 || player.movement==null || player.movement.hitbox==null)continue;
+                if(player==null || player.HasLocalControl || player.healthState==PlayerMain.HealthState.Dead || player.movement==null || player.movement.hitbox==null)continue;
                 if(teamCount++>=32)break;
                 var bounds=player.movement.hitbox.bounds;
                 float distance=Vector3.Distance(origin,bounds.center);
@@ -180,7 +180,9 @@ namespace Zb2Menu {
                     left=Math.Min(left,screen.x);right=Math.Max(right,screen.x);top=Math.Min(top,1-screen.y);bottom=Math.Max(bottom,1-screen.y);++projected;
                 }
                 if(projected<2 || right<0 || left>1 || bottom<0 || top>1)continue;
-                var marker=new Marker{Kind=14,X=(left+right)*.5f,Y=bottom,Distance=distance,Left=Math.Max(0,left),Right=Math.Min(1,right),Top=Math.Max(0,top),Bottom=Math.Min(1,bottom),Health=player.healthFast,MaxHealth=player.MaxHealth,Name=new byte[96],Corners=corners,Bones=new float[51]};
+                // Remote peers synchronize HealthState, not numeric healthFast/MaxHealth.
+                // Negative values encode known state without fabricating a percentage.
+                var marker=new Marker{Kind=14,X=(left+right)*.5f,Y=bottom,Distance=distance,Left=Math.Max(0,left),Right=Math.Min(1,right),Top=Math.Max(0,top),Bottom=Math.Min(1,bottom),Health=player.healthState==PlayerMain.HealthState.Dying?-2:-1,MaxHealth=0,Name=new byte[96],Corners=corners,Bones=new float[51]};
                 TeamBones(player,marker.Bones);
                 string name=player.lobbyPlayer==null?"Aliado":player.lobbyPlayer.playerName;
                 if(string.IsNullOrWhiteSpace(name))name="Aliado";

@@ -4,6 +4,13 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- ESP deixa de tratar HP remoto não sincronizado como percentual real; informa o estado recebido.
+- Item Magnet ganha modal visual com filtros próprios, raio de até 1.000 m e modo mapa inteiro.
+- Varredura de loot usa cursor persistente e altura baseada no modelo para apoiar no chão.
+- Magnet de inimigos separa seguir o jogador de fixar um ponto de chão escolhido pela mira.
+- Magnet de amigos permanece sem implementação autoritativa; limitações de rede documentadas.
+
+
 - Captura do overlay respeita a necessidade de mouse/teclado, preservando o acesso à UI do jogo fora da janela.
 - Cursor é coordenado pela Unity e restaurado ao fechar; o caminho de UI continua funcionando durante pausa.
 - Magnet e congelamento aguardam a conclusão do estado de surgimento dos inimigos.

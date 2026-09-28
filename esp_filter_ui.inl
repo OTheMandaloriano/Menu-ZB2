@@ -3,12 +3,14 @@ static void FilterCheckbox(const char* label,int& word,int bit) {
     bool selected=(value&mask)!=0;
     if(ImGui::Checkbox(label,&selected))word=static_cast<int>(selected ? value|mask : value&~mask);
 }
-static void DrawItemFilters() {
-    if(ImGui::Button("Escolher itens..."))ImGui::OpenPopup("Catalogo de itens");
+static void DrawItemFilters(bool loot=false) {
+    const char* title=loot?"Itens para puxar":"Catalogo de itens";
+    if(ImGui::Button(loot?"Escolher itens para puxar...":"Escolher itens..."))ImGui::OpenPopup(title);
     ImGui::SetNextWindowSize(ImVec2(760,540),ImGuiCond_FirstUseEver);
-    if(!ImGui::BeginPopupModal("Catalogo de itens",nullptr,ImGuiWindowFlags_NoCollapse))return;
+    if(!ImGui::BeginPopupModal(title,nullptr,ImGuiWindowFlags_NoCollapse))return;
     int* masks[]={&Config::iItemFilter0,&Config::iItemFilter1,&Config::iItemFilter2,&Config::iItemFilter3};
-    static char search[128]={};ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##item-search","Buscar nome ou ID interno...",search,sizeof(search));
+    if(loot){masks[0]=&Config::iLootFilter0;masks[1]=&Config::iLootFilter1;masks[2]=&Config::iLootFilter2;masks[3]=&Config::iLootFilter3;}
+    static char searches[2][128]={};char* search=searches[loot?1:0];ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##item-search","Buscar nome ou ID interno...",search,128);
     if(ImGui::Button("Todos"))for(auto p:masks)*p=-1;
     ImGui::SameLine();if(ImGui::Button("Nenhum"))for(auto p:masks)*p=0;
     ImGui::SameLine();if(ImGui::Button("Limpar busca"))search[0]=0;

@@ -14,7 +14,7 @@ O checkbox Congelar atraídos agora executa uma rotina: guarda o estado de físi
 
 ## Item Magnet
 
-Disponível em solo/host. Usa a tecla configurável de segurar (X como padrão de novos presets) ou ativação pelo checkbox. Presets anteriores preservam a tecla escolhida. Move no máximo dois itens por passagem de 250 ms para o chão próximo ao jogador, respeitando o raio, as categorias e os filtros individuais do catálogo.
+Disponível em solo/host. Usa a tecla configurável de segurar (X como padrão de novos presets) ou ativação pelo checkbox. Presets anteriores preservam a tecla escolhida. Move no máximo dois itens por passagem de 250 ms para o chão próximo ao jogador, respeitando categoria e filtros individuais próprios. Mapa inteiro remove o limite espacial; o modo por raio aceita até 1.000 m. A varredura mantém cursor para alcançar todas as células existentes.
 
 Não pega itens automaticamente. Rejeita sacos de loot e loot reservado a outro jogador, itens bloqueados, ocultos ou internos. Conserva a instância e o ID, transfere a propriedade da célula espacial, reposiciona e usa as mensagens do jogo para remover/reanunciar a representação aos clientes. Há restauração da célula/posição em caso de falha durante a movimentação local. Não cria uma cópia do item nem chama AddItem como fallback quando a mochila está cheia.
 
@@ -25,3 +25,5 @@ O documento completo ainda **não está entregue**. Horda seguindo outro jogador
 ## Verificação
 
 Build nativa e gerenciada; testes de catálogo bloqueado, cache do ESP, modificação/restauração, suspensão por Harmony, movimentação de loot entre células sem duplicação e renderização da equipe. Nenhum teste simulado comprova o resultado em uma sessão multiplayer real.
+
+Atualização: [saúde remota, mapa inteiro e ponto fixo](MAPA_INTEIRO_E_SAUDE.md).

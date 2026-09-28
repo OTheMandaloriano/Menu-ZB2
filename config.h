@@ -117,6 +117,13 @@ namespace Config {
 
     extern float fAllyDistance;
     extern int iMagnetTargets;
+    extern int iMagnetDestination;
+    extern bool bLootWholeMap;
+    extern int iLootFilter0;
+    extern int iLootFilter1;
+    extern int iLootFilter2;
+    extern int iLootFilter3;
+
     extern float fMagnetFront,fMagnetBoss;
     extern int   iAllyBox;
     extern bool  bAllyName;

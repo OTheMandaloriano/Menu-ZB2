@@ -27,6 +27,12 @@ struct Values {
     decltype(Config::bItemMagnet) bItemMagnet={};
     decltype(Config::fItemMagnetRadius) fItemMagnetRadius={};
     decltype(Config::iItemMagnetType) iItemMagnetType={};
+    decltype(Config::iLootFilter0) iLootFilter0={};
+    decltype(Config::iLootFilter1) iLootFilter1={};
+    decltype(Config::iLootFilter2) iLootFilter2={};
+    decltype(Config::iLootFilter3) iLootFilter3={};
+    decltype(Config::iMagnetDestination) iMagnetDestination={};
+    decltype(Config::bLootWholeMap) bLootWholeMap={};
     float viewportWidth=1920, viewportHeight=1080;
     decltype(Config::b360Mode) b360Mode = {};
     decltype(Config::bAimbot) bAimbot = {};
@@ -110,6 +116,12 @@ inline Values Capture(float width,float height) {
     values.bItemMagnet=Config::bItemMagnet;
     values.fItemMagnetRadius=Config::fItemMagnetRadius;
     values.iItemMagnetType=Config::iItemMagnetType;
+    values.iLootFilter0=Config::iLootFilter0;
+    values.iLootFilter1=Config::iLootFilter1;
+    values.iLootFilter2=Config::iLootFilter2;
+    values.iLootFilter3=Config::iLootFilter3;
+    values.iMagnetDestination=Config::iMagnetDestination;
+    values.bLootWholeMap=Config::bLootWholeMap;
     values.viewportWidth=width; values.viewportHeight=height;
     values.b360Mode=Config::b360Mode;
     values.bAimbot=Config::bAimbot;

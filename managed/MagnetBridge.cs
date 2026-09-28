@@ -15,10 +15,12 @@ namespace Zb2Menu {
         static readonly HashSet<int> requestedBosses=new HashSet<int>();
         static Vector3 anchor;
         static bool anchorSet;
+        static int anchorMode=-1;
+        static Vector3 anchorForward;
         public static string Status="";
         public static bool Active {get{return previous || Status.Length>0;}}
         public static void Reset(){MagnetFreeze.Clear();cursor=0;previous=false;owner=null;loader=null;Status="";nextPass=0;slots.Clear();bossSlots.Clear();placed.Clear();requestedBosses.Clear();anchorSet=false;}
-        public static void Apply(PlayerMain player,bool enabled,bool inputAllowed,float radius,int targetMode=0,float frontDistance=2.5f,float bossDistance=8,bool freeze=false) {
+        public static void Apply(PlayerMain player,bool enabled,bool inputAllowed,float radius,int targetMode=0,float frontDistance=2.5f,float bossDistance=8,bool freeze=false,int mode=0) {
             if(!enabled || player==null || player.healthFast<=0 || !player.HasLocalControl){Reset();return;}
             var multiplayer=MultiplayerController.instance;
             if(multiplayer==null || !multiplayer.IsServer()){Reset();Status="Magnet requer autoridade do host";return;}
@@ -38,8 +40,14 @@ namespace Zb2Menu {
             if(forward.sqrMagnitude<.01f)return;forward.Normalize();
             frontDistance=FiniteDistance(frontDistance,2.5f,1.5f,10);bossDistance=FiniteDistance(bossDistance,8,6,20);
             Vector3 center=origin+forward*frontDistance;
-            bool relocated=!anchorSet || Vector3.Distance(anchor,center)>2;
-            if(relocated){anchor=center;anchorSet=true;placed.Clear();}
+            if(mode!=anchorMode){anchorSet=false;placed.Clear();anchorMode=mode;}
+            if(mode==1 && !anchorSet){
+                RaycastHit hit;var view=player.cam.CameraTransform;
+                if(!Physics.Raycast(view.position,view.forward,out hit,1000,~0,QueryTriggerInteraction.Ignore) || hit.normal.y<.6f){Status="Magnet: mire em um ponto de chao livre";return;}
+                center=hit.point;
+            }
+            bool relocated=!anchorSet || (mode!=1 && Vector3.Distance(anchor,center)>2);
+            if(relocated){anchor=center;anchorForward=forward;anchorSet=true;placed.Clear();}
             int count=0;
             int total=current.zombies.Count;
             for(int scanned=0;scanned<total;++scanned) {
@@ -57,7 +65,7 @@ namespace Zb2Menu {
                 var allocation=boss?bossSlots:slots;
                 int slot;if(!allocation.TryGetValue(zombie.identity.id,out slot)){slot=allocation.Count;allocation.Add(zombie.identity.id,slot);}
                 float spacing=boss?4:1.2f;
-                var destination=boss?origin+forward*bossDistance:anchor;
+                var destination=boss?anchor+anchorForward*(bossDistance-frontDistance):anchor;
                 int columns=boss?3:5;
                 var proposed=destination+new Vector3((slot%columns-columns/2)*spacing,3,(slot/columns)*spacing);
                 RaycastHit ground;
@@ -65,7 +73,7 @@ namespace Zb2Menu {
                 Vector3 target=ground.point+Vector3.up*.15f;
                 if(Vector3.Distance(zombie.obj.transform.position,target)<1.25f){placed[zombie.identity.id]=target;if(freeze)MagnetFreeze.Hold(zombie);continue;}
                 float bodyRadius=boss?1.5f:.4f,bodyHeight=boss?4:1.6f;
-                if((!boss && Vector3.Distance(origin,target)>radius) || Physics.CheckCapsule(target+Vector3.up*bodyRadius,target+Vector3.up*bodyHeight,bodyRadius,~0,QueryTriggerInteraction.Ignore))continue;
+                if(Physics.CheckCapsule(target+Vector3.up*bodyRadius,target+Vector3.up*bodyHeight,bodyRadius,~0,QueryTriggerInteraction.Ignore))continue;
                 zombie.TeleportTo(target,zombie.obj.transform.rotation);
                 placed[zombie.identity.id]=target;
                 if(freeze)MagnetFreeze.Hold(zombie);
