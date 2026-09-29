@@ -27,6 +27,11 @@
     "source": "https://raw.githubusercontent.com/juliettef/IconFontCppHeaders/main/licence.txt",
     "sha256": "8a0e8338ba1d9359adbbfe5ffb70d6423b169192d146dae12410adaff15aa67a"
   },
+  "Lexend-Regular.ttf": {
+    "source": "Lexend-variable.ttf",
+    "weight": 400,
+    "sha256": "5c7ce59910c9d6ab92d846c07833cf672e95e01aae071ecffbe4d826340ac8ec"
+  },
   "Lexend-SemiBold.ttf": {
     "source": "Lexend-variable.ttf",
     "weight": 600,

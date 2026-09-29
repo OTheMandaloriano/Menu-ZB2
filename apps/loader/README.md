@@ -1,6 +1,8 @@
 # Loader nativo
 
-Implementação offline, Windows x64, 460 × 260 unidades lógicas. Lexend e
+Implementação offline, Windows x64, 400 × 384 unidades lógicas. A revisão visual
+segue a referência Activation / WARDOGS escolhida pelo usuário após a versão 1.0,
+com título centralizado e controles neutros. Lexend e
 FontAwesome 6 Free ficam embutidos no executável, com licenças acessíveis em Sobre.
 
 | Arquivo | Responsabilidade |
@@ -26,3 +28,6 @@ Ele é desmarcado ao mudar o PID. Sucesso exige confirmação do módulo no proc
 isso não comprova que todas as funções internas do menu inicializaram corretamente.
 
 Build, emissão, instalação, testes e limites: [docs/LOADER.md](../../docs/LOADER.md).
+
+O emissor gráfico da equipe é o aplicativo separado [ZB2 Admin](../admin/README.md).
+O loader aceita importar `.zb2license` e disponibiliza Copiar ID na própria ativação.

@@ -35,7 +35,7 @@ void LoaderController::Run(){
             const auto now=License::Now();LoaderServices::CheckClock(stored,now);
             if(action==Action::Activate){
                 state.phase=LoaderPhase::Checking;state.message=u8"Validando assinatura...";Publish(state);
-                while(!token.empty() && (token.back()=='\n'||token.back()=='\r'||token.back()==' '))token.pop_back();
+                token=License::Normalize(token);
                 auto result=License::Validate(token,state.device,now,publicKey);
                 if(!result.valid)throw std::runtime_error(result.error);
                 stored={token,std::max(stored.lastSeen,now)};LoaderServices::SaveState(root,stored);

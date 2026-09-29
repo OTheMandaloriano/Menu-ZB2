@@ -26,10 +26,11 @@ def main():
             data = urllib.request.urlopen(url, timeout=30).read()
             path.write_bytes(data)
         records[name] = {'source': url, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
-    for weight, name in [(600, 'SemiBold'), (700, 'Bold'), (900, 'Black')]:
+    for weight, name in [(400, 'Regular'), (600, 'SemiBold'), (700, 'Bold'), (900, 'Black')]:
         path = ROOT / f'Lexend-{name}.ttf'
-        font = TTFont(ROOT / 'Lexend-variable.ttf')
-        instantiateVariableFont(font, {'wght': weight}, inplace=True).save(path)
+        if not path.exists():
+            font = TTFont(ROOT / 'Lexend-variable.ttf')
+            instantiateVariableFont(font, {'wght': weight}, inplace=True).save(path)
         records[path.name] = {'source': 'Lexend-variable.ttf', 'weight': weight,
                               'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
     (ROOT / 'provenance.json').write_text(json.dumps(records, indent=2)+'\n', encoding='utf-8')

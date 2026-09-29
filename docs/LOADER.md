@@ -6,9 +6,9 @@ Entregar somente `dist/loader/ZB2Menu.exe`. A licença é enviada separadamente,
 como texto ou arquivo `.zb2license` cujo conteúdo pode ser colado na ativação.
 Não enviar a pasta build, o emissor ou a chave privada.
 
-1. Abrir o loader, entrar em Sobre e copiar o ID do computador.
+1. Abrir o loader e clicar em Copiar ID.
 2. O proprietário emite a licença para esse ID e define o número de dias.
-3. Colar o conteúdo completo da licença em **Verificar licença**.
+3. Usar **Abrir arquivo** para selecionar a licença recebida e clicar em **Ativar**.
 4. Abrir o jogo compatível e entrar no mapa.
 5. Marcar **No mapa** e clicar em **Carregar menu**. Após a confirmação, usar INSERT.
 
@@ -17,6 +17,11 @@ não altera o antivírus e não faz conexão com servidores. Atualizações são
 manuais: substituir o executável por uma nova build assinada pelo proprietário.
 
 ## Emissor separado
+
+Para uso diário, utilize o **ZB2 Admin**, que permite emissão sem terminal,
+seleção de prazo, histórico e autorização de integrantes em outros PCs.
+Consulte o [guia da equipe](ADMIN.md). O script abaixo permanece como ferramenta
+técnica; não é mais a interface de operação da equipe.
 
 Dependência no PC do proprietário: Python com `cryptography`. O cliente não precisa
 de Python. A chave é ECDSA P-256 e fica protegida por DPAPI do usuário Windows.
@@ -29,13 +34,13 @@ python scripts/license_admin.py keygen --key D:/ZB2-Privado/issuer.dpapi --publi
 ```
 
 O comando recusa sobrescrever material existente. Na máquina de desenvolvimento
-desta entrega, a chave já foi criada em `D:/ZB2-Retomada/loader-private/issuer.dpapi`.
+desta entrega, a chave já foi criada em `D:/ZB2-Retomada/loader-private/issuer-owner.dpapi`.
 Não criar outra chave para renovar licenças dos clientes desta build.
 
 Emitir licença, com validade contada desde a emissão em UTC:
 
 ```powershell
-python scripts/license_admin.py issue --key D:/ZB2-Retomada/loader-private/issuer.dpapi --device ID_DE_64_CARACTERES --days 30 --output cliente.zb2license
+python scripts/license_admin.py issue --key D:/ZB2-Retomada/loader-private/issuer-owner.dpapi --device ID_DE_64_CARACTERES --days 30 --output cliente.zb2license
 ```
 
 Guardar a chave e o perfil Windows com backup protegido. Copiar apenas o arquivo
@@ -49,7 +54,7 @@ versionados; não é necessário baixar fontes durante o build. O script opciona
 `prepare_loader_assets.py` exige fontTools 4.60.1 e registra proveniência SHA-256.
 
 ```powershell
-python scripts/build_loader.py --runtime "D:/Projeto/ZB2 Menu/build/Release_x64" --runtime-commit 21759653045fed481d11e6ccd02122ad558250e7 --version 1.0-local --key D:/ZB2-Retomada/loader-private/issuer.dpapi --public packaging/loader-public-key.json --tests
+python scripts/build_loader.py --runtime "D:/Projeto/ZB2 Menu/build/Release_x64" --runtime-commit 21759653045fed481d11e6ccd02122ad558250e7 --version 1.1-local --key D:/ZB2-Retomada/loader-private/issuer-owner.dpapi --public packaging/loader-public-key.json --tests
 ```
 
 O helper é recompilado dos fontes atuais. Os três DLLs são copiados sem alteração
@@ -90,7 +95,7 @@ timeout pede reiniciar o jogo. A janela pode fechar sem matar o jogo ou a thread
 ## Testes
 
 ```powershell
-python tests/test_loader_functional.py --exe build/loader/loader-tests.exe --key D:/ZB2-Retomada/loader-private/issuer.dpapi -v
+python tests/test_loader_functional.py --exe build/loader/loader-tests.exe --key D:/ZB2-Retomada/loader-private/issuer-owner.dpapi -v
 Push-Location build/loader
 ./loader-tests.exe
 Pop-Location

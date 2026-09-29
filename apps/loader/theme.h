@@ -5,6 +5,7 @@ extern ImFont* regular;
 extern ImFont* heading;
 extern ImFont* icons;
 extern ImFont* button;
+extern ImFont* small;
 extern float uiScale;
 constexpr ImU32 text=IM_COL32(243,244,246,255);
 constexpr ImU32 muted=IM_COL32(157,164,178,255);

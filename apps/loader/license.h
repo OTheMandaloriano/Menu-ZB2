@@ -17,5 +17,6 @@ bool Verify(const std::string& payload, const std::vector<unsigned char>& signat
 Result Validate(const std::string& token, const std::string& device, int64_t now,
                 const std::vector<unsigned char>& publicXY);
 std::string DeviceId();
+std::string Normalize(const std::string& token);
 int64_t Now();
 }

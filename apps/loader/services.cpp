@@ -110,7 +110,7 @@ Stored ReadState(const fs::path& root) {
     Require(split!=std::string::npos,"Estado local incompleto.");
     auto parsed=std::from_chars(plain.data(),plain.data()+split,result.lastSeen);
     Require(parsed.ec==std::errc() && parsed.ptr==plain.data()+split && result.lastSeen>0,"Estado local incorreto.");
-    result.token=plain.substr(split+1);Require(result.token.size()<=2048,"Licenca local excessiva.");return result;
+    result.token=plain.substr(split+1);Require(result.token.size()<=4096,"Licenca local excessiva.");return result;
 }
 void SaveState(const fs::path& root,const Stored& value) {
     CheckPath(root);fs::create_directories(root);

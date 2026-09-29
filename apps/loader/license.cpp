@@ -27,6 +27,13 @@ bool Number(const std::string& value, int64_t& output) {
     const auto parsed = std::from_chars(value.data(), value.data()+value.size(), output);
     return parsed.ec == std::errc() && parsed.ptr == value.data()+value.size() && output > 0;
 }
+std::vector<std::string> Lines(const std::string& payload) {
+    std::vector<std::string> fields;size_t start=0;
+    for(size_t end=payload.find('\n');end!=std::string::npos;end=payload.find('\n',start)) {
+        fields.push_back(payload.substr(start,end-start));start=end+1;
+    }
+    if(start!=payload.size())fields.clear();return fields;
+}
 }
 std::vector<unsigned char> Unhex(const std::string& input) {
     if (input.size()%2 || !LowerHex(input,input.size())) return {};
@@ -66,25 +73,46 @@ bool Verify(const std::string& payload,const std::vector<unsigned char>& signatu
     BCryptDestroyKey(key);
     return status>=0;
 }
-Result Validate(const std::string& token,const std::string& device,int64_t now,
+std::string Normalize(const std::string& token) {
+    if(token.size()>8192)return token;
+    size_t start=token.rfind("\xef\xbb\xbf",0)==0?3:0;std::string result;
+    for(size_t i=start;i<token.size();++i)if(token[i]!=' ' && token[i]!='\t' && token[i]!='\r' && token[i]!='\n')result+=token[i];
+    return result;
+}
+Result Validate(const std::string& input,const std::string& device,int64_t now,
                 const std::vector<unsigned char>& publicXY) {
+    const auto token=Normalize(input);
     Result result;
-    result.error=u8"Licença inválida. Confira a chave recebida.";
-    if(token.size()>2048 || token.rfind("ZB2L1.",0)!=0) return result;
-    const auto dot=token.find('.',6);
-    if(dot==std::string::npos) return result;
-    auto bytes=Unhex(token.substr(6,dot-6));
-    std::string payload(bytes.begin(),bytes.end());
-    if(!Verify(payload,Unhex(token.substr(dot+1)),publicXY)) return result;
-    std::vector<std::string> fields;
-    size_t start=0;
-    for(size_t end=payload.find('\n');end!=std::string::npos;end=payload.find('\n',start)) {
-        fields.push_back(payload.substr(start,end-start));start=end+1;
+    result.error=u8"Cole sua licença ou escolha Abrir arquivo.";
+    if(token.empty())return result;
+    result.error=u8"Isso não é uma licença. Abra o arquivo .zb2license recebido.";
+    if(token.size()>4096 || (token.rfind("ZB2L1.",0)!=0 && token.rfind("ZB2L2.",0)!=0))return result;
+    std::vector<std::string> parts;size_t first=0;
+    for(size_t end=token.find('.');end!=std::string::npos;end=token.find('.',first)){parts.push_back(token.substr(first,end-first));first=end+1;}
+    parts.push_back(token.substr(first));
+    const bool delegated=parts[0]=="ZB2L2";
+    if(parts.size()!=(delegated?5u:3u))return result;
+    auto signer=publicXY;int64_t maxDays=3650,grantIssued=0,grantExpires=INT64_MAX;
+    result.error=u8"Licença incompleta ou alterada. Importe o arquivo original.";
+    if(delegated){
+        auto certificateBytes=Unhex(parts[3]);std::string certificate(certificateBytes.begin(),certificateBytes.end());
+        if(!Verify(certificate,Unhex(parts[4]),publicXY))return result;
+        auto grant=Lines(certificate);
+        if(grant.size()!=8 || grant[0]!="ZB2-ISSUER-1" || grant[1]!="Menu-ZB2" || !LowerHex(grant[2],32) ||
+           grant[3].size()<4 || grant[3].size()>160 || Unhex(grant[3]).empty() || !LowerHex(grant[4],128) ||
+           !Number(grant[5],grantIssued) || !Number(grant[6],grantExpires) || !Number(grant[7],maxDays) ||
+           maxDays>3650 || grantExpires<=grantIssued || grantExpires-grantIssued>3650LL*86400)return result;
+        if(now<grantIssued || now>=grantExpires){result.error=u8"Autorização do emissor fora da validade. Solicite uma nova licença.";return result;}
+        signer=Unhex(grant[4]);
     }
+    auto bytes=Unhex(parts[1]);
+    std::string payload(bytes.begin(),bytes.end());
+    if(!Verify(payload,Unhex(parts[2]),signer))return result;
+    auto fields=Lines(payload);
     int64_t issued=0;
-    if(start!=payload.size() || fields.size()!=6 || fields[0]!="ZB2-LICENSE-1" || fields[1]!="Menu-ZB2" ||
+    if(fields.size()!=6 || fields[0]!="ZB2-LICENSE-1" || fields[1]!="Menu-ZB2" ||
        !LowerHex(fields[2],32) || !LowerHex(fields[3],64) || !Number(fields[4],issued) || !Number(fields[5],result.expires) ||
-       result.expires<=issued || result.expires-issued>3650LL*86400) return result;
+       result.expires<=issued || result.expires-issued>maxDays*86400 || issued<grantIssued || result.expires>grantExpires) return result;
     if(fields[3]!=device) { result.error=u8"Licença de outro computador. Solicite uma nova.";return result; }
     if(now<issued) { result.error=u8"Licença ainda não válida. Confira a data do PC.";return result; }
     if(now>=result.expires) { result.error=u8"Licença expirada. Solicite a renovação.";return result; }
