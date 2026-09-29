@@ -24,7 +24,7 @@ result = subprocess.run(['cmd.exe','/d','/c',str(setup)],capture_output=True,tex
 for line in result.stdout.splitlines():
     if '=' in line and not line.startswith('='):
         key,value=line.split('=',1);env[key.upper()]=value
-sources = ['apps/loader/main.cpp','apps/loader/preview_ui.cpp'] + ['imgui/'+n+'.cpp' for n in ['imgui','imgui_draw','imgui_widgets','imgui_tables','imgui_impl_win32','imgui_impl_dx11']]
+sources = ['apps/loader/main.cpp','apps/loader/window.cpp','apps/loader/graphics.cpp','apps/loader/preview_ui.cpp','apps/loader/preview_theme.cpp'] + ['imgui/'+n+'.cpp' for n in ['imgui','imgui_draw','imgui_widgets','imgui_tables','imgui_impl_win32','imgui_impl_dx11']]
 commands = [[shutil.which('rc.exe',path=env['PATH']),'/nologo','/fo','bundle.res','bundle.rc'],
  [shutil.which('cl.exe',path=env['PATH']),'/nologo','/std:c++17','/EHsc','/O2','/MT','/W3','/utf-8','/DUNICODE','/D_UNICODE','/DNOMINMAX',*[str(root/p) for p in sources],'bundle.res','/Fe:ZB2Menu-Preview.exe','/link','/SUBSYSTEM:WINDOWS','user32.lib','gdi32.lib','dwmapi.lib','imm32.lib','d3d11.lib','d3dcompiler.lib']]
 logs=[]

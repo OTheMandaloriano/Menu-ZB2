@@ -4,6 +4,10 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Loader 0.2 adota o visual compacto aprovado, com ativação/painel e sem sidebar.
+- Separa entrada, janela, recursos D3D11, tema e telas; renderização testada em 100%/200%.
+- Mantém ações de licença e carregamento explicitamente demonstrativas.
+
 - Prévia nativa do loader com telas de ativação, início e pacote; sem validação/injeção real.
 - Empacotador determinístico com allowlist, manifesto e verificação de integridade; pacote de desenvolvimento explicitamente não assinado.
 

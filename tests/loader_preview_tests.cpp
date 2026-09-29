@@ -1,17 +1,27 @@
-#include "../apps/loader/preview_ui.cpp"
+#include "../apps/loader/preview_ui.h"
 #include "software_renderer.h"
 #include <stdexcept>
 int main(){
-    ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(760,530);io.DeltaTime=1.f/60;
-    ImGui::StyleColorsDark();auto& style=ImGui::GetStyle();style.WindowPadding=ImVec2(22,18);style.FramePadding=ImVec2(10,8);style.ItemSpacing=ImVec2(10,10);style.FrameRounding=5;
-    style.Colors[ImGuiCol_WindowBg]=ImVec4(.055f,.065f,.075f,1);style.Colors[ImGuiCol_ChildBg]=ImVec4(.07f,.08f,.09f,1);
-    style.Colors[ImGuiCol_Button]=ImVec4(.10f,.30f,.29f,1);
-    io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/segoeui.ttf",18.f);io.Fonts->Build();
-    for(int tab=0;tab<3;++tab){
-        page=tab;
-        for(int i=0;i<2;++i){ImGui::NewFrame();DrawLoaderPreview();ImGui::Render();}
-        if(ImGui::GetDrawData()->TotalVtxCount==0)throw std::runtime_error("empty preview");
-        if(!RenderPpm("loader-"+std::to_string(tab)+".ppm",1))throw std::runtime_error("render failed");
+    ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DeltaTime=1.f/60;
+    for(int dpi=1;dpi<=2;++dpi){
+        ConfigureLoaderPreview(float(dpi));io.Fonts->Build();io.DisplaySize=ImVec2(420.f*dpi,460.f*dpi);
+        for(int tab=0;tab<2;++tab){
+            LoaderPreviewState state;state.page=tab;
+            for(int i=0;i<2;++i){ImGui::NewFrame();DrawLoaderPreview(state);ImGui::Render();}
+            if(ImGui::GetDrawData()->TotalVtxCount==0)throw std::runtime_error("empty preview");
+            if(!RenderPpm("loader-v2-"+std::to_string(tab)+"-"+std::to_string(dpi)+".ppm",1))throw std::runtime_error("render failed");
+        }
     }
-    ImGui::DestroyContext();std::puts("PASS: three loader pages rendered without opening desktop windows");
+    ConfigureLoaderPreview(1);io.Fonts->Build();io.DisplaySize=ImVec2(420,460);
+    LoaderPreviewState state;
+    auto frame=[&](){ImGui::NewFrame();DrawLoaderPreview(state);ImGui::Render();};
+    auto click=[&](float x,float y){io.MousePos=ImVec2(x,y);io.MouseDown[0]=false;frame();io.MouseDown[0]=true;frame();io.MouseDown[0]=false;frame();};
+    frame();frame();click(200,313);
+    if(!state.attempted || state.page!=0)throw std::runtime_error("preview must not activate a license");
+    click(200,387);if(state.page!=1 || state.attempted)throw std::runtime_error("demo navigation");
+    click(200,380);if(!state.attempted)throw std::runtime_error("load shows explicit preview feedback");
+    click(200,438);if(state.page!=0)throw std::runtime_error("return navigation");
+    click(350,20);if(!state.minimize)throw std::runtime_error("minimize action");
+    click(390,20);if(!state.close)throw std::runtime_error("close action");
+    ImGui::DestroyContext();std::puts("PASS: two compact loader pages rendered at 100% and 200% DPI");
 }

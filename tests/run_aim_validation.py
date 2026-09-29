@@ -46,8 +46,10 @@ for name in names:
     command = ([compiler, '/nologo', '/std:c++17', '/EHsc', '/W4', '/WX', '/O2', str(unit),
                 '/Fe:'+str(executable), '/Fo:'+str(output/(name+'.obj'))] if msvc else
                [compiler, '-std=c++17', '-O2', '-Wall', '-Wextra', '-Werror', '-pthread', str(unit), '-o', str(executable)])
+    if name == 'loader_preview_tests':
+        command += ['/utf-8',str(source/'apps/loader/preview_ui.cpp'),str(source/'apps/loader/preview_theme.cpp')]
     if name in ('esp_render_tests','loader_preview_tests'):
-        command += [str(source/'esp_layout.cpp')]
+        if name == 'esp_render_tests': command += [str(source/'esp_layout.cpp')]
         command += [str(source/'imgui'/(name+'.cpp')) for name in ['imgui','imgui_draw','imgui_tables','imgui_widgets']]
         command += ['user32.lib','/link','/IGNORE:4099']
         command = [item for item in command if not item.startswith('/Fo:')]
