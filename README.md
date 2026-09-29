@@ -22,7 +22,7 @@ O projeto combina uma DLL nativa C++ para interface e renderização com adaptad
 Este é o repositório privado de **código-fonte, testes e documentação**. Distribuição para usuários e atualização do menu pertencem a um canal separado. Veja [distribuição e atualizações](docs/DISTRIBUICAO.md).
 
 > [!IMPORTANT]
-> O menu é distribuído com o injetor e suas dependências. O launcher foi retirado por decisão do proprietário. Não há uma versão pública estável. Testes simulados não substituem validação em partida solo, host e cliente.
+> O menu é distribuído com o injetor e suas dependências. O injetor permanece operacional; um novo loader está em fase de prévia visual, sem ativação ou carregamento reais. Não há uma versão pública estável. Testes simulados não substituem validação em partida solo, host e cliente.
 
 ## Requisitos de desenvolvimento
 
@@ -130,3 +130,5 @@ Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. 
 [Controles de combate e inventário](docs/COMBAT_ITEMS_10.md)
 
 [Utilidades e controles de sessão](docs/UTILITIES_11.md)
+
+[Prévia do loader e empacotamento](docs/LOADER_PREVIEW.md)

@@ -1,6 +1,9 @@
 # Distribuição por injetor
 
-O launcher e a atualização automática foram retirados por decisão do proprietário.
+O injetor continua sendo a distribuição operacional. O proprietário aprovou
+retomar um loader em etapas; há uma [prévia visual](LOADER_PREVIEW.md), ainda
+sem ativação, instalação ou carregamento reais. A atualização automática não
+está implementada.
 
 Distribua juntos `injector.exe`, `config.ini`, `kiero-dx11-base.dll`, `Zb2.AimBridge.dll`, `0Harmony.dll` e `Harmony.LICENSE`. Símbolos PDB/MAP são preservados para diagnóstico, mas não são necessários no pacote de execução.
 

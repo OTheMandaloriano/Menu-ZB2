@@ -37,7 +37,7 @@ if not compiler:
     raise SystemExit('Install g++ or the Visual Studio C++ build tools.')
 records = []
 names = ['aim_tests', 'snapshot_tests', 'modifier_tests', 'esp_options_tests', 'monotonic_time_tests','hotkey_toggle_tests']
-if os.name == 'nt': names += ['runtime_gate_tests','settings_channel_tests','input_search_tests','esp_render_tests','silhouette_gpu_tests']
+if os.name == 'nt': names += ['runtime_gate_tests','settings_channel_tests','input_search_tests','esp_render_tests','silhouette_gpu_tests','loader_preview_tests']
 if args.only: names = [name for name in names if name == args.only]
 if not names: raise SystemExit('Unknown test name')
 for name in names:
@@ -46,7 +46,7 @@ for name in names:
     command = ([compiler, '/nologo', '/std:c++17', '/EHsc', '/W4', '/WX', '/O2', str(unit),
                 '/Fe:'+str(executable), '/Fo:'+str(output/(name+'.obj'))] if msvc else
                [compiler, '-std=c++17', '-O2', '-Wall', '-Wextra', '-Werror', '-pthread', str(unit), '-o', str(executable)])
-    if name == 'esp_render_tests':
+    if name in ('esp_render_tests','loader_preview_tests'):
         command += [str(source/'esp_layout.cpp')]
         command += [str(source/'imgui'/(name+'.cpp')) for name in ['imgui','imgui_draw','imgui_tables','imgui_widgets']]
         command += ['user32.lib','/link','/IGNORE:4099']

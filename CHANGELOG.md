@@ -4,6 +4,9 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Prévia nativa do loader com telas de ativação, início e pacote; sem validação/injeção real.
+- Empacotador determinístico com allowlist, manifesto e verificação de integridade; pacote de desenvolvimento explicitamente não assinado.
+
 - Teleportes locais, aplicação de hora e fila limitada de criação de inimigos conectados aos métodos do jogo.
 - FOV, terceira pessoa e velocidade do dia com restauração; proteção de queda independente e reviver apenas quando caído.
 - Anti-AFK substituído por Executar em segundo plano, sem promessa de evitar expulsão.

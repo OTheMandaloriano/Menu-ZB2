@@ -51,7 +51,12 @@ inline bool RenderPpm(const std::string& path,int scale=2) {
             }
         }
     }
-    FILE* file=std::fopen(path.c_str(),"wb");if(!file)return false;
+    FILE* file=nullptr;
+#ifdef _MSC_VER
+    if(fopen_s(&file,path.c_str(),"wb")!=0)return false;
+#else
+    file=std::fopen(path.c_str(),"wb");if(!file)return false;
+#endif
     std::fprintf(file,"P6\n%d %d\n255\n",width,height);
     bool ok=std::fwrite(pixels.data(),1,pixels.size(),file)==pixels.size();
     return std::fclose(file)==0 && ok;

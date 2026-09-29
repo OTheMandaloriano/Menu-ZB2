@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "files": [
+    "injector.exe",
+    "config.ini",
+    "kiero-dx11-base.dll",
+    "Zb2.AimBridge.dll",
+    "0Harmony.dll",
+    "Harmony.LICENSE"
+  ]
+}

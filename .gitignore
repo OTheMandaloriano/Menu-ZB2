@@ -20,3 +20,10 @@ opencode.json
 .vs/
 __pycache__/
 *.pyc
+
+# Distribution artifacts and private signing material
+dist/
+*.zb2license
+*.pfx
+*.p12
+*.key
