@@ -58,6 +58,10 @@ class RangeTests {
         RangeBridge.Configure(1,200,0,360,800,600);other.UpdateLoadState();Check(Real(other)==0,"front FOV excludes rear");
         RangeBridge.Configure(1,200,1,360,800,600);other.UpdateLoadState();Check(Real(other)==1,"360 includes rear within range");
         other.zombieProps[0].isWaveZombie=true;RangeBridge.Configure(0,10,0,360,800,600);other.UpdateLoadState();Check(Real(other)==1 && other.LastActive,"normal wave logic untouched");
+        other.zombieProps[0].isWaveZombie=false;RangeBridge.Configure(0,10,0,360,800,600);
+        MagnetLoadLease.Retain(other,99);other.UpdateLoadState();Check(Real(other)==1,"magnet lease retains entity independently from disabled aim");
+        MagnetLoadLease.Clear();other.UpdateLoadState();Check(Real(other)==0,"magnet disable restores native LOD");
+        MagnetLoadLease.Retain(other,99);Time.unscaledTime+=2;other.UpdateLoadState();Check(Real(other)==0,"stale lease expires");
         var buffer=Marshal.AllocHGlobal(20*256+4);
         try {
             ZombieLoader.Instance=loader;

@@ -163,8 +163,10 @@ namespace Zb2Menu {
         }
         // Pass the caller's ShotPath by reference. ShootGun later sends this exact
         // local through SyncShotOnline, including host broadcasts. No extra packet.
+        public static double LastAimCheckMs,LastOriginalShotMs,PeakOriginalShotMs;
         static void ExecuteShot(PhysicalGun gun, PlayerMain player, int mask,
                                 ref ShotPath path, bool effect, DatabaseGun custom) {
+            long started=System.Diagnostics.Stopwatch.GetTimestamp();
             try {
                 Request state;
                 if (Current(out state) && (state.Flags & Silent)!=0 && effect && player == state.Player) {
@@ -172,7 +174,10 @@ namespace Zb2Menu {
                     else System.Threading.Interlocked.Increment(ref blocked);
                 }
             } catch (Exception ex) { RecordFailure(ex); }
-            gun.Shoot(player, mask, path, effect, custom);
+            LastAimCheckMs=(System.Diagnostics.Stopwatch.GetTimestamp()-started)*1000.0/System.Diagnostics.Stopwatch.Frequency;
+            started=System.Diagnostics.Stopwatch.GetTimestamp();
+            try{gun.Shoot(player, mask, path, effect, custom);}
+            finally{LastOriginalShotMs=(System.Diagnostics.Stopwatch.GetTimestamp()-started)*1000.0/System.Diagnostics.Stopwatch.Frequency;if(LastOriginalShotMs>PeakOriginalShotMs)PeakOriginalShotMs=LastOriginalShotMs;}
         }
         static IEnumerable<CodeInstruction> PatchShotPath(IEnumerable<CodeInstruction> instructions) {
             var code = new List<CodeInstruction>(instructions);

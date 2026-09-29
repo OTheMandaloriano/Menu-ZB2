@@ -110,6 +110,13 @@ class MagnetTests {
         Time.unscaledTime=60;MagnetBridge.Apply(p,true,true,60,1);Check(dormant.calls==0,"dormant enemy beyond radius not promoted");
         Time.unscaledTime=61;MagnetBridge.Apply(p,true,true,300,1);Check(dormant.calls==1,"ordinary dormant enemy inside configured radius promoted and gathered");
         MagnetBridge.Reset();
+        MagnetBridge.Reset();p.transform.position=new Vector3();p.cam.CameraTransform.position=new Vector3(0,3,20);Physics.RayResults=null;Physics.ground=true;
+        ZombieLoader.Instance=new ZombieLoader();var held=new Zombie{identity=new ZombieIdentity{id=900}};held.obj.transform.position=new Vector3(0,0,10);ZombieLoader.Instance.zombies.Add(held);
+        Time.unscaledTime=80;MagnetBridge.Apply(p,true,true,300,1,2.5f,8,false,5,false);var original=held.obj.transform.position;int calls=held.calls;
+        p.cam.CameraTransform.position=new Vector3(0,20,100);Time.unscaledTime=81;MagnetBridge.Apply(p,true,true,300,1,2.5f,8,false,5,true);
+        Check(Vector3.Distance(original,held.obj.transform.position)<.001f && held.calls==calls,"NoClip toggle preserves fixed ground anchor");
+        Time.unscaledTime=82;MagnetBridge.Apply(p,true,true,300,1,2.5f,8,false,5,false);
+        Check(Vector3.Distance(original,held.obj.transform.position)<.001f,"NoClip disable does not recapture anchor");MagnetBridge.Reset();
         harmony.UnpatchAll("magnet.freeze.tests");
         Console.WriteLine(checks+" magnet checks passed");
     }

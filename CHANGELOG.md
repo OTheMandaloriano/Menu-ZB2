@@ -4,6 +4,10 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Destinos fixos preservam posição e modo chão/ar ao alternar NoClip.
+- Magnet mantém modelos promovidos no LOD enquanto ativo, independentemente da mira.
+- Tooltips detalham captura, destino, tipo de alvo e distâncias; disparos têm medições separadas de verificação e execução nativa.
+
 - Magnet promove zumbis comuns descarregados dentro do raio, além do grupo anterior e bosses.
 - Chams/silhueta ficam no grupo ESP de zumbis, com master e distância compartilhados.
 - Ponto de cabeça funciona sem esqueleto; bosses usam envelope do modelo também em caixas 2D/cantos.

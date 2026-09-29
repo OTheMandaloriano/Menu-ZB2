@@ -19,14 +19,14 @@ namespace Zb2Menu {
         static readonly Dictionary<int,Vector3> placed=new Dictionary<int,Vector3>();
         static readonly HashSet<int> requestedBosses=new HashSet<int>();
         static Vector3 anchor;
-        static bool anchorSet;
+        static bool anchorSet,anchorAir;
         static int anchorMode=-1;
         static Vector3 anchorForward;
         static int groundMask=-1;
         static bool sharedGroundSet;static RaycastHit sharedGround;
         public static string Status="";
         public static bool Active {get{return previous || Status.Length>0;}}
-        public static void Reset(){MagnetFreeze.Clear();cursor=0;previous=false;owner=null;loader=null;Status="";PeakMilliseconds=0;nextPass=0;nextPrune=0;slots.Clear();bossSlots.Clear();placed.Clear();requestedBosses.Clear();anchorSet=false;}
+        public static void Reset(){MagnetLoadLease.Clear();MagnetFreeze.Clear();cursor=0;previous=false;owner=null;loader=null;Status="";PeakMilliseconds=0;nextPass=0;nextPrune=0;slots.Clear();bossSlots.Clear();placed.Clear();requestedBosses.Clear();anchorSet=false;}
         public static void Apply(PlayerMain player,bool enabled,bool inputAllowed,float radius,int targetMode=0,float frontDistance=2.5f,float bossDistance=8,bool freeze=false,int mode=0,bool noClip=false) {
             long start=System.Diagnostics.Stopwatch.GetTimestamp();
             try{ApplyCore(player,enabled,inputAllowed,radius,targetMode,frontDistance,bossDistance,freeze,mode,noClip);}
@@ -40,9 +40,9 @@ namespace Zb2Menu {
             if(current==null || player.cam==null || player.cam.CameraTransform==null)return;
             if(cohortLoader!=current){cohort.Clear();cohortLoader=current;}
             if(!previous || owner!=player || loader!=current){Reset();owner=player;loader=current;previous=true;}
-            int requestedMode=mode+(noClip?8:0);bool stacked=(mode&4)!=0;mode &= 3;
+            int requestedMode=mode;bool stacked=(mode&4)!=0;mode &= 3;
             if(mode<0 || mode>2)mode=0;
-            bool fixedPoint=mode!=0;bool air=noClip;
+            bool fixedPoint=mode!=0;bool air=fixedPoint && anchorSet && requestedMode==anchorMode?anchorAir:noClip;
             groundMask=player.movement.groundMask;
             // Fixed modes retain captured enemies until the toggle is disabled.
             freeze=freeze || fixedPoint || stacked || air;
@@ -53,6 +53,7 @@ namespace Zb2Menu {
             if(float.IsNaN(radius)||float.IsInfinity(radius))radius=50;
             radius=Mathf.Clamp(radius,10,300);
             if(targetMode<0 || targetMode>2)targetMode=0;
+            MagnetLoadLease.Pulse(current);
             Prune(current);
             LoadOneCaptured(current,targetMode,player.transform.position,radius);
             if(targetMode!=1)LoadOneBoss(current);
@@ -74,7 +75,7 @@ namespace Zb2Menu {
                 center=nearby.point;
             }
             bool relocated=!anchorSet || (!fixedPoint && Vector3.Distance(anchor,center)>(stacked || air?.1f:.5f));
-            if(relocated){if(fixedPoint)MagnetFreeze.Clear();anchor=center;anchorForward=forward;anchorSet=true;placed.Clear();sharedGroundSet=false;}
+            if(relocated){if(fixedPoint)MagnetFreeze.Clear();anchor=center;anchorAir=air;anchorForward=forward;anchorSet=true;placed.Clear();sharedGroundSet=false;}
             int count=0,attempted=0;bool? commonBlocked=null,bossBlocked=null;
             int total=current.zombies.Count;
             for(int scanned=0;scanned<Math.Min(total,128);++scanned) {
@@ -112,7 +113,7 @@ namespace Zb2Menu {
                 float offset=reference==null?0:zombie.obj.transform.position.y-reference.position.y;
                 if(float.IsNaN(offset)||float.IsInfinity(offset)||Math.Abs(offset)>8)continue;
                 Vector3 target=footPoint+Vector3.up*offset;
-                if(Vector3.Distance(zombie.obj.transform.position,target)<(stacked?.03f:1.25f)){placed[zombie.identity.id]=target;cohort.Add(zombie.identity.id);if(freeze)MagnetFreeze.Hold(zombie,target);continue;}
+                if(Vector3.Distance(zombie.obj.transform.position,target)<(stacked?.03f:1.25f)){placed[zombie.identity.id]=target;cohort.Add(zombie.identity.id);MagnetLoadLease.Retain(current,zombie.identity.id);if(freeze)MagnetFreeze.Hold(zombie,target);continue;}
                 float bodyRadius=boss?1.5f:.4f,bodyHeight=boss?4:1.6f;
                 bool blocked;
                 if(stacked && !air){
@@ -123,7 +124,7 @@ namespace Zb2Menu {
                 if(blocked)continue;
                 zombie.TeleportTo(target,stacked?player.transform.rotation:zombie.obj.transform.rotation);
                 MagnetFreeze.MarkMoved();
-                placed[zombie.identity.id]=target;cohort.Add(zombie.identity.id);
+                placed[zombie.identity.id]=target;cohort.Add(zombie.identity.id);MagnetLoadLease.Retain(current,zombie.identity.id);
                 if(freeze)MagnetFreeze.Hold(zombie,target);
                 ++count;
             }
@@ -153,6 +154,7 @@ namespace Zb2Menu {
             if(Time.unscaledTime<nextPrune)return;nextPrune=Time.unscaledTime+1;
             liveIds.Clear();foreach(var z in current.zombies)if(z!=null && z.health!=null && z.health.isAlive && z.health.amount>0)liveIds.Add(z.identity.id);
             PruneMap(placed);PruneMap(slots);PruneMap(bossSlots);
+            requestedBosses.RemoveWhere(id=>liveIds.Contains(id));
         }
         static void PruneMap<T>(Dictionary<int,T> map) {
             staleIds.Clear();foreach(var key in map.Keys)if(!liveIds.Contains(key))staleIds.Add(key);
@@ -163,14 +165,14 @@ namespace Zb2Menu {
             int id=-1;
             foreach(var z in current.unloadedZombies)if(z!=null && (cohort.Contains(z.identity.id) || Vector3.Distance(origin,z.transform.position)<=radius) && !requestedBosses.Contains(z.identity.id) && (targetMode==0 || z.identity.IsBoss==(targetMode==2))){id=z.identity.id;break;}
             if(id<0)foreach(var z in current.zombieProps)if(z!=null && (cohort.Contains(z.identity.id) || Vector3.Distance(origin,z.transform.position)<=radius) && !requestedBosses.Contains(z.identity.id) && (targetMode==0 || z.identity.IsBoss==(targetMode==2))){id=z.identity.id;break;}
-            if(id>=0){requestedBosses.Add(id);current.ForceLoadRealZombie(id);}
+            if(id>=0){requestedBosses.Add(id);MagnetLoadLease.Retain(current,id);current.ForceLoadRealZombie(id);}
         }
         static void LoadOneBoss(ZombieLoader current) {
             int id=-1;
             foreach(var zombie in current.unloadedZombies)if(zombie!=null && zombie.identity.IsBoss && !requestedBosses.Contains(zombie.identity.id)){id=zombie.identity.id;break;}
             if(id<0)foreach(var zombie in current.zombieProps)if(zombie!=null && zombie.identity.IsBoss && !requestedBosses.Contains(zombie.identity.id)){id=zombie.identity.id;break;}
             // The game owns conversion and network state. Never mutate the list being enumerated.
-            if(id>=0){requestedBosses.Add(id);current.ForceLoadRealZombie(id);}
+            if(id>=0){requestedBosses.Add(id);MagnetLoadLease.Retain(current,id);current.ForceLoadRealZombie(id);}
         }
     }
 }

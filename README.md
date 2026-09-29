@@ -124,3 +124,5 @@ Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. 
 [Grupo único, rigs e Fast Knife](docs/GROUP_MELEE_7.md)
 
 [ESP, alcance e rigs](docs/ESP_RANGE_8.md)
+
+[Retenção de LOD e independência do NoClip](docs/MAGNET_LEASE_9.md)

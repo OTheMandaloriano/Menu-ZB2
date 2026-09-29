@@ -80,12 +80,13 @@ namespace Zb2Menu {
         static ZombieLoader.ZombieLoadState TargetState(ZombieLoader owner,ZombieLoader.ZombieLoadState current,
             int index,Zombie real,bool wave,out bool goActive) {
             var original=owner.GetTargetZombieState(current,index,real,wave,out goActive);
-            if(original==ZombieLoader.ZombieLoadState.Real || wanted.Count==0) return original;
+            if(original==ZombieLoader.ZombieLoadState.Real) return original;
             try {
                 int id;
                 if(current==ZombieLoader.ZombieLoadState.Unloaded) id=owner.unloadedZombies[index].identity.id;
                 else if(current==ZombieLoader.ZombieLoadState.Prop) id=owner.zombieProps[index-owner.unloadedZombies.Count].identity.id;
                 else {if(real==null)return original;id=real.identity.id;}
+                if(MagnetLoadLease.Contains(owner,id))return ZombieLoader.ZombieLoadState.Real;
                 if(!wanted.Contains(id)) return original;
                 if(current!=ZombieLoader.ZombieLoadState.Real) {
                     if(loads>=LoadsPerPass)return original;

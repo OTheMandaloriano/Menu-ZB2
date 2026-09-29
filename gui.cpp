@@ -1269,7 +1269,7 @@ namespace GUI {
                 static const char* kSnapFrom[] = { "Base", "Topo", "Centro" };
                 if (ImGui::BeginTable("visual_cols", 2)) {
                     ImGui::TableNextColumn();
-                    ImGui::TextDisabled("Revisao ESP-RANGE-8");
+                    ImGui::TextDisabled("Revisao MAGNET-LEASE-9");
                     Section("Zumbis");
                     if(Mono::Get().coopMode==2)ImGui::TextWrapped("Cliente: HP de zumbis comuns nao e sincronizado; barras numericas ficam ocultas.");
                     ImGui::Checkbox("Ativo##Z", &Config::bZombieEsp); Tip("Ativa o desenho do ESP. A coleta da mira e independente.");
@@ -1415,7 +1415,7 @@ namespace GUI {
                 ImGui::Checkbox("Desbloquear Loadout", &Config::bUnlockLoadout); Tip("Kits do loadout livres (a loja compra com Money: use Infinite Money).");
                 ImGui::Separator();
                 // REMOVIDO 17/09: Spawn de Itens (nao util; IDs ficam no historico p/ fase futura).
-                ImGui::Checkbox("Magnet de zumbis (solo/host)", &Config::bEnemyMagnet);
+                ImGui::Checkbox("Magnet de zumbis (solo/host)", &Config::bEnemyMagnet);Tip("Carrega e reune inimigos elegiveis em lotes. Desligar libera a retencao. Requer solo ou host.");
                 HotkeyButton("Tecla Magnet", &Config::iMagnetKey, "Alterna o Magnet. Reune zumbis carregados dentro do raio, em lotes. Padrao H.");
                 const char* targets[]={"Zumbis e bosses","Somente zumbis","Somente bosses"};
                 const char* destinations[]={"Seguir minha posicao","Fixar no ponto da mira","Fixar a minha frente"};
@@ -1424,13 +1424,13 @@ namespace GUI {
                 const char* arrangements[]={"Distribuido","Sobreposto (mesmo ponto)"};
                 ImGui::Combo("Agrupamento",&Config::iMagnetArrangement,arrangements,2);
                 Tip("Sobreposto reune os corpos no mesmo destino. Nao altera penetracao ou dano dos tiros.");
-                ImGui::Combo("Alvos Magnet", &Config::iMagnetTargets,targets,3);
+                ImGui::Combo("Alvos Magnet", &Config::iMagnetTargets,targets,3);Tip("Filtra novos alvos e libera os retidos que nao pertencem ao filtro.");
                 ImGui::TextDisabled("Bosses existentes ignoram o raio de busca.");
-                ImGui::SliderFloat("Distancia frontal",&Config::fMagnetFront,1.5f,10,"%.1fm");
+                ImGui::SliderFloat("Distancia frontal",&Config::fMagnetFront,1.5f,10,"%.1fm");Tip("Distancia do destino a frente na ativacao; ponto fixo nao acompanha NoClip nem movimento posterior.");
                 ImGui::BeginDisabled(Config::iMagnetArrangement==1);
-                ImGui::SliderFloat("Distancia bosses",&Config::fMagnetBoss,6,20,"%.1fm");
+                ImGui::SliderFloat("Distancia bosses",&Config::fMagnetBoss,6,20,"%.1fm");Tip("Separacao frontal dos bosses apenas no agrupamento distribuido.");
                 ImGui::EndDisabled();
-                ImGui::SliderFloat("Raio Magnet", &Config::fMagnetRadius, 10, 300, "%.0fm");
+                ImGui::SliderFloat("Raio Magnet", &Config::fMagnetRadius, 10, 300, "%.0fm");Tip("Raio de captura medido a partir de voce, nao do destino. Inclui registros descarregados em lotes; obstaculos e nascimento podem adiar a chegada.");
                 if(Config::iMagnetDestination==0 && Config::iMagnetArrangement==0) {
                     ImGui::Checkbox("Congelar atraidos", &Config::bMagnetFreeze);Tip("Suspende atualizacao dos zumbis reunidos e restaura fisica/animacao ao desligar.");
                 } else ImGui::TextDisabled("Fixo/sobreposto: mantem os atraidos ate desligar.");
