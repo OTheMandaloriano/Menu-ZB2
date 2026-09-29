@@ -24,6 +24,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <charconv>
 
 static const char* kAppFolder = "ZB2 Menu";
 static const char* kDllFile = "kiero-dx11-base.dll"; // default (config.ini pode trocar)
@@ -166,7 +167,7 @@ static bool EnableDebugPriv() {
         return false;
     TOKEN_PRIVILEGES tp = { 0 };
     tp.PrivilegeCount = 1;
-    if (!LookupPrivilegeValueA(nullptr, SE_DEBUG_NAME, &tp.Privileges[0].Luid)) {
+    if (!LookupPrivilegeValueW(nullptr, L"SeDebugPrivilege", &tp.Privileges[0].Luid)) {
         CloseHandle(t);
         return false;
     }
@@ -380,7 +381,9 @@ static bool Inject(DWORD pid, const std::wstring& dll) {
     DWORD mod = 0;
     GetExitCodeThread(th, &mod);
     CloseHandle(th);
-    VirtualFreeEx(h, rem, 0, MEM_RELEASE);
+    // On timeout the remote thread may still read this buffer. Keep it alive
+    // until the game exits rather than causing a use-after-free in the game.
+    if (w == WAIT_OBJECT_0) VirtualFreeEx(h, rem, 0, MEM_RELEASE);
     CloseHandle(h);
 
     if (w != WAIT_OBJECT_0) { Log(Level::Err, "Timeout no LoadLibrary remoto."); return false; }
@@ -401,8 +404,15 @@ static void PauseExit(bool nowait) {
 
 int main(int argc, char** argv) {
     bool nowait = false;
+    DWORD requestedPid = 0;
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "--nowait") == 0 || strcmp(argv[i], "-n") == 0) nowait = true;
+        else if (strcmp(argv[i], "--pid") == 0) {
+            if (++i >= argc) return 6;
+            const char* end = argv[i] + strlen(argv[i]);
+            auto parsed = std::from_chars(argv[i], end, requestedPid);
+            if (parsed.ec != std::errc() || parsed.ptr != end || !requestedPid) return 6;
+        }
         else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "/?") == 0) {
             printf("Uso: injector.exe [--nowait]\n");
             printf("  Le config.ini ao lado do exe (process/dll/timeout/retry).\n");
@@ -421,6 +431,7 @@ int main(int argc, char** argv) {
     // 0. Config externa
     Cfg cfg;
     LoadConfig(cfg);
+    if (requestedPid) { cfg.retry = 1; cfg.bootstrapDelay = 0; cfg.timeout = 0; }
     char procA[64] = { 0 }, dllA[MAX_PATH] = { 0 };
     WideCharToMultiByte(CP_ACP, 0, cfg.process, -1, procA, sizeof(procA), nullptr, nullptr);
     WideCharToMultiByte(CP_ACP, 0, cfg.dll, -1, dllA, sizeof(dllA), nullptr, nullptr);
@@ -458,7 +469,8 @@ int main(int argc, char** argv) {
     ReportDllState(size, mt);
 
     // 3. Watcher: espera o processo aparecer (polling 1s ate timeout).
-    DWORD pid = WaitForProcess(cfg.process, cfg.timeout);
+    DWORD pid = requestedPid ? requestedPid : WaitForProcess(cfg.process, cfg.timeout);
+    if (requestedPid && FindProcessId(cfg.process) != requestedPid) return 6;
     if (!pid) {
         Log(Level::Err, "Processo %s nao apareceu em %ds. Abra o jogo e rode de novo.", procA, cfg.timeout);
         PauseExit(nowait);

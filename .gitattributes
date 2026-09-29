@@ -16,3 +16,6 @@
 *.pdb binary
 *.png binary
 *.zip binary
+*.ttf binary
+# Preserve the upstream OFL license text byte for byte, including its trailing space.
+apps/loader/assets/Lexend-OFL.txt whitespace=-blank-at-eol

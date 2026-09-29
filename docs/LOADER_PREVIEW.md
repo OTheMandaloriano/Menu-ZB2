@@ -1,3 +1,11 @@
+# Documento histórico
+
+Esta prévia foi substituída pelo [loader funcional offline](LOADER.md).
+Os comandos e limitações abaixo registram a etapa anterior e não descrevem
+o executável atual. Use `scripts/build_loader.py` para novas builds.
+
+---
+
 # Loader: primeira etapa
 
 O usuário aprovou retomar o loader em etapas. Esta entrega é uma prévia visual

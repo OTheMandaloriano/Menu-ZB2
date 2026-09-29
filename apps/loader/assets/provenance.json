@@ -1,0 +1,45 @@
+{
+  "DearImGui-LICENSE.txt": {
+    "source": "https://raw.githubusercontent.com/ocornut/imgui/v1.89.9/LICENSE.txt",
+    "sha256": "438f0d4dd95acd6723a8f2996ec365245de154ff52a390aa644624aa95aabf2c"
+  },
+  "Lexend-variable.ttf": {
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lexend/Lexend%5Bwght%5D.ttf",
+    "sha256": "3add53e641fbc81da64da4bb254285e2831b52b029527bc0714e2b9610832ee6"
+  },
+  "Lexend-OFL.txt": {
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lexend/OFL.txt",
+    "sha256": "5da8505887d0fa7fe963445fd58852707fda34adfeb65af25c99d152bab285bd"
+  },
+  "fa-solid-900.ttf": {
+    "source": "https://raw.githubusercontent.com/FortAwesome/Font-Awesome/6.7.2/webfonts/fa-solid-900.ttf",
+    "sha256": "af19d135d3a935b3ebfbd80320716ffe1202052c5f68dc2c5f1abc57005ac605"
+  },
+  "FontAwesome-LICENSE.txt": {
+    "source": "https://raw.githubusercontent.com/FortAwesome/Font-Awesome/6.7.2/LICENSE.txt",
+    "sha256": "9b914eae88817d63b576eab5aafde7068c7a1abae125d7cdfb034f1da43a9afc"
+  },
+  "IconsFontAwesome6.h": {
+    "source": "https://raw.githubusercontent.com/juliettef/IconFontCppHeaders/main/IconsFontAwesome6.h",
+    "sha256": "1986b023825b269fb8c60ccc2419c4594280249596e828e573d5c8ef309e265d"
+  },
+  "IconFontCppHeaders-LICENSE.txt": {
+    "source": "https://raw.githubusercontent.com/juliettef/IconFontCppHeaders/main/licence.txt",
+    "sha256": "8a0e8338ba1d9359adbbfe5ffb70d6423b169192d146dae12410adaff15aa67a"
+  },
+  "Lexend-SemiBold.ttf": {
+    "source": "Lexend-variable.ttf",
+    "weight": 600,
+    "sha256": "87450d8b315f3e8d31628ab5f7ffd2abfc6fc00467656f182a57ab8766c5eed6"
+  },
+  "Lexend-Bold.ttf": {
+    "source": "Lexend-variable.ttf",
+    "weight": 700,
+    "sha256": "68b8db643700b30fd3917e6a86f4de77acd7a4fe2a8865e3b10090921e29e68c"
+  },
+  "Lexend-Black.ttf": {
+    "source": "Lexend-variable.ttf",
+    "weight": 900,
+    "sha256": "aa927ca672684b032cf16bcb644526dd8c4639234fdb267120c83c50206f19b7"
+  }
+}
