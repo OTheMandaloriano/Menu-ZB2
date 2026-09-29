@@ -61,12 +61,13 @@ namespace Config {
     extern bool  bInfAmmo;
     extern bool  bInstantReload;
     extern bool  bFullAuto;
+    extern bool bExplosiveMods;
+    extern int iGrantItem,iGrantRequest;
     extern bool  bSaitama;          // 4.000.000 dano
     extern float fNadeTime;
     extern float fExplRadius;       // (HOST)
     extern float fExplDamage;       // (HOST)
     extern bool  bContactExpl;
-    extern bool  bPowerDrop;        // velocidade 400
 
     // ---- PLAYER / Items ----
     extern char  szItemSearch[64];

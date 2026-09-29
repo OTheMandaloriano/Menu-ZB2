@@ -83,6 +83,7 @@ namespace Mono {
         float zHp0 = 0.0f;
         float espMs = 0.0f;    // custo do BuildEsp (diagnostico)
         int   espShown = 0;
+        char extrasStatus[192]={};
         int pyreCount=0;
         char pyreStatus[192]={};
         int   coopMode = 0;        // 0=lobby/unknown 1=single 2=client 3=host

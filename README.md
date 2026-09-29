@@ -126,3 +126,5 @@ Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. 
 [ESP, alcance e rigs](docs/ESP_RANGE_8.md)
 
 [Retenção de LOD e independência do NoClip](docs/MAGNET_LEASE_9.md)
+
+[Controles de combate e inventário](docs/COMBAT_ITEMS_10.md)

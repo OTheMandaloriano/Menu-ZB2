@@ -1731,7 +1731,16 @@ namespace Mono {
         auto status=s_pyreStatus?pInvoke(s_pyreStatus,nullptr,nullptr,&error):nullptr;
         if(status && !error){char* text=pStrUtf8(status);if(text){strncpy_s(s.pyreStatus,text,_TRUNCATE);pFree(text);}}
     }
+    static void ApplyExtras(bool ready) {
+        if(!s_extrasApply)return;
+        int active=ready?1:0,punch=s_options.bSaitama?1:0,explosives=s_options.bExplosiveMods?1:0,contact=s_options.bContactExpl?1:0;
+        void* args[]={&active,&punch,&explosives,&contact,&s_options.fNadeTime,&s_options.fExplRadius,&s_options.fExplDamage,&s_options.iGrantItem,&s_options.iItemAmount,&s_options.iGrantRequest};
+        MonoObject* error=nullptr;auto message=pInvoke(s_extrasApply,nullptr,args,&error);
+        if(error){strncpy_s(s.extrasStatus,"Falha nos extras; confira o log",_TRUNCATE);return;}
+        if(message){char* text=pStrUtf8(message);if(text){if(*text || !ready)strncpy_s(s.extrasStatus,text,_TRUNCATE);pFree(text);}}
+    }
     static void ApplyVisuals(bool ready) {
+        ApplyExtras(ready);
         UpdatePyres(ready);
         if(!s_chamsApply)return;
         int enabled=ready && s_options.bZombieEsp && s_options.bChams?1:0;

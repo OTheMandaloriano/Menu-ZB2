@@ -5,6 +5,9 @@
 // Render owns Config. Unity owns its copy; no game call holds the UI gate.
 namespace RuntimeSettings {
 struct Values {
+    bool bSaitama=false,bExplosiveMods=false,bContactExpl=false;
+    float fNadeTime=2,fExplRadius=8,fExplDamage=500;
+    int iGrantItem=0,iGrantRequest=0,iItemAmount=1;
     bool bZombieHeadDot=false;
     decltype(Config::bNoClip) bNoClip = {};
     decltype(Config::fNoClipSpeed) fNoClipSpeed = {};
@@ -99,7 +102,10 @@ struct Values {
 };
 inline Values Capture(float width,float height) {
     Values values;
-    values.bNoClip=Config::bNoClip; values.fNoClipSpeed=Config::fNoClipSpeed;
+    values.bNoClip=Config::bNoClip;
+    values.bSaitama=Config::bSaitama;values.bExplosiveMods=Config::bExplosiveMods;values.bContactExpl=Config::bContactExpl;
+    values.fNadeTime=Config::fNadeTime;values.fExplRadius=Config::fExplRadius;values.fExplDamage=Config::fExplDamage;
+    values.iGrantItem=Config::iGrantItem;values.iGrantRequest=Config::iGrantRequest;values.iItemAmount=Config::iItemAmount; values.fNoClipSpeed=Config::fNoClipSpeed;
     values.iItemFilter0=Config::iItemFilter0;
     values.iItemFilter1=Config::iItemFilter1;
     values.iItemFilter2=Config::iItemFilter2;

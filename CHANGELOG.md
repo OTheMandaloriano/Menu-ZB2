@@ -4,6 +4,11 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Saitama conecta socos locais identificados a dano e impulso, em solo/host.
+- Explosivos têm ativação explícita, pavio, contato, raio/dano e restauração de catálogo.
+- Novo seletor pesquisável adiciona itens permitidos pelo fluxo nativo de inventário, sem descartar no chão se cheio.
+- Power Drop e botões de slot sem implementação retirados da interface.
+
 - Destinos fixos preservam posição e modo chão/ar ao alternar NoClip.
 - Magnet mantém modelos promovidos no LOD enquanto ativo, independentemente da mira.
 - Tooltips detalham captura, destino, tipo de alvo e distâncias; disparos têm medições separadas de verificação e execução nativa.

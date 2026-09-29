@@ -75,12 +75,13 @@ namespace Config {
     bool  bInfAmmo = false;
     bool  bInstantReload = false;
     bool  bFullAuto = false;
+    bool bExplosiveMods=false;
+    int iGrantItem=0,iGrantRequest=0;
     bool  bSaitama = false;
     float fNadeTime = 2.0f;
     float fExplRadius = 8.0f;
     float fExplDamage = 500.0f;
     bool  bContactExpl = false;
-    bool  bPowerDrop = false;
 
     char szItemSearch[64] = { 0 };
     int  iItemAmount = 1;
@@ -697,8 +698,8 @@ namespace GUI {
         JB(bLimitFov); JF(fFovAngle); JB(b360Mode); JB(bDrawFov); JV(colFov); JF(fEspDistance); JF(fAimDistance);
         JB(bPrediction); JF(fLagComp);
         JB(bNoRecoil); JB(bNoSpread); JB(bNoSway); JB(bTightAim); JB(bRapidFire); JF(fRapidMult); JB(bFastKnife); JF(fKnifeMult);
-        JB(bInfAmmo); JB(bInstantReload); JB(bFullAuto); JB(bSaitama); JF(fNadeTime);
-        JF(fExplRadius); JF(fExplDamage); JB(bContactExpl); JB(bPowerDrop);
+        JB(bInfAmmo); JB(bInstantReload); JB(bFullAuto); JB(bSaitama); JB(bExplosiveMods); JF(fNadeTime);
+        JF(fExplRadius); JF(fExplDamage); JB(bContactExpl);
         JS(szItemSearch); JI(iItemAmount);
         JB(bSpeedHack); JF(fSpeedMult); JB(bSuperJump); JF(fJumpMult);
         JB(bRollSpeed); JF(fRollMult);
@@ -788,8 +789,8 @@ namespace GUI {
         LB(bLimitFov); LF(fFovAngle); LB(b360Mode); LB(bDrawFov); LV(colFov); LF(fEspDistance); LF(fAimDistance);
         LB(bPrediction); LF(fLagComp);
         LB(bNoRecoil); LB(bNoSpread); LB(bNoSway); LB(bTightAim); LB(bRapidFire); LF(fRapidMult); LB(bFastKnife); LF(fKnifeMult);
-        LB(bInfAmmo); LB(bInstantReload); LB(bFullAuto); LB(bSaitama); LF(fNadeTime);
-        LF(fExplRadius); LF(fExplDamage); LB(bContactExpl); LB(bPowerDrop);
+        LB(bInfAmmo); LB(bInstantReload); LB(bFullAuto); LB(bSaitama); LB(bExplosiveMods); LF(fNadeTime);
+        LF(fExplRadius); LF(fExplDamage); LB(bContactExpl);
         LS(szItemSearch); LI(iItemAmount);
         LB(bSpeedHack); LF(fSpeedMult); LB(bSuperJump); LF(fJumpMult);
         LB(bRollSpeed); LF(fRollMult);
@@ -1235,24 +1236,18 @@ namespace GUI {
                 ImGui::SliderFloat("Knife Mult", &Config::fKnifeMult, 1, 5, "%.1fx");
                 ImGui::Checkbox("Instant Reload", &Config::bInstantReload); Tip("Recarga instantanea: completa o pente na hora (sem animacao). Single/host. Como cliente use a recarga normal (R).");
                 ImGui::Checkbox("Full Auto for All", &Config::bFullAuto); Tip("Automatico independente do Rapid Fire; desativar restaura o modo original da arma.");
-                ImGui::TextDisabled("Pendente: controles sem implementacao nesta versao.");
-                ImGui::BeginDisabled();
-                ImGui::Checkbox("Saitama Mode (4M dano)", &Config::bSaitama);
-                ImGui::SliderFloat("Nade Time", &Config::fNadeTime, 0, 10, "%.1fs");
-                ImGui::SliderFloat("Explosion Radius (HOST)", &Config::fExplRadius, 1, 50, "%.0f");
-                ImGui::SliderFloat("Explosion Damage", &Config::fExplDamage, 10, 10000, "%.0f");
-                ImGui::Checkbox("Contact Explosion", &Config::bContactExpl);
-                ImGui::Checkbox("Power Drop (400)", &Config::bPowerDrop);
-                ImGui::Separator();
-                ImGui::Text("Items");
-                ImGui::InputText("Search Items", Config::szItemSearch, 64);
-                ImGui::SliderInt("Amount", &Config::iItemAmount, 1, 9999);
-                if (ImGui::Button("Primary")) {} Tip("Entrega no slot primario (Fase Items).");
-                ImGui::SameLine(); if (ImGui::Button("Secondary")) {}
-                ImGui::SameLine(); if (ImGui::Button("Melee")) {}
-                ImGui::SameLine(); if (ImGui::Button("Add to Inventory")) {}
-                ImGui::Separator();
+                Section("Soco e explosivos (solo/host)");
+                ImGui::Checkbox("Saitama: super soco",&Config::bSaitama);Tip("Socos desarmados do jogador local: 4 milhoes de dano e impulso. Nao afeta tiros ou facas. Efeito visual do corpo depende do inimigo.");
+                ImGui::Checkbox("Modificar explosivos",&Config::bExplosiveMods);Tip("Altera granadas de fragmentacao e dinamite no catalogo desta sessao solo/host. Pode afetar explosivos de outros jogadores. Desligar restaura os parametros, nao desfaz explosoes.");
+                ImGui::BeginDisabled(!Config::bExplosiveMods);
+                ImGui::SliderFloat("Pavio (segundos)",&Config::fNadeTime,.1f,10,"%.1f s");Tip("Tempo ate detonar. Alterar pode afetar explosivos ja lancados.");
+                ImGui::SliderFloat("Raio da explosao",&Config::fExplRadius,1,30,"%.1f m");Tip("Raio fisico da explosao; valores altos aumentam o custo de colisao e dano.");
+                ImGui::SliderFloat("Dano maximo",&Config::fExplDamage,10,10000,"%.0f");Tip("Preserva a proporcao da queda de dano e do orcamento total original.");
+                ImGui::Checkbox("Explodir no contato",&Config::bContactExpl);Tip("Detona ao colidir com outro objeto; desligar restaura o comportamento original.");
                 ImGui::EndDisabled();
+                DrawInventoryGrant();
+                if(Mono::Get().extrasStatus[0])ImGui::TextWrapped("%s",Mono::Get().extrasStatus);
+
                 ImGui::Text("Movement");
                 ImGui::Checkbox("Speed Hack", &Config::bSpeedHack); Tip("Multiplica a velocidade horizontal de caminhada e corrida.");
                 ImGui::SliderFloat("Speed Mult", &Config::fSpeedMult, 1, 5, "%.1fx"); Tip("1x restaura a velocidade normal.");
@@ -1269,7 +1264,7 @@ namespace GUI {
                 static const char* kSnapFrom[] = { "Base", "Topo", "Centro" };
                 if (ImGui::BeginTable("visual_cols", 2)) {
                     ImGui::TableNextColumn();
-                    ImGui::TextDisabled("Revisao MAGNET-LEASE-9");
+                    ImGui::TextDisabled("Revisao COMBAT-ITEMS-10");
                     Section("Zumbis");
                     if(Mono::Get().coopMode==2)ImGui::TextWrapped("Cliente: HP de zumbis comuns nao e sincronizado; barras numericas ficam ocultas.");
                     ImGui::Checkbox("Ativo##Z", &Config::bZombieEsp); Tip("Ativa o desenho do ESP. A coleta da mira e independente.");
