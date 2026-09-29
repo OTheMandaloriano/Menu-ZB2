@@ -171,3 +171,5 @@ static class ManagedAimTests {
 namespace Zb2Menu {public static class GodModeBridge {public static bool Active=false;public static void Install(HarmonyLib.Harmony h){}public static void Clear(){}public static void Apply(PlayerMain p,bool b){}}}
 
 namespace Zb2Menu {public static class CombatExtrasBridge {public static void Install(HarmonyLib.Harmony h){}}}
+
+namespace Zb2Menu {public static class UtilityBridge {public static void Install(HarmonyLib.Harmony h){}}}

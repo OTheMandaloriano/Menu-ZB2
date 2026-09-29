@@ -54,6 +54,7 @@ namespace Zb2Menu {
                     MagnetFreeze.Install(candidate);
                     GodModeBridge.Install(candidate);
                     CombatExtrasBridge.Install(candidate);
+                    UtilityBridge.Install(candidate);
                     MenuInputBridge.Install(candidate);
                     harmony = candidate;
                     return true;

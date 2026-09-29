@@ -12,6 +12,7 @@ static MonoMethod* s_itemAllowed = nullptr;
 static MonoMethod* s_catalogIcon = nullptr;
 static MonoMethod* s_chamsApply = nullptr;
 static MonoMethod* s_extrasApply=nullptr;
+static MonoMethod* s_utilityApply=nullptr;
 static MonoMethod* s_rigBone=nullptr;static MonoMethod* s_rigBounds=nullptr;
 static MonoMethod* s_pyreUpdate=nullptr;
 static MonoMethod* s_pyreStatus=nullptr;
@@ -81,6 +82,8 @@ static bool LoadAimBridge() {
         if(rig){s_rigBone=pMethodFrom(rig,"Bone",2);s_rigBounds=pMethodFrom(rig,"Bounds",2);}
         auto extras=pClassFrom(image,"Zb2Menu","CombatExtrasBridge");
         if(extras)s_extrasApply=pMethodFrom(extras,"Apply",10);
+        auto utilities=pClassFrom(image,"Zb2Menu","UtilityBridge");
+        if(utilities)s_utilityApply=pMethodFrom(utilities,"Apply",14);
         auto ranges = pClassFrom(image, "Zb2Menu", "RangeBridge");
         if (!modifiers || !world || !ranges) return false;
         s_rangeConfigure = pMethodFrom(ranges, "Configure", 6);

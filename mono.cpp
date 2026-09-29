@@ -1739,7 +1739,17 @@ namespace Mono {
         if(error){strncpy_s(s.extrasStatus,"Falha nos extras; confira o log",_TRUNCATE);return;}
         if(message){char* text=pStrUtf8(message);if(text){if(*text || !ready)strncpy_s(s.extrasStatus,text,_TRUNCATE);pFree(text);}}
     }
+    static void ApplyUtilities(bool ready) {
+        if(!s_utilityApply)return;
+        int active=ready?1:0,flags=(s_options.bCustomFov?1:0)|(s_options.bThirdPerson?2:0)|(s_options.bDaySpeed?4:0)|(s_options.bNoFall?8:0)|(s_options.bAntiAfk?16:0);
+        void* position=&s.utilityX;
+        void* args[]={&active,&flags,&s_options.fCamFov,&s_options.fThirdDist,&s_options.fDaySpeed,&s_options.iUtilityCommand,&s_options.iUtilityRequest,&s_options.fSaveX,&s_options.fSaveY,&s_options.fSaveZ,&s_options.fDayHour,&s_options.iSpawnCount,&s_options.iSpawnBoss,&position};
+        MonoObject* error=nullptr;auto message=pInvoke(s_utilityApply,nullptr,args,&error);
+        if(error){strncpy_s(s.utilityStatus,"Falha na utilidade; confira parametros",_TRUNCATE);return;}
+        if(message){char* text=pStrUtf8(message);if(text){strncpy_s(s.utilityStatus,text,_TRUNCATE);pFree(text);}}
+    }
     static void ApplyVisuals(bool ready) {
+        ApplyUtilities(ready);
         ApplyExtras(ready);
         UpdatePyres(ready);
         if(!s_chamsApply)return;

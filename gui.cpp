@@ -29,6 +29,8 @@
 
 // ---- Definicao do estado global ----
 namespace Config {
+    bool bCustomFov=false,bDaySpeed=false;
+    int iUtilityCommand=0,iUtilityRequest=0;
     bool bMenuOpen = true;
     int  iMenuKey = VK_INSERT;
     bool bWatermark = true;
@@ -727,7 +729,7 @@ namespace GUI {
         JI(iItemMagnetType); JF(fItemMagnetRadius); JB(bAutoCollect);
         JF(fSaveX); JF(fSaveY); JF(fSaveZ);
         JF(fDayHour); JF(fDaySpeed); JI(iSpawnCount); JI(iSpawnBoss);
-        JF(fCamFov); JB(bThirdPerson); JF(fThirdDist); JB(bAntiAfk); JB(bNoClip); JI(iNoClipKey);
+        JF(fCamFov);JB(bCustomFov);JB(bDaySpeed); JB(bThirdPerson); JF(fThirdDist); JB(bAntiAfk); JB(bNoClip); JI(iNoClipKey);
         JF(fNoClipSpeed); JB(bNoFall); JI(iCfgVer);
 #undef JB
 #undef JI
@@ -816,7 +818,7 @@ namespace GUI {
         LI(iItemMagnetType); LF(fItemMagnetRadius); LB(bAutoCollect);
         LF(fSaveX); LF(fSaveY); LF(fSaveZ);
         LF(fDayHour); LF(fDaySpeed); LI(iSpawnCount); LI(iSpawnBoss);
-        LF(fCamFov); LB(bThirdPerson); LF(fThirdDist); LB(bAntiAfk); LB(bNoClip); LI(iNoClipKey);
+        LF(fCamFov);LB(bCustomFov);LB(bDaySpeed); LB(bThirdPerson); LF(fThirdDist); LB(bAntiAfk); LB(bNoClip); LI(iNoClipKey);
         LF(fNoClipSpeed); LB(bNoFall);
         LF(fAlongN); LF(fAlongD); LF(fAlongH); LF(fAlongP); LF(fGapN); LF(fGapD); LF(fGapH); LF(fGapP);
         LI(iOrderN); LI(iOrderD); LI(iOrderH); LI(iOrderP); LF(fBarLength); LF(fBarThickness);
@@ -1264,7 +1266,7 @@ namespace GUI {
                 static const char* kSnapFrom[] = { "Base", "Topo", "Centro" };
                 if (ImGui::BeginTable("visual_cols", 2)) {
                     ImGui::TableNextColumn();
-                    ImGui::TextDisabled("Revisao COMBAT-ITEMS-10");
+                    ImGui::TextDisabled("Revisao UTILITIES-11");
                     Section("Zumbis");
                     if(Mono::Get().coopMode==2)ImGui::TextWrapped("Cliente: HP de zumbis comuns nao e sincronizado; barras numericas ficam ocultas.");
                     ImGui::Checkbox("Ativo##Z", &Config::bZombieEsp); Tip("Ativa o desenho do ESP. A coleta da mira e independente.");
@@ -1453,36 +1455,43 @@ namespace GUI {
                 if(ImGui::Button("Ir ao braseiro selecionado")){Config::iPyreRequest=Config::iPyreRequest>=2147483646?1:Config::iPyreRequest+1;}
                 Tip("Teleporta somente voce para um ponto livre ao lado do braseiro. Ative-o normalmente pelo jogo.");
                 ImGui::EndDisabled();
-                ImGui::TextDisabled("Auto-coleta, aliados e selecao Steam: nao implementados.");
-                ImGui::BeginDisabled();
-                ImGui::Separator();
-                ImGui::Text("Teleports");
-                ImGui::InputFloat3("XYZ", &Config::fSaveX);
-                if (ImGui::Button("Salvar Posicao Atual")) {}
-                ImGui::SameLine(); if (ImGui::Button("Teleportar")) {}
-                ImGui::Separator();
-                if (ImGui::Button("Ir p/ Municao")) {} ImGui::SameLine();
-                if (ImGui::Button("Explosivos")) {} ImGui::SameLine();
-                if (ImGui::Button("Upgrade")) {}
-                if (ImGui::Button("Fogueira")) {} ImGui::SameLine();
-                if (ImGui::Button("Mercador")) {}
-                ImGui::Separator();
-                ImGui::Text("Host Controls (HOST)");
-                ImGui::SliderFloat("Hora do dia", &Config::fDayHour, 0, 24, "%.1fh");
-                ImGui::SliderFloat("Vel. tempo", &Config::fDaySpeed, 1, 10, "%.1fx");
-                ImGui::SliderInt("Qtd Spawn", &Config::iSpawnCount, 1, 100);
-                if (ImGui::Button("Spawnar Zumbi")) {}
-                ImGui::Combo("Boss", &Config::iSpawnBoss, kBossName, 3);
-                ImGui::SameLine(); if (ImGui::Button("Spawnar Boss")) {}
-                ImGui::Separator();
-                ImGui::Text("Utilities");
-                ImGui::SliderFloat("Camera FOV", &Config::fCamFov, 60, 120, "%.0f");
-                ImGui::Checkbox("Third Person", &Config::bThirdPerson);
-                ImGui::SliderFloat("Dist 3rd", &Config::fThirdDist, 1, 10, "%.1fm");
-                ImGui::Checkbox("Anti-AFK", &Config::bAntiAfk);
-                ImGui::Checkbox("No Fall Damage", &Config::bNoFall);
-                if (ImGui::Button("Revive Yourself")) {}
+                Section("Teleporte local");
+                if(Mono::Get().utilityStatus[0])ImGui::TextWrapped("%s",Mono::Get().utilityStatus);
+                auto action=[](int command){Config::iUtilityCommand=command;Config::iUtilityRequest=Config::iUtilityRequest>=2147483646?1:Config::iUtilityRequest+1;};
+                ImGui::BeginDisabled(!Mono::Get().inMap);
+                float destination[3]={Config::fSaveX,Config::fSaveY,Config::fSaveZ};
+                if(ImGui::InputFloat3("XYZ",destination)){Config::fSaveX=destination[0];Config::fSaveY=destination[1];Config::fSaveZ=destination[2];}
+                Tip("Coordenadas do mundo; a chegada exige chao e espaco livre.");
+                if(ImGui::Button("Salvar posicao atual")){Config::fSaveX=Mono::Get().utilityX;Config::fSaveY=Mono::Get().utilityY;Config::fSaveZ=Mono::Get().utilityZ;}
+                Tip("Copia sua posicao para XYZ. Pode ser salva no preset.");
+                ImGui::SameLine();if(ImGui::Button("Teleportar para XYZ"))action(1);Tip("Busca chao e espaco livre perto das coordenadas; nao atravessa o vazio.");
+                if(ImGui::Button("Bancada de municao"))action(2);Tip("Vai para a bancada de municao mais proxima registrada no mapa.");
+                if(ImGui::Button("Bancada de explosivos"))action(3);Tip("Vai para a bancada de explosivos mais proxima.");
+                if(ImGui::Button("Bancada de melhorias"))action(4);Tip("Vai para a bancada de melhoria mais proxima.");
+                if(ImGui::Button("Braseiro apagado mais proximo"))action(5);Tip("Para escolher outro braseiro, use a lista acima.");
+                if(ImGui::Button("Mercador"))action(6);Tip("Busca chegada junto a van existente.");
                 ImGui::EndDisabled();
+                Section("Controles do host");
+                ImGui::BeginDisabled(!Mono::Get().inMap || Mono::Get().coopMode==2);
+                ImGui::SliderFloat("Hora do dia",&Config::fDayHour,0,23.99f,"%.2fh");
+                if(ImGui::Button("Aplicar hora"))action(7);Tip("Muda a hora uma vez; o ciclo continua normalmente.");
+                ImGui::Checkbox("Alterar velocidade do dia",&Config::bDaySpeed);Tip("Altera somente o ciclo dia/noite. Desligar restaura a duracao original.");
+                ImGui::SliderFloat("Velocidade do dia",&Config::fDaySpeed,1,10,"%.1fx");Tip("Multiplica a passagem de horas; nao altera a velocidade de fisica ou animacoes.");
+                ImGui::SliderInt("Quantidade de zumbis",&Config::iSpawnCount,1,100);
+                if(ImGui::Button("Criar zumbis"))action(9);Tip("Mire no chao livre ate 50 m. Cria um por passagem, com intervalo de 0,25 s. Quantidades altas podem reduzir FPS.");
+                ImGui::SameLine();if(ImGui::Button("Cancelar fila"))action(10);
+                ImGui::Combo("Boss",&Config::iSpawnBoss,kBossName,3);
+                if(ImGui::Button("Criar boss"))action(11);Tip("Cria um boss pelo caminho nativo. Rejeita tipo que ja existe e destino sem chao.");
+                ImGui::EndDisabled();
+                Section("Camera e utilidades");
+                ImGui::Checkbox("FOV de camera personalizado",&Config::bCustomFov);Tip("Independente do circulo do aimbot. Desligar restaura o FOV original.");
+                ImGui::SliderFloat("Camera FOV",&Config::fCamFov,60,120,"%.0f");Tip("Aplica somente com FOV de camera personalizado ativo.");
+                ImGui::Checkbox("Terceira pessoa",&Config::bThirdPerson);Tip("Forca a camera local em terceira pessoa. Desligar restaura o modo anterior.");
+                ImGui::SliderFloat("Distancia da camera",&Config::fThirdDist,1,10,"%.1fm");Tip("Distancia base em terceira pessoa; a camera do jogo ainda evita obstaculos.");
+                ImGui::Checkbox("Executar em segundo plano",&Config::bAntiAfk);Tip("Unity runInBackground. Nao simula teclas nem garante evitar expulsao por inatividade.");
+                ImGui::Checkbox("Sem dano de queda",&Config::bNoFall);Tip("Bloqueia apenas DamageType.Fall no jogador local; nao exige God Mode.");
+                if(ImGui::Button("Levantar quando caido"))action(8);Tip("Usa Revive do jogo. Nao ressuscita depois de morrer nem reinicia a partida.");
+
                 ImGui::EndTabItem();
             }
             // ---- 4 SETTINGS ----

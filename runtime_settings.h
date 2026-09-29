@@ -5,6 +5,9 @@
 // Render owns Config. Unity owns its copy; no game call holds the UI gate.
 namespace RuntimeSettings {
 struct Values {
+    bool bCustomFov=false,bDaySpeed=false,bThirdPerson=false,bAntiAfk=false,bNoFall=false;
+    float fCamFov=90,fThirdDist=4,fDaySpeed=1,fDayHour=12,fSaveX=0,fSaveY=0,fSaveZ=0;
+    int iUtilityCommand=0,iUtilityRequest=0,iSpawnCount=1,iSpawnBoss=0;
     bool bSaitama=false,bExplosiveMods=false,bContactExpl=false;
     float fNadeTime=2,fExplRadius=8,fExplDamage=500;
     int iGrantItem=0,iGrantRequest=0,iItemAmount=1;
@@ -103,6 +106,23 @@ struct Values {
 inline Values Capture(float width,float height) {
     Values values;
     values.bNoClip=Config::bNoClip;
+    values.bCustomFov=Config::bCustomFov;
+    values.bDaySpeed=Config::bDaySpeed;
+    values.bThirdPerson=Config::bThirdPerson;
+    values.bAntiAfk=Config::bAntiAfk;
+    values.bNoFall=Config::bNoFall;
+    values.fCamFov=Config::fCamFov;
+    values.fThirdDist=Config::fThirdDist;
+    values.fDaySpeed=Config::fDaySpeed;
+    values.fDayHour=Config::fDayHour;
+    values.fSaveX=Config::fSaveX;
+    values.fSaveY=Config::fSaveY;
+    values.fSaveZ=Config::fSaveZ;
+    values.iUtilityCommand=Config::iUtilityCommand;
+    values.iUtilityRequest=Config::iUtilityRequest;
+    values.iSpawnCount=Config::iSpawnCount;
+    values.iSpawnBoss=Config::iSpawnBoss;
+
     values.bSaitama=Config::bSaitama;values.bExplosiveMods=Config::bExplosiveMods;values.bContactExpl=Config::bContactExpl;
     values.fNadeTime=Config::fNadeTime;values.fExplRadius=Config::fExplRadius;values.fExplDamage=Config::fExplDamage;
     values.iGrantItem=Config::iGrantItem;values.iGrantRequest=Config::iGrantRequest;values.iItemAmount=Config::iItemAmount; values.fNoClipSpeed=Config::fNoClipSpeed;

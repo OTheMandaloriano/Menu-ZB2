@@ -238,6 +238,8 @@ namespace Config {
     extern int   iSpawnBoss;        // 0=Riot 1=Queen 2=Reaper (HOST)
 
     // ---- MISC / Utilities ----
+    extern bool bCustomFov,bDaySpeed;
+    extern int iUtilityCommand,iUtilityRequest;
     extern float fCamFov;           // 60-120
     extern bool  bThirdPerson;
     extern float fThirdDist;        // 1-10m
