@@ -17,7 +17,7 @@ for group,(source,name) in bundles.items():
         path=folder/stale
         assert path.resolve().parent==folder.resolve()
         path.unlink(missing_ok=True)
-    # Required third-party attributions are embedded and readable in app Credits.
+    # Required third-party attributions are embedded in the executable resources; no text files are extracted.
     allowed=[name]
     archive=OUTPUT/(group+'.zip')
     with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as package:

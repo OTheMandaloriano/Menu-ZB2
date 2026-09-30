@@ -1,4 +1,4 @@
-# ZB2 Admin — guia simples (1.4)
+# ZB2 Admin — guia simples (1.8)
 
 ## Você é o proprietário
 
@@ -28,8 +28,8 @@ para aquele PC e aplicada automaticamente. Não executar diretamente dentro do Z
 A opção **Gerar somente a chave** continua disponível. Também é possível copiar
 uma licença na linha do histórico e o cliente colar a chave manualmente.
 
-Para reenviar uma emissão existente, selecione-a no histórico e use **Gerar ZIP
-pronto**. Isso não cria outra licença nem reinicia o prazo. O prazo começa na emissão.
+Para reenviar uma emissão existente, use o ícone **ZIP** na linha do histórico.
+Isso não cria outra licença nem reinicia o prazo. O prazo começa na emissão.
 Uma renovação válida com vencimento posterior é aplicada ao abrir o novo pacote.
 
 ## Enviar a um integrante que vai emitir
@@ -45,7 +45,7 @@ O integrante precisa preparar o próprio PC uma única vez:
    A autorização incluída é importada automaticamente.
 
 O ZIP personalizado contém `ZB2Admin.exe` e `autorizacao.zb2issuer`.
-Para reenviar, selecione a autorização na lista e use **Gerar ZIP do integrante**.
+Para reenviar, clique com o botão direito na estação da lista e use **Salvar ZIP desta estação**.
 
 Exemplo de limites: autorização por 365 dias, licenças de no máximo 30 dias.
 O integrante não recebe sua chave principal nem pode autorizar outros integrantes.
@@ -66,7 +66,7 @@ Os dados ficam em `Documentos/ZB2Menu/Admin`. Não distribua essa pasta.
 
 Nenhum AVISOS.txt, chave privada, histórico, pedido de estação ou arquivo de build
 é colocado no pacote personalizado. Atribuições das dependências ficam embutidas,
-acessíveis em Créditos, sem arquivos extras na pasta do cliente.
+nos recursos do executável, sem telas jurídicas nem arquivos extras na pasta do cliente.
 
 Os ZIPs iniciais CLIENTE.zip/EQUIPE.zip servem para começar o cadastro; ainda não
 contêm uma licença/autorização pessoal. Os ZIPs prontos são gerados dentro do Admin.
@@ -101,4 +101,20 @@ histórico. Veja [ESTRUTURA.md](ESTRUTURA.md).
 
 Prazo em um único campo de dias; busca filtra as linhas carregadas enquanto digita.
 O HWID é abreviado visualmente e o botão copia todos os 64 caracteres. Créditos
-mostram o projeto; atribuições ficam em Dependências, sem TXT de entrega.
+mostram o projeto; atribuições permanecem nos recursos, sem botão Dependências nem TXT de entrega.
+
+## Acabamento 1.8
+
+O formulário mostra o prazo da próxima emissão. Cada linha do histórico conserva o
+prazo originalmente emitido; alterar o campo não renova uma licença antiga.
+Ao emitir, a resposta identifica a nova linha e confirma seus dias e vencimento.
+
+Use os ícones da linha para copiar a chave ou salvar o ZIP existente. O botão direito
+oferece salvar o arquivo de licença; em Minha equipe, permite recuperar o ZIP de uma
+estação autorizada. A emissão/ autorização principal não precisa ser repetida.
+
+Mensagens e ações de exportação são limpas ao navegar. Respostas recebidas depois da
+troca de aba atualizam o histórico sem trazer mensagens de outra tela.
+Créditos mostram somente o projeto. Não há botão ou popup de dependências, nem
+extração de arquivos TXT de atribuição. Os avisos redistribuídos permanecem nos
+recursos e fontes do projeto.

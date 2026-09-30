@@ -20,6 +20,6 @@ Settings ReadSettings(const std::filesystem::path& root){
 }
 void SaveSettings(const std::filesystem::path& root,const Settings& settings){Write(root/L"preferences.txt",settings.reducedMotion?"reduced_motion=1\n":"reduced_motion=0\n");}
 void WriteDiagnostics(const std::filesystem::path& path,bool owner,int licenseCount,int teamCount){
-    Write(path,"ZB2 Admin 1.6\nFrontend: Dear ImGui / D3D11 / Windows x64\nModo: offline\nPerfil: "+std::string(owner?"proprietario":"integrante ou pendente")+"\nLicencas locais: "+std::to_string(licenseCount)+"\nAutorizacoes locais: "+std::to_string(teamCount)+"\nNao inclui nomes, IDs, chaves, tokens ou conteudo de licencas.\n");
+    Write(path,"ZB2 Admin 1.8\nFrontend: Dear ImGui / D3D11 / Windows x64\nModo: offline\nPerfil: "+std::string(owner?"proprietario":"integrante ou pendente")+"\nLicencas locais: "+std::to_string(licenseCount)+"\nAutorizacoes locais: "+std::to_string(teamCount)+"\nNao inclui nomes, IDs, chaves, tokens ou conteudo de licencas.\n");
 }
 }

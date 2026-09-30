@@ -1,7 +1,6 @@
 #include "ui.h"
 #include "../shared/widgets.h"
 #include "assets/IconsFontAwesome6.h"
-#include "../shared/resources.h"
 namespace {
 using namespace UiTheme;
 void Status(const LoaderUiState& state){
@@ -25,14 +24,13 @@ void DrawLoader(LoaderUiState& state){
     if(Ui::Button(396,16,24,24,ICON_FA_XMARK,true))state.close=true;
     if(state.about){
         if(state.credits){
-            Ui::Text(20,56,400,24,u8"ZB2 Pro Menu — Créditos & Equipe",text,regular);
-            Ui::Text(20,92,400,20,"WeFagundes & Equipe de Modding",text,regular);
-            Ui::Text(20,124,400,16,"Unity Mono / DirectX 11 Hook (x64)",muted,caption);
-            Ui::Text(20,152,400,16,(current.version+u8" · Alpha Build").c_str(),muted,caption);
-            Ui::Text(20,180,400,16,current.phase==LoaderPhase::Success?"Menu carregado":"Aguardando carregamento",text,caption);
-            if(Ui::Button(20,208,194,28,"Voltar ao menu"))state.credits=false;
-            if(Ui::Button(226,208,194,28,u8"Dependências",true))ImGui::OpenPopup("Dependencias");
-            if(ImGui::BeginPopup("Dependencias")){ImGui::BeginChild("avisos",Ui::P(340,156));static const auto notices=AppResources::Read(205);ImGui::TextWrapped("%s",notices.c_str());ImGui::EndChild();ImGui::EndPopup();}
+            Ui::Panel(20,56,400,180);
+            Ui::Text(36,64,368,28,"ZB2 Pro Menu",text,regular,1);
+            Ui::Text(36,100,368,20,"DirectX 11 Hook & Modding Engine",muted,caption,1);
+            Ui::Text(36,132,368,20,"WeFagundes & Equipe",text,regular,1);
+            Ui::Text(36,160,368,16,(current.version+u8" · Alpha Build").c_str(),muted,caption,1);
+            if(Ui::Button(108,192,224,32,"Voltar aos dados",false,false,ICON_FA_ARROW_LEFT)){state.credits=false;state.localMessage.clear();}
+
         }else if(state.help){
             Ui::Wrapped(20,64,400,u8"1. Copie seu ID e solicite a licença à equipe.\n2. Abra o arquivo recebido e ative o acesso.\n3. Com AUTO-INJECT ligado, o menu carrega quando a partida estiver pronta.\n\nPrefere acionar? Use Injetar agora. No jogo, abra o menu com INSERT.");
             if(Ui::Button(20,204,400,28,"Voltar aos dados",false,false,ICON_FA_ARROW_LEFT))state.help=false;

@@ -26,7 +26,7 @@ resources=['501 RCDATA "ZB2AdminBackend.exe"','502 RCDATA "backend.sha256"']
 shutil.copyfile(ROOT/'apps/shared/brand/admin.ico',output/'admin.ico')
 resources.append('1 ICON "admin.ico"')
 notices='\n\n'.join((assets/name).read_text(encoding='utf-8') for name in ['Lexend-OFL.txt','FontAwesome-LICENSE.txt','IconFontCppHeaders-LICENSE.txt','DearImGui-LICENSE.txt'])
-(output/'notices.txt').write_text(notices,encoding='utf-8');resources.append('205 RCDATA "notices.txt"')
+(output/'attributions.bin').write_text(notices,encoding='utf-8');resources.append('205 RCDATA "attributions.bin"')
 for resource,name in [(201,'Lexend-SemiBold.ttf'),(202,'Lexend-Bold.ttf'),(203,'Lexend-Black.ttf'),(204,'fa-solid-900.ttf'),(206,'Lexend-Regular.ttf')]:
     shutil.copyfile(assets/name,output/name);resources.append(f'{resource} RCDATA "{name}"')
 (output/'admin.rc').write_text('\n'.join(resources)+'\n',encoding='ascii')

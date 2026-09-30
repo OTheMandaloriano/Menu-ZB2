@@ -7,6 +7,7 @@ enum class Picker {None,Request,Authorization,Owner};
 struct UiState {
     Snapshot data;Page page=Page::Licenses;
     bool close=false,minimize=false,send=false,save=false,copy=false,saveAfterReply=false;
+    Page requestPage=Page::Licenses;bool pendingFeedback=false;
     bool started=false,credits=false;unsigned revision=0;float fade=1;
     bool reducedMotion=false,saveSettings=false,exportDiagnostics=false;
     int openFolder=0;

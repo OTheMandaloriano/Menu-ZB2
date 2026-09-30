@@ -50,10 +50,20 @@ with tempfile.TemporaryDirectory(prefix='packages-',dir=ROOT/'build/admin-native
     rpc(owner,'client_package',record['Id'],archive);assert len(list((owner/'licenses').glob('*.json')))==1
     rpc(owner,'issue_package','Cliente','1'*64,'7',root/'missing'/'client.zip',valid=False)
     assert len(list((owner/'licenses').glob('*.json')))==1
+    rpc(owner,'issue','Historico antigo','3'*64,'365')
     rpc(owner,'issue_package','Renovacao','1'*64,'30',archive)
     with zipfile.ZipFile(archive) as z:z.extractall(customer)
     renewed=subprocess.run([str(loader),'import-package',str(local),str(customer/'ZB2Menu.exe'),'1'*64,str(int(time.time()))],capture_output=True)
     assert renewed.returncode==0 and int(renewed.stdout)>int(imported.stdout);checks+=1
+    all_records=[json.loads(p.read_text(encoding='utf-8')) for p in (owner/'licenses').glob('*.json')]
+    thirty=next(r for r in all_records if r['Customer']=='Renovacao')
+    previous=next(r for r in all_records if r['Customer']=='Historico antigo')
+    assert thirty['Days']==30 and thirty['Expires']-thirty['Issued']==30*86400
+    claims=bytes.fromhex(thirty['Token'].split('.')[1]).decode('ascii').split('\n')
+    assert int(claims[5])-int(claims[4])==30*86400
+    assert previous['Days']==365 and previous['Expires']-previous['Issued']==365*86400
+    with zipfile.ZipFile(archive) as z:assert z.read('licenca.zb2license').decode('utf-8').strip()==thirty['Token']
+    checks+=4
     request=rpc(member,'create_station','Integrante teste')[3]
     teamzip=root/'Equipe.zip'
     approved=rpc(owner,'authorize_package',request,'365','30',teamzip)

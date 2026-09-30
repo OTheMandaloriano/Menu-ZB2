@@ -28,6 +28,7 @@ Snapshot DecodeResponse(const std::string& response){
             if(fields.size()==9){auto& value=model.licenses.back().expires;auto parsed=std::from_chars(fields[8].data(),fields[8].data()+fields[8].size(),value);if(parsed.ec!=std::errc()||parsed.ptr!=fields[8].data()+fields[8].size()||value<=0)throw std::runtime_error("Data de validade incorreta.");}
         }
         else if(type=="G"&&fields.size()==5)model.grants.push_back({fields[0],fields[1],fields[2],fields[3],fields[4]});
+        else if(type=="I"&&fields.size()==1){model.issuedId=fields[0];}
         else if(type=="X"&&fields.size()==2){model.output=fields[0];model.filename=fields[1];}
         else if(type=="R"&&fields.size()==3){model.requestName=fields[0];model.requestId=fields[1];model.requestText=fields[2];}
         else if(type=="W"&&fields.size()==1){model.notice=fields[0];model.error=true;}

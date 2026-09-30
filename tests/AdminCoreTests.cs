@@ -44,6 +44,7 @@ internal static class AdminCoreTests
             member.ImportAuthorization(grant);
             Check(member.MaxDays() == 30, "Operator maximum");
             LicenseRecord delegated = member.Issue("Cliente delegado", new string('1', 64), 30);
+            Check(delegated.Days==30 && delegated.Expires-delegated.Issued==30L*86400,"Delegated exact 30 days");
             Check(delegated.Token.StartsWith("ZB2L2."), "Delegated protocol");
             Reject(delegate { member.Issue("Cliente", new string('1', 64), 31); }, "Operator day limit");
             Reject(delegate { member.Authorize(request, 365, 30); }, "Operator cannot authorize other operators");

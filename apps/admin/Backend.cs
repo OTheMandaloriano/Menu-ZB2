@@ -46,15 +46,17 @@ namespace Zb2Admin
                 case "issue":
                     Crypto.Require(args.Length==3,"Dados da licença incompletos.");
                     LicenseRecord issued=store.Issue(args[0],args[1],Number(args[2]));
+                    Row(extra,"I",issued.Id);
                     Row(extra,"X",issued.Token,"Licenca-"+issued.Id.Substring(0,8)+".zb2license");
-                    notice="Licença gerada. Salve o arquivo e envie ao cliente.";break;
+                    notice="Licença emitida: "+issued.Days+" dias · até "+issued.DateText+".";break;
                 case "issue_package":
                     Crypto.Require(args.Length==4,"Informe cliente, computador, prazo e destino do ZIP.");
                     Packages.CheckDestination(args[3]);
                     LicenseRecord packed=store.Issue(args[0],args[1],Number(args[2]));
+                    Row(extra,"I",packed.Id);
                     Row(extra,"X",packed.Token,"Licenca-"+packed.Id.Substring(0,8)+".zb2license");
-                    try { Packages.Client(args[3],packed);notice="ZIP pronto. Envie somente esse ZIP ao cliente."; }
-                    catch(Exception error){notice="Licença salva no histórico; ZIP não concluído: "+error.Message+" Selecione a licença e use Gerar ZIP, sem emitir novamente.";}
+                    try { Packages.Client(args[3],packed);notice="ZIP pronto: "+packed.Days+" dias · até "+packed.DateText+"."; }
+                    catch(Exception error){notice="Licença salva no histórico; ZIP não concluído: "+error.Message+" Use a ação ZIP dessa licença no histórico, sem emitir novamente.";}
                     break;
                 case "client_package":
                     Crypto.Require(args.Length==2,"Selecione uma licença e o destino do ZIP.");
@@ -72,7 +74,7 @@ namespace Zb2Admin
                     string approval=store.Authorize(candidate,Number(args[1]),Number(args[2]));
                     Row(extra,"X",approval,"Autorizacao-"+candidate.Id.Substring(0,8)+".zb2issuer");
                     try { Packages.Team(args[3],args[4],Crypto.ReadGrant(approval,store.RootPublic,Crypto.Now()));notice="Integrante autorizado. Envie o ZIP pronto para o PC da solicitação."; }
-                    catch(Exception error){notice="Autorização salva; ZIP não concluído: "+error.Message+" Selecione a autorização e use Gerar ZIP do integrante.";}
+                    catch(Exception error){notice="Autorização salva; ZIP não concluído: "+error.Message+" Abra as ações da estação no histórico para salvar o ZIP novamente.";}
                     break;
                 case "create_station":
                     Crypto.Require(args.Length==1,"Informe o nome do integrante.");store.CreateStation(args[0]);

@@ -96,7 +96,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show){
                 const auto action=state.pick;state.pick=Admin::Picker::None;
                 const auto filter=action==Admin::Picker::Request?L"Solicitacao da equipe\0*.zb2station\0\0":action==Admin::Picker::Authorization?L"Autorizacao da estacao\0*.zb2issuer\0\0":L"Chave do proprietario\0*.dpapi\0\0";
                 auto path=Pick(window,false,"",filter);
-                if(!path.empty())controller->Submit({action==Admin::Picker::Request?"inspect_request":action==Admin::Picker::Authorization?"import_authorization":"import_owner",action==Admin::Picker::Owner?std::vector<std::string>{path.u8string(),state.name}:std::vector<std::string>{path.u8string()}});
+                if(!path.empty()){state.requestPage=state.page;state.pendingFeedback=true;controller->Submit({action==Admin::Picker::Request?"inspect_request":action==Admin::Picker::Authorization?"import_authorization":"import_owner",action==Admin::Picker::Owner?std::vector<std::string>{path.u8string(),state.name}:std::vector<std::string>{path.u8string()}});}
             }
             if(state.save){state.save=false;auto extension=std::filesystem::path(state.exportName).extension().string();
                 const wchar_t* filter=extension==".zb2station"?L"Solicitacao da equipe\0*.zb2station\0\0":extension==".zb2issuer"?L"Autorizacao da estacao\0*.zb2issuer\0\0":L"Licenca do cliente\0*.zb2license\0\0";

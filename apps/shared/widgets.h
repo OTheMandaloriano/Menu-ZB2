@@ -11,6 +11,7 @@ void Badge(const char* label,bool active);
 void Tabular(const char* value);
 float TabularWidth(const char* value);
 bool RowCopy(const char* icon);
+bool RowAction(const char* icon);
 void Hint(const char* text);
 void Panel(float x,float y,float width,float height);
 void Device(float x,float y,float width,const std::string& device);

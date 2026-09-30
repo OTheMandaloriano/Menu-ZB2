@@ -15,9 +15,9 @@ void ConfigureUiTheme(float dpi){
     uiScale=dpi;ImGui::GetStyle()=ImGuiStyle();ImGui::StyleColorsDark();auto& style=ImGui::GetStyle();
     style.WindowPadding=ImVec2(20,18);style.FramePadding=ImVec2(14,10);style.ItemSpacing=ImVec2(12,12);
     style.FrameRounding=4;style.WindowRounding=8;style.WindowBorderSize=1;style.FrameBorderSize=1;
-    style.Colors[ImGuiCol_WindowBg]=ImVec4(26/255.f,26/255.f,28/255.f,1);
+    style.Colors[ImGuiCol_WindowBg]=ImVec4(10/255.f,12/255.f,16/255.f,1);
     style.Colors[ImGuiCol_Border]=ImVec4(1,1,1,.06f);
-    style.Colors[ImGuiCol_FrameBg]=ImVec4(24/255.f,24/255.f,26/255.f,1);
+    style.Colors[ImGuiCol_FrameBg]=ImVec4(24/255.f,28/255.f,38/255.f,1);
     style.Colors[ImGuiCol_FrameBgHovered]=ImVec4(.15f,.15f,.17f,1);
     style.Colors[ImGuiCol_FrameBgActive]=ImVec4(.18f,.18f,.20f,1);
     style.Colors[ImGuiCol_Header]=ImVec4(.19f,.19f,.22f,1);
@@ -45,5 +45,11 @@ void ConfigureUiTheme(float dpi){
     };
     regular=add(4,14);merge();button=regular;heading=add(4,28);caption=add(4,12);icons=regular;
     ImGui::GetIO().FontDefault=regular;
-    style.HoverDelayShort=.15f;
+    style.HoverDelayShort=.15f;style.HoverStationaryDelay=0.f;
+    style.Colors[ImGuiCol_TableHeaderBg]=ImVec4(1,1,1,.025f);
+    style.Colors[ImGuiCol_TableRowBg]=ImVec4(0,0,0,0);
+    style.Colors[ImGuiCol_TableRowBgAlt]=ImVec4(1,1,1,.015f);
+    style.Colors[ImGuiCol_TableBorderLight]=ImVec4(1,1,1,.06f);
+    style.Colors[ImGuiCol_HeaderHovered]=ImVec4(1,1,1,.045f);
+    style.Colors[ImGuiCol_Header]=ImVec4(37/255.f,99/255.f,235/255.f,.10f);
 }

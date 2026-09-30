@@ -115,8 +115,8 @@ def main():
     notices = '\n\n'.join((assets/name).read_text(encoding='utf-8') for name in
         ['Lexend-OFL.txt','FontAwesome-LICENSE.txt','IconFontCppHeaders-LICENSE.txt'])
     notices += '\n\nDear ImGui\n'+(assets/'DearImGui-LICENSE.txt').read_text(encoding='utf-8')
-    (out/'notices.txt').write_text(notices, encoding='utf-8')
-    resources.append('205 RCDATA "notices.txt"')
+    (out/'attributions.bin').write_text(notices, encoding='utf-8')
+    resources.append('205 RCDATA "attributions.bin"')
     regular=assets/'Lexend-Regular.ttf'
     if hashlib.sha256(regular.read_bytes()).hexdigest()!=provenance[regular.name]['sha256']:
         parser.error('Regular font hash mismatch')
