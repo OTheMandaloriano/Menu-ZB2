@@ -38,8 +38,8 @@ Chaves, perfis e histórico não fazem parte dos pacotes.
 
 | Área | Situação |
 |---|---|
-| Cliente | 1.14-local; ativação e carregamento implementados |
-| Admin | Interface 1.13, com o cliente 1.14 incorporado |
+| Cliente | 1.15-local; ativação e carregamento implementados |
+| Admin | Interface 1.14, com o cliente 1.15 incorporado |
 | Atualizações | Envio manual de ZIPs; atualizador GitHub ainda é uma proposta |
 | Limpeza | Serviços antigos do Admin, após análise; runtime antigo do cliente não é removido automaticamente |
 | Validação | Testes automatizados e observações locais documentados; não equivalem a homologação completa de todas as funções em partida |
@@ -67,7 +67,7 @@ dist/          Entrega local; fora do Git
 .local/        Credenciais, recuperação e auditorias; fora do Git
 ```
 
-O arquivo `kiero-dx11-base.vcxproj` permanece na raiz como entrada do Visual Studio.
+O arquivo `Deadblock.Menu.vcxproj` permanece na raiz como entrada do Visual Studio.
 As pastas `.agents` e `.opencode` pertencem às ferramentas de desenvolvimento.
 Veja a [estrutura detalhada](docs/ESTRUTURA.md) e o [mapa do código](docs/ARQUITETURA.md).
 
@@ -78,7 +78,7 @@ Requisitos: Windows x64, MSVC v145, Windows SDK, Python e as ferramentas indicad
 As assemblies proprietárias do jogo são usadas da instalação local; não estão neste repositório.
 
 ```powershell
-msbuild kiero-dx11-base.vcxproj /p:Configuration=Release /p:Platform=x64
+msbuild Deadblock.Menu.vcxproj /p:Configuration=Release /p:Platform=x64
 python tests/check_repository_layout.py
 python tests/check_runtime_ownership.py
 python tests/run_aim_validation.py

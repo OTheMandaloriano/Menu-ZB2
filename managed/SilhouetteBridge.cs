@@ -6,7 +6,7 @@ using UnityEngine.Rendering;
 namespace Zb2Menu {
     // Unity owns the mask and command buffer. Present only consumes a retained GPU view.
     public static class SilhouetteBridge {
-        [DllImport("kiero-dx11-base.dll", CallingConvention=CallingConvention.Cdecl)]
+        [DllImport("Deadblock.Menu.dll", CallingConvention=CallingConvention.Cdecl)]
         static extern int Zb2PublishOutlineMask(IntPtr texture);
         internal static Func<IntPtr,int> PublishMask=Zb2PublishOutlineMask;
         public static string Failure="";

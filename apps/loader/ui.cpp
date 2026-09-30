@@ -35,7 +35,7 @@ void DrawLoader(LoaderUiState& state){
             Ui::Panel(20,56,400,180);
             Ui::Text(36,64,368,28,"ZB2 Pro Menu",text,regular,1);
             Ui::Text(36,100,368,20,"DirectX 11 Hook & Modding Engine",muted,caption,1);
-            Ui::Text(36,132,368,20,"WeFagundes & Equipe",text,regular,1);
+            Ui::Text(36,132,368,20,"OTheMandaloriano & Equipe",text,regular,1);
             Ui::Text(36,160,368,16,(current.version+u8" · Alpha Build").c_str(),muted,caption,1);
             if(Ui::Button(108,192,224,32,"Voltar aos dados",false,false,ICON_FA_ARROW_LEFT)){state.credits=false;state.localMessage.clear();}
 

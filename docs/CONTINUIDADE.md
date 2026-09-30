@@ -9,7 +9,7 @@ real do disco e do Git. Este arquivo não substitui testes nem uma inspeção at
 2. Trabalhar em D:/Projeto/ZB2 Menu, a fonte canônica do projeto.
 3. Conferir git status, diff e diff --cached. Há mudanças locais acumuladas e arquivos
    novos. Não usar reset/clean nem sobrescrever arquivos com uma cópia antiga.
-4. Este guia acompanha a entrega de continuidade do cliente 1.14 e Admin 1.13,
+4. Este guia acompanha a entrega de continuidade do cliente 1.15 e Admin 1.14,
    posterior ao commit 0787c00. Compare HEAD com origin/main antes de trabalhar;
    não use um hash antigo anotado aqui como prova do estado remoto atual.
    O proprietário autorizou a publicação desta entrega. Novas publicações precisam
@@ -17,8 +17,8 @@ real do disco e do Git. Este arquivo não substitui testes nem uma inspeção at
 
 ## Estado do produto
 
-- Cliente instalado: 1.14-local, com mensagens de monitoramento corrigidas e Detalhes.
-- Admin: interface 1.13, recompilada incorporando o cliente 1.14.
+- Cliente instalado: 1.15-local, com mensagens de monitoramento corrigidas e Detalhes.
+- Admin: interface 1.14, recompilada incorporando o cliente 1.15.
 - Auto-inject existe. Não confundir com auto-update, que não existe ainda.
 - Runtime empacotado declarado nos builds: commit 21759653045fed481d11e6ccd02122ad558250e7.
   Isso identifica o runtime da entrega, não prova que a árvore atual gere os mesmos bytes.
@@ -28,7 +28,7 @@ real do disco e do Git. Este arquivo não substitui testes nem uma inspeção at
 
 ## Cuidados com a emissão
 
-O perfil do proprietário WeFagundes fica em Documentos/ZB2Menu/Admin. Material privado
+O perfil do proprietário fica em Documentos/ZB2Menu/Admin. Material privado
 de manutenção fica em .local/private. Não imprimir, copiar para testes ou distribuir
 essas chaves. DPAPI depende do usuário Windows: uma sessão de sandbox não equivale
 ao usuário real. Nunca resolver falha DPAPI regenerando a chave do proprietário.
@@ -86,3 +86,13 @@ implementados de propostas. Usar texto simples e não prometer zero resíduos ou
 ausência de detecção por antivírus.
 
 Organização atual: fontes nativos em `src/menu/`. Consulte [DESENVOLVIMENTO.md](DESENVOLVIMENTO.md).
+
+## Migração de identidade
+
+Projeto e DLL principais usam Deadblock.Menu. A ponte gerenciada e o manifesto
+devem acompanhar a DLL nova; não misture a ponte antiga com o pacote novo.
+O loader reconhece o módulo antigo carregado para evitar injeção duplicada.
+Leia PORTABILIDADE.md e rode check_runtime_names.py e check_portable_identity.py.
+Compilação e testes passaram; a nova DLL ainda precisa de validação em uma nova partida.
+Referências a commits do runtime em relatórios anteriores são históricas. Use o
+build-metadata.json da entrega atual para identificar o runtime empacotado.

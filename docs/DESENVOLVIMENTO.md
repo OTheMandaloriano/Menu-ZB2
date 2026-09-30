@@ -23,7 +23,7 @@ Não mova imgui ou kiero sem atualizar includes, scripts e testes que os referen
 No terminal de desenvolvimento do Visual Studio:
 
 ```powershell
-msbuild kiero-dx11-base.vcxproj /p:Configuration=Release /p:Platform=x64
+msbuild Deadblock.Menu.vcxproj /p:Configuration=Release /p:Platform=x64
 python scripts/build_managed_aim.py --managed "CAMINHO_DO_JOGO/ZumbiBlocks2_Data/Managed"
 python tests/check_repository_layout.py
 python tests/check_runtime_ownership.py

@@ -217,8 +217,8 @@ void Draw(UiState& state){
             Ui::Panel(156,148,528,356);
             Ui::Text(180,184,480,40,"ZB2 Pro Menu",text,heading,1);
             Ui::Text(180,232,480,24,"DirectX 11 Hook & Modding Engine",muted,regular,1);
-            Ui::Text(180,280,480,24,"WeFagundes & Equipe",text,regular,1);
-            Ui::Text(180,316,480,24,u8"v1.13-local · Alpha Build",muted,caption,1);
+            Ui::Text(180,280,480,24,"OTheMandaloriano & Equipe",text,regular,1);
+            Ui::Text(180,316,480,24,u8"v1.14-local · Alpha Build",muted,caption,1);
             Ui::Text(180,360,480,24,state.data.maxDays>0?u8"Emissão Autorizada":u8"Aguardando autorização",state.data.maxDays>0?IM_COL32(110,231,183,255):muted,regular,1);
             if(Ui::Button(292,432,256,36,u8"Voltar à Ajuda",false,false,ICON_FA_ARROW_LEFT)){state.credits=false;state.message.clear();state.exportText.clear();}
 
@@ -229,7 +229,7 @@ void Draw(UiState& state){
     else if(!state.data.initialized){Ui::Text(24,200,792,40,state.data.busy?u8"Verificando estação...":u8"Não foi possível abrir a estação",text,heading,1);Ui::Wrapped(100,276,640,state.message.c_str());if(!state.data.busy&&Ui::Button(270,388,300,40,"Verificar novamente"))RequestAction(state,"snapshot");}
     else{ImGui::BeginDisabled(state.data.busy);switch(state.page){case Page::Licenses:LicensePage(state);break;case Page::Team:TeamPage(state);break;case Page::Station:StationPage(state);break;default:break;}ImGui::EndDisabled();}
     ImGui::PopStyleVar();ImGui::GetWindowDrawList()->AddLine(Ui::P(24,540),Ui::P(816,540),IM_COL32(49,49,55,255));
-    const std::string message=state.data.busy&&state.requestPage==state.page?"Processando...":state.message.empty()?"ZB2 Admin 1.13":state.message;
+    const std::string message=state.data.busy&&state.requestPage==state.page?"Processando...":state.message.empty()?"ZB2 Admin 1.14":state.message;
     ImGui::GetWindowDrawList()->PushClipRect(Ui::P(24,548),Ui::P(816,588),true);Ui::Text(24,548,792,28,message.c_str(),state.data.error?IM_COL32(231,153,151,255):muted,caption);ImGui::GetWindowDrawList()->PopClipRect();
     ImGui::SetCursorPos(Ui::P(24,548));ImGui::InvisibleButton("##notice",Ui::P(792,32));Ui::Hint(message.c_str());
     ImGui::End();

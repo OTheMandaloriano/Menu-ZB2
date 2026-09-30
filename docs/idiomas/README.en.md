@@ -22,7 +22,7 @@ cryptography, CMake and Ninja. Game assemblies and private signing material are 
 included in the repository.
 
 ```powershell
-msbuild kiero-dx11-base.vcxproj /p:Configuration=Release /p:Platform=x64
+msbuild Deadblock.Menu.vcxproj /p:Configuration=Release /p:Platform=x64
 python tests/check_repository_layout.py
 python tests/check_runtime_ownership.py
 python tests/run_aim_validation.py

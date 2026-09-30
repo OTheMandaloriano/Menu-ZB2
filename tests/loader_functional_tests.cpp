@@ -57,7 +57,7 @@ int wmain(int argc,wchar_t** argv){
             ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={LoaderWidth*scale,LoaderHeight*scale};io.DeltaTime=1.f/60;
             ConfigureUiTheme(scale);io.Fonts->Build();
             for(int page=0;page<10;++page){
-                LoaderUiState state;state.snapshot.gameVerified=true;state.snapshot.version="1.14-local";state.snapshot.device=std::string(64,'a');state.snapshot.expiry="29/10/2026 14:00 UTC";
+                LoaderUiState state;state.snapshot.gameVerified=true;state.snapshot.version="1.15-local";state.snapshot.device=std::string(64,'a');state.snapshot.expiry="29/10/2026 14:00 UTC";
                 state.snapshot.phase=static_cast<LoaderPhase>(page<7?page:2);state.snapshot.licensed=page>=2;state.snapshot.pid=page>=3?1234:0;
                 const char* messages[]={u8"Verificando licença e pacote...",u8"Ative seu acesso neste computador.","Abra o Zumbi Blocks 2 para continuar.","Aguardando a cena da partida.",u8"Carregando o menu. Aguarde a confirmação...","Menu carregado. Pressione INSERT no jogo.",u8"Falha ao carregar. Confira as permissões e tente novamente."};
                 state.snapshot.message=messages[page<7?page:2];

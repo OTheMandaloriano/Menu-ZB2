@@ -1155,7 +1155,7 @@ namespace GUI {
                 EspLayout::Draw(dl, geometry, content, style);
             }
         }
-        // Circulo do raio (wohax show_aim_radius): so com raio > 0.
+        // Circulo do raio (visualizaÃ§Ã£o do raio): so com raio > 0.
         if (Config::bDrawFov && (Config::bAimbot || Config::bAutoAim || Config::bAutoFire || Config::bSilentAim) && !Config::b360Mode && Config::fFovAngle > 0.0f) {
             ImVec2 sc = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
             float r = Config::fFovAngle * 4.0f;
@@ -1175,15 +1175,15 @@ namespace GUI {
 
         if (ImGui::BeginTabBar("ZB2Tabs")) {
             // ---- 1 PLAYER ----
-            // Categoria aimbot espelho wohax (mesma logica de funcionamento):
+            // Categoria de mira e seleÃ§Ã£o de alvo:
             // enable + radius + bone + mode; mira so com firing (tecla/modo).
             if (ImGui::BeginTabItem("PLAYER")) {
                 const int gameMode = Mono::Get().coopMode;
                 const bool networkMode = gameMode == 2 || gameMode == 3;
                 if (networkMode)
                     ImGui::TextColored(ImVec4(1.0f, 0.78f, 0.25f, 1.0f), "MULTIPLAYER: Silent sincroniza a direcao do tiro; confirmacao de dano depende da partida.");
-                ImGui::Checkbox("Aimbot", &Config::bAimbot); Tip("Igual ao wohax: elege por px, mira vetor 3D. Segure a Aim Key.");
-                // Aim Key + Hold/Toggle + LED vivo (padrao BF/Warface/wohax firing).
+                ImGui::Checkbox("Aimbot", &Config::bAimbot); Tip("Seleciona pelo centro da tela e mira no ponto 3D. Segure a Aim Key.");
+                // Aim Key + Hold/Toggle + LED vivo (padrao ativaÃ§Ã£o de mira).
                 {
                     ImGui::Text("Aim Key"); ImGui::SameLine();
                     char nm[64] = { 0 };
@@ -1192,7 +1192,7 @@ namespace GUI {
                         s_capKey = &Config::iAimKey;
                         ImGui::OpenPopup("hotkey_modal");
                     }
-                    Tip("Tecla que ativa a mira (firing do wohax). Troque em SETTINGS > Aim Key.");
+                    Tip("Tecla que ativa a mira (ativaÃ§Ã£o por tecla). Troque em SETTINGS > Aim Key.");
                     ImGui::SameLine();
                     static const char* kAimModes[2] = { "Hold", "Toggle" };
                     ImGui::SetNextItemWidth(90.0f);
@@ -1204,7 +1204,7 @@ namespace GUI {
                         down ? "(●)" : "(○)");
                     Tip("LED vivo: acende segurando a tecla.");
                 }
-                ImGui::Combo("Aim Bone", &Config::iAimBone, kAimBones, 4); Tip("Head/Neck/Chest/Pelvis (bone 3D, igual ao wohax).");
+                ImGui::Combo("Aim Bone", &Config::iAimBone, kAimBones, 4); Tip("Head/Neck/Chest/Pelvis (ponto 3D do modelo).");
                 ImGui::Combo("Aim Priority", &Config::iAimPriority, kAimPrio, 3); Tip("Crosshair: mais proximo do centro; em 360 usa angulo 3D. Nearest: menor distancia. LowestHP: menor vida.");
                 ImGui::SliderFloat("Smoothing", &Config::fSmoothing, 1, 8, "%.0f"); Tip("Suaviza o movimento da camera. Nao altera o tiro do Silent Aim.");
                 float radiusPixels = Config::fFovAngle * 4.0f;

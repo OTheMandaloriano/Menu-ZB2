@@ -9,7 +9,7 @@ Para o cliente, gere o ZIP personalizado no Admin: executável e licença já
 incluídos. Para a equipe emissora, autorize a solicitação e gere o ZIP com a
 autorização. Ambos são extraídos antes da execução. Veja [ADMIN.md](ADMIN.md).
 Não enviar chave privada, dados de estação, diretório build ou símbolos.
-O pacote técnico legado contém `injector.exe`, `config.ini`, `kiero-dx11-base.dll`,
+O pacote técnico legado (anterior à migração de nomes) contém `injector.exe`, `config.ini`, `kiero-dx11-base.dll`,
 `Zb2.AimBridge.dll`, `0Harmony.dll` e `Harmony.LICENSE`; continua disponível para
 diagnóstico interno. Símbolos PDB/MAP são preservados para diagnóstico.
 

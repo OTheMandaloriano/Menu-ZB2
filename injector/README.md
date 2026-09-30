@@ -14,7 +14,7 @@ logs coloridos com timestamp, config externa.
 
 ```ini
 process=ZumbiBlocks2.exe
-dll=D:\Projeto\ZB2 Menu\build\Release_x64\kiero-dx11-base.dll
+dll=Deadblock.Menu.dll
 timeout=120
 retry=3
 retry_delay=5

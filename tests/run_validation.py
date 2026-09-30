@@ -65,7 +65,7 @@ for name in ("layout_tests", "gui_harness"):
         print(tested.stderr)
         (output / "results.json").write_text(dumps(records, indent=2), encoding="utf-8")
         exit(tested.returncode)
-project = parse(source / "kiero-dx11-base.vcxproj")
+project = parse(source / "Deadblock.Menu.vcxproj")
 namespace = {"m": "http://schemas.microsoft.com/developer/msbuild/2003"}
 for kind in ("ClCompile", "ClInclude"):
     for item in project.findall(".//m:" + kind, namespace):

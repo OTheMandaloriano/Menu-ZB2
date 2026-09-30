@@ -93,7 +93,7 @@ class LoaderTests(unittest.TestCase):
         result=self.call('install',destination)
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertTrue(Path(result.stdout).is_dir())
-        self.assertTrue((Path(result.stdout)/'kiero-dx11-base.dll').is_file())
+        self.assertTrue((Path(result.stdout)/'Deadblock.Menu.dll').is_file())
 
     def test_device_identifier_is_stable(self):
         first=self.call('device')

@@ -4,7 +4,7 @@
 
 - **Cliente** é quem vai jogar. Recebe o ZB2Menu.exe.
 - **Equipe** é quem vai emitir licenças para outros clientes. Recebe o ZB2Admin.exe.
-- Você, WeFagundes, já é o proprietário neste PC. Não crie uma solicitação para si.
+- Se este PC já está autorizado como proprietário, não crie uma solicitação de integrante para si.
 
 ## Cliente novo: ainda não tenho o ID
 

@@ -27,7 +27,7 @@
 #include <charconv>
 
 static const char* kAppFolder = "ZB2 Menu";
-static const char* kDllFile = "kiero-dx11-base.dll"; // default (config.ini pode trocar)
+static const char* kDllFile = "Deadblock.Menu.dll"; // default (config.ini pode trocar)
 
 // ---- Log colorido com timestamp ----
 // Cores so no console real (saida redirecionada p/ arquivo sai sem ANSI/codigos).
@@ -418,7 +418,7 @@ int main(int argc, char** argv) {
         else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "/?") == 0) {
             printf("Uso: injector.exe [--nowait]\n");
             printf("  Le config.ini ao lado do exe (process/dll/timeout/retry).\n");
-            printf("  Sem config.ini usa defaults: ZumbiBlocks2.exe + kiero-dx11-base.dll + 120s.\n");
+            printf("  Sem config.ini usa defaults: ZumbiBlocks2.exe + Deadblock.Menu.dll + 120s.\n");
             printf("  --nowait: pula a pausa final (p/ scripts).\n");
             return 0;
         }
@@ -457,7 +457,7 @@ int main(int argc, char** argv) {
     FILETIME mt = { 0 };
     if (!FindDll(cfg, dll, size, mt)) {
         Log(Level::Err, "DLL '%s' nao encontrada (config.ini ou ao lado do injetor).", dllA);
-        Log(Level::Err, "Compile a DLL antes (kiero-dx11-base.vcxproj Release|x64).");
+        Log(Level::Err, "Compile a DLL antes (Deadblock.Menu.vcxproj Release|x64).");
         PauseExit(nowait);
         return 2;
     }

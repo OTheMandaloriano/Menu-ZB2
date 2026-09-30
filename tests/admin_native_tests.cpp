@@ -55,7 +55,7 @@ int wmain(int argc,wchar_t** argv){
         for(float scale:{1.f,1.5f,2.f}){
             ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={Admin::Width*scale,Admin::Height*scale};io.DeltaTime=1.f/60;ConfigureUiTheme(scale);io.Fonts->Build();Check(Ui::TabularWidth("11/11/2011 11:11")==Ui::TabularWidth("28/08/2088 08:08"),"date digits must be tabular");Check(UiTheme::regular->FindGlyph('1')->AdvanceX<UiTheme::regular->FindGlyph('0')->AdvanceX,"body digits must preserve natural font metrics");Check(UiTheme::heading->FontSize==18*scale&&UiTheme::regular->FontSize==14*scale&&UiTheme::caption->FontSize==12*scale,"strict font scale");Check(Ui::TabularWidth("30/09/2027 01:12")<=150*scale,"full expiry must fit a single column");
             for(int page=0;page<12;++page){
-                Admin::UiState state;state.data.initialized=true;state.data.busy=false;state.data.hasKey=true;state.data.revision=1;state.data.total=1;state.data.maxDays=30;state.data.role="owner";state.data.name="WeFagundes";state.data.user="WeFagundes";state.data.stationId=std::string(32,'a');state.data.device=std::string(64,'8');
+                Admin::UiState state;state.data.initialized=true;state.data.busy=false;state.data.hasKey=true;state.data.revision=1;state.data.total=1;state.data.maxDays=30;state.data.role="owner";state.data.name="OperadorTeste";state.data.user="OperadorTeste";state.data.stationId=std::string(32,'a');state.data.device=std::string(64,'8');
                 state.page=static_cast<Admin::Page>(page<4?page:2);state.started=true;
                 if(page==6)state.page=Admin::Page::Settings;
                 if(page==7){state.page=Admin::Page::Help;state.credits=true;}

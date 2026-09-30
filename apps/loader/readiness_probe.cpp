@@ -25,7 +25,7 @@ DWORD WINAPI Observe(void*){
     FILETIME created{},exit{},kernel{},user{};GetProcessTimes(GetCurrentProcess(),&created,&exit,&kernel,&user);
     Api api;void* domain=nullptr;void* thread=nullptr;bool bound=false;uint64_t readySince=0;
     while(!stopping.load()){
-        if(GetModuleHandleW(L"kiero-dx11-base.dll"))break;
+        if(GetModuleHandleW(L"Deadblock.Menu.dll")||GetModuleHandleW(L"kiero-dx11-base.dll"))break;
         bool assemblies=false,map=false,objects=false,unsupported=false;
         if(!bound){HMODULE module=GetModuleHandleW(L"mono-2.0-bdwgc.dll");if(module){
             bound=Bind(module,"mono_get_root_domain",api.root)&&Bind(module,"mono_thread_attach",api.attach)&&Bind(module,"mono_thread_detach",api.detach)&&

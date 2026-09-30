@@ -341,7 +341,7 @@ namespace Mono {
     static void AmmoCachesClear(); // forward (limpa caches na troca de cena)
     static void ReadAll(); // forward (chamada na worker, fora do Present)
     static void AuditBones(); // forward (chamada na worker, fora do Present)
-    static void WohaxAim(void* local); // forward (maquina wohax)
+    static void DeadblockAim(void* local); // forward (mÃ¡quina de estados da mira)
     static MonoImage*  s_unity = nullptr;
     static MonoClass*  cCamU = nullptr;
     static MonoClass*  cTrans = nullptr;
@@ -1867,7 +1867,7 @@ namespace Mono {
                 // e o ritmo adaptativo so reagia DEPOIS.
                 // Novo ritmo: posicao+skeleton TODO ciclo (barato, ~2ms).
                 BuildEsp();
-                WohaxAim(aimLocal);
+                DeadblockAim(aimLocal);
                 // Defesa ja rodada no bloco rapido acima: aqui so o lento.
                 if (s_defN == 0) { /* ReadAll/AuditBones feitos no ciclo rapido */ }
                 else {
@@ -2940,8 +2940,8 @@ namespace Mono {
     }
 
     // ========================================================================
-    // AIMBOT estilo wohax (reescrita 23/09, mesma logica de funcionamento).
-    // wohax (Warface, CryBot/Lua): elege por distancia do crosshair em px,
+    // Mira DEADBLOCK: seleÃ§Ã£o no espaÃ§o da tela e orientaÃ§Ã£o no mundo.
+    // Seleciona por distÃ¢ncia do centro da tela em pixels,
     // mira vetor 3D (bone - camPos normalizado) via direcao do ator, atira
     // so com firing=1 (gatilho segurado), sticky com intervalo entre trocas.
     // Aqui: mesma maquina de estados, adaptada p/ Unity Mono (PlayerCamera

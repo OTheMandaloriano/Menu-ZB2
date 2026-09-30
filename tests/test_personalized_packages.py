@@ -35,7 +35,7 @@ with tempfile.TemporaryDirectory(prefix='packages-',dir=ROOT/'build/admin-native
     with zipfile.ZipFile(initial_team) as z:assert z.namelist()==['ZB2Admin.exe'] and z.testzip() is None
     assert not list((owner/'licenses').glob('*.json'))
     checks+=3
-    rpc(owner,'import_owner',args.key,'WeFagundes')
+    rpc(owner,'import_owner',args.key,'OperadorTeste')
     archive=root/'Cliente ação.zip'
     result=rpc(owner,'issue_package','Cliente pronto','1'*64,'7',archive)
     assert archive.exists() and result[3].startswith('ZB2L1.')

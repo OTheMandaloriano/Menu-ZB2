@@ -249,7 +249,7 @@ static bool AimWindowActive() {
     return process == GetCurrentProcessId() && !s_options.bMenuOpen;
 }
 #include "aim_bridge.inl"
-static void WohaxAim(void* local) {
+static void DeadblockAim(void* local) {
     const bool enabled = local && s_camWok && AimRequested() && AimWindowActive();
     // The managed adapter updates the ShootGun local consumed by both simulation
     // and SyncShotOnline. A connected role never silently turns into camera aim.

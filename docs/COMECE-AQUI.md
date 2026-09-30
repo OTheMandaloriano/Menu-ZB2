@@ -6,7 +6,7 @@ Este é o ponto de entrada para o proprietário, a equipe e o próximo agente.
 
 - Distribuição manual por ZIP, com programas iniciais que não exigem ID ou solicitação.
 - Emissão de licença e autorização offline. Cada PC conserva os próprios dados.
-- Cliente 1.14-local; interface do Admin 1.13, recompilada para incorporar esse cliente.
+- Cliente 1.15-local; interface do Admin 1.14, recompilada para incorporar esse cliente.
 - No Admin: Configurações > Analisar resíduos > Limpar analisados.
 - Essa limpeza remove apenas serviços antigos do Admin que passaram nas verificações.
 
@@ -38,3 +38,5 @@ Não prometer esses recursos ao cliente como se já estivessem implementados.
 O projeto oficial está em `D:/Projeto/ZB2 Menu`. A pasta `D:/ZB2-Retomada` contém
 cópias de trabalho e auditorias de sessões anteriores. Ela não é a fonte canônica
 para uma nova atualização e não deve substituir automaticamente o projeto oficial.
+
+Identidade pública e caminhos que funcionam em qualquer conta: [PORTABILIDADE.md](PORTABILIDADE.md).

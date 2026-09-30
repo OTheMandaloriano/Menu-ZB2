@@ -3,7 +3,7 @@
   "files": [
     "injector.exe",
     "config.ini",
-    "kiero-dx11-base.dll",
+    "Deadblock.Menu.dll",
     "Zb2.AimBridge.dll",
     "0Harmony.dll",
     "Harmony.LICENSE",

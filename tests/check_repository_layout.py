@@ -4,7 +4,7 @@ import re,xml.etree.ElementTree as ET
 root=Path(__file__).resolve().parents[1]
 assert not [p for p in root.iterdir() if p.suffix in {'.cpp','.h','.inl'}], 'Native sources belong in src/menu'
 ns={'m':'http://schemas.microsoft.com/developer/msbuild/2003'}
-project=ET.parse(root/'kiero-dx11-base.vcxproj')
+project=ET.parse(root/'Deadblock.Menu.vcxproj')
 references=[]
 for tag in ('ClCompile','ClInclude'):
     for item in project.findall('.//m:'+tag,ns):

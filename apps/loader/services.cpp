@@ -19,7 +19,7 @@ struct Handle {
     ~Handle(){if(value && value!=INVALID_HANDLE_VALUE)CloseHandle(value);}
     Handle(const Handle&)=delete;Handle& operator=(const Handle&)=delete;
 };
-constexpr const char* names[]={"injector.exe","config.ini","kiero-dx11-base.dll","Zb2.AimBridge.dll","0Harmony.dll","Harmony.LICENSE","ZB2.Readiness.dll"};
+constexpr const char* names[]={"injector.exe","config.ini","Deadblock.Menu.dll","Zb2.AimBridge.dll","0Harmony.dll","Harmony.LICENSE","ZB2.Readiness.dll"};
 struct File { std::string name,hash;size_t size=0; };
 struct Bundle {std::string version;std::vector<File> files;};
 void Require(bool value,const char* message){if(!value)throw std::runtime_error(message);}
@@ -95,12 +95,12 @@ Modules ReadModules(DWORD pid){
         if(snapshot.value==INVALID_HANDLE_VALUE){DWORD code=GetLastError();if(code==ERROR_BAD_LENGTH){Sleep(15);continue;}throw ModuleError(code);}
         MODULEENTRY32W entry{};entry.dwSize=sizeof(entry);Modules result;
         if(!Module32FirstW(snapshot.value,&entry)){DWORD code=GetLastError();if(code==ERROR_BAD_LENGTH||code==ERROR_PARTIAL_COPY){Sleep(15);continue;}throw ModuleError(code);}
-        do{result.menu|=_wcsicmp(entry.szModule,L"kiero-dx11-base.dll")==0;result.probe|=_wcsicmp(entry.szModule,L"ZB2.Readiness.dll")==0;result.mono|=_wcsicmp(entry.szModule,L"mono-2.0-bdwgc.dll")==0;}while(Module32NextW(snapshot.value,&entry));
+        do{result.menu|=_wcsicmp(entry.szModule,L"Deadblock.Menu.dll")==0||_wcsicmp(entry.szModule,L"kiero-dx11-base.dll")==0;result.probe|=_wcsicmp(entry.szModule,L"ZB2.Readiness.dll")==0;result.mono|=_wcsicmp(entry.szModule,L"mono-2.0-bdwgc.dll")==0;}while(Module32NextW(snapshot.value,&entry));
         DWORD code=GetLastError();if(code==ERROR_NO_MORE_FILES)return result;
         if(code!=ERROR_BAD_LENGTH&&code!=ERROR_PARTIAL_COPY)throw ModuleError(code);Sleep(15);
     }throw ModuleError(ERROR_BAD_LENGTH);
 }
-bool HasModule(DWORD pid,const wchar_t* name=L"kiero-dx11-base.dll"){
+bool HasModule(DWORD pid,const wchar_t* name=L"Deadblock.Menu.dll"){
     auto modules=ReadModules(pid);return _wcsicmp(name,L"ZB2.Readiness.dll")==0?modules.probe:modules.menu;
 }
 }
@@ -219,7 +219,7 @@ static void LaunchHelper(const Process& game,const fs::path& runtime,bool probe)
     DWORD wait=WaitForSingleObject(helper.value,45000),exit=1;
     Require(wait==WAIT_OBJECT_0,"Carregamento sem resposta. Nao tente novamente nesta sessao; reinicie o jogo.");
     Require(GetExitCodeProcess(helper.value,&exit) && exit==0,"Carregamento falhou. Consulte o log do carregador; reinicie o jogo antes de tentar novamente.");
-    Require(WaitForSingleObject(target.value,0)==WAIT_TIMEOUT && HasModule(game.pid,probe?L"ZB2.Readiness.dll":L"kiero-dx11-base.dll"),"O modulo nao foi confirmado no jogo. Reinicie o jogo e confira o log.");
+    Require(WaitForSingleObject(target.value,0)==WAIT_TIMEOUT && HasModule(game.pid,probe?L"ZB2.Readiness.dll":L"Deadblock.Menu.dll"),"O modulo nao foi confirmado no jogo. Reinicie o jogo e confira o log.");
 }
 void LoadRuntime(const Process& game,const fs::path& runtime){LaunchHelper(game,runtime,false);}
 void PrepareReadiness(const Process& game,const fs::path& runtime){LaunchHelper(game,runtime,true);}

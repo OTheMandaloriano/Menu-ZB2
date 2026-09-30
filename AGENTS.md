@@ -9,7 +9,7 @@ Regra: 1 skill dominante por mensagem. Não misturar ESP + offset + perf.
 |---|---|
 | `zb2-mono-safety` | mexer em `mono.cpp`/`main.cpp`, invoke, entity list, hook, crash |
 | `zb2-esp-patterns` | desenhar/mudar ESP em `gui.cpp` |
-| `zb2-aimbot` | mexer no aimbot (`WohaxAim`, `WohaxLookAt`, `WohaxDistPx`, aba PLAYER) |
+| `zb2-aimbot` | mexer no aimbot (`DeadblockAim`, aba PLAYER) |
 | `zb2-horda-perf` | ESP lento/travando com horda |
 | `zb2-ce-mcp` | ler/mudar valor vivo no jogo via CE MCP |
 | `zb2-dnspy-mcp` | dado estático do `Assembly-CSharp.dll` via MCP local (classe, campo, IL, enum, callers) |
@@ -34,9 +34,9 @@ Regra: 1 skill dominante por mensagem. Não misturar ESP + offset + perf.
 
 ## Aimbot (resumo; detalhe em `zb2-aimbot`)
 
-Máquina de estados wohax portada: eleição por px do crosshair →
+Máquina de estados da mira: eleição por px do crosshair →
 sticky 500ms → mira vetor 3D (`bone3d − camPos`) com firing=1.
-Pipeline: `WohaxAim` (mono.cpp) → snapshot `EspEntry` → `PlayerCamera`
+Pipeline: `DeadblockAim` (mono.cpp) → snapshot `EspEntry` → `PlayerCamera`
 pitch `set_Angle` + yaw `Transform.Rotate`. Sem `IsVisible` ainda
 (raycast é o próximo ciclo). Flags de vitrine (`bSilentAim`,
 `bAutoFire`, `bTriggerbot`, `bPrediction`, `fLagComp`) NÃO executam.
@@ -58,3 +58,15 @@ A política atual e a proposta de retenção estão em docs/RETENCAO-E-LIMPEZA.m
 Atualize o guia de continuidade e as evidências ao encerrar uma entrega.
 
 Organização dos fontes: menu nativo em `src/menu/`; detalhes em [docs/DESENVOLVIMENTO.md](docs/DESENVOLVIMENTO.md).
+
+## Identidade pública e caminhos portáveis
+
+- Marca do produto: DEADBLOCK. Créditos públicos: OTheMandaloriano (The Mandalorian).
+- Não inserir nomes pessoais ou caminhos C:/Users/<conta> nos fontes, exemplos ou fixtures.
+- Usar Known Folder API para Documentos. Nunca presumir nome de conta, disco ou idioma.
+- Não confundir crédito público com nome local da estação; preservar perfis e licenças existentes.
+- Rodar `python tests/check_portable_identity.py` antes de publicar.
+- Troca do nome da DLL exige validar em conjunto projeto, DllImport gerenciado, helper,
+  manifesto, leitura de módulos e testes. Não renomear o executável isoladamente.
+- Preservar avisos de licença e procedência dos componentes de terceiros.
+- Leia docs/PORTABILIDADE.md. A migração Deadblock.Menu está aplicada nos fontes. Validar uma nova sessão do jogo antes de declarar a entrega homologada.

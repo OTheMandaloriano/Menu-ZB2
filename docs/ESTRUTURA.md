@@ -21,7 +21,7 @@ Os arquivos .cpp/.h/.inl do menu ficam em src/menu. O projeto Visual Studio perm
 na raiz; includes, referências de projeto e testes foram ajustados juntos.
 node_modules do OpenCode são dependências, não lixo do produto; ficam fora dos ZIPs.
 
-## Dados: C:/Users/WeFagundes/Documents/ZB2Menu
+## Dados: <Documentos do usuário>/ZB2Menu
 
 `Admin` guarda estação, chave protegida, histórico e serviço em uso.
 `loader` guarda ativação e runtime do cliente. `configs`, `imgui.ini` e `logs`

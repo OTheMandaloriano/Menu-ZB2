@@ -69,8 +69,8 @@ internal static class AdminCoreTests
             }
             File.WriteAllText(Path.Combine(directory, "fixtures.json"), json.Serialize(fixtures), new UTF8Encoding(false));
             string oldStation=File.ReadAllText(Path.Combine(directory,"member","station.json"));
-            member.RecoverOwner(args[0],"WeFagundes");
-            Check(member.Current.Role=="owner" && member.Current.Name=="WeFagundes" && member.MaxDays()==3650,"Verified recovery from mistaken member registration");
+            member.RecoverOwner(args[0],"OperadorTeste");
+            Check(member.Current.Role=="owner" && member.Current.Name=="OperadorTeste" && member.MaxDays()==3650,"Verified recovery from mistaken member registration");
             Check(member.History().Count==1,"Recovery preserves license history");
             string[] backups=Directory.GetFiles(Path.Combine(directory,"member","backups"),"*.json");
             Check(backups.Length==1 && File.ReadAllText(backups[0])==oldStation,"Recovery retains protected old station backup");

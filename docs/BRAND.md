@@ -1,6 +1,6 @@
 # DEADBLOCK — identidade do painel
 
-DEADBLOCK identifica visualmente o projeto de WeFagundes. O símbolo original usa
+DEADBLOCK identifica visualmente o projeto de OTheMandaloriano. O símbolo original usa
 um D modular e uma diagonal azul. Admin e cliente compartilham a marca; a segunda
 linha distingue `ZB2 / ADMIN` e `ZB2 / MENU`.
 

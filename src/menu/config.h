@@ -38,7 +38,7 @@ namespace Config {
     extern bool  bTriggerbot;
     extern int   iAimBone;          // 0=Head 1=Neck 2=Chest 3=Pelvis
     extern int   iAimPriority;      // 0=Crosshair 1=LowestHP 2=Nearest
-    extern float fSmoothing;        // 1-8 (1 = snap wohax)
+    extern float fSmoothing;        // 1-8 (1 = ajuste imediato)
     extern bool  bLimitFov;
     extern float fFovAngle;         // 1-360
     extern bool  b360Mode;

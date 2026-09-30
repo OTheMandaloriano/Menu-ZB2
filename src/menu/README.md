@@ -1,7 +1,7 @@
 # Menu nativo
 
 Este diretório contém os fontes que antes ficavam na raiz do repositório.
-O projeto kiero-dx11-base.vcxproj permanece na raiz e aponta para estes arquivos.
+O projeto Deadblock.Menu.vcxproj permanece na raiz e aponta para estes arquivos.
 
 - main.cpp: inicialização, hooks e ciclo de vida.
 - mono.cpp: integração nativa com Unity Mono e publicação dos dados.

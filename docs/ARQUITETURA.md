@@ -37,14 +37,14 @@ Na revisão havia oito arquivos:
 
 | Arquivo | Papel | Tratamento |
 |---|---|---|
-| kiero-dx11-base.dll | Módulo nativo do menu e hook D3D11 | Necessário para montar o cliente |
+| Deadblock.Menu.dll | Módulo nativo do menu e hook D3D11 | Necessário para montar o cliente |
 | Zb2.AimBridge.dll | Ponte gerenciada com Unity Mono | Necessário para montar o cliente |
 | 0Harmony.dll | Dependência gerenciada | Necessário para montar o cliente |
 | config.ini | Configuração inicial do runtime | Necessário para montar o cliente |
 | Harmony.LICENSE | Atribuição da dependência distribuída | Preservar com a dependência |
 | injector.exe | Helper de uma compilação anterior do menu | Não é escolhido por build_loader.py, que recompila seu helper |
-| kiero-dx11-base.pdb | Símbolos de depuração dessa DLL | Preservar para investigar falhas; não entra no pacote do cliente |
-| kiero-dx11-base.map | Mapa de endereços dessa compilação | Preservar para investigar falhas; não entra no pacote do cliente |
+| Deadblock.Menu.pdb | Símbolos de depuração dessa DLL | Preservar para investigar falhas; não entra no pacote do cliente |
+| Deadblock.Menu.map | Mapa de endereços dessa compilação | Preservar para investigar falhas; não entra no pacote do cliente |
 
 `packaging/runtime-files.json` declara os sete componentes incorporados no cliente.
 O helper `injector.exe` e `ZB2.Readiness.dll` são construídos em `build/loader`.
