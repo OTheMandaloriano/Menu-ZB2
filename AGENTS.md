@@ -56,3 +56,5 @@ Para manutenção do menu, loader, Admin ou distribuição, comece por docs/COME
 Confira o estado real do Git e do disco; não trate recursos planejados como implementados.
 A política atual e a proposta de retenção estão em docs/RETENCAO-E-LIMPEZA.md.
 Atualize o guia de continuidade e as evidências ao encerrar uma entrega.
+
+Organização dos fontes: menu nativo em `src/menu/`; detalhes em [docs/DESENVOLVIMENTO.md](docs/DESENVOLVIMENTO.md).

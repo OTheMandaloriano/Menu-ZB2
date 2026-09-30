@@ -23,7 +23,7 @@ if not compiler and os.name == 'nt':
                  'Microsoft.VisualStudio.Component.VC.Tools.x86.x64', '-property', 'installationPath'],
                 env=env, capture_output=True, text=True, check=True).stdout.strip()
     if found:
-        with TemporaryDirectory(prefix='zb2-msvc-') as temporary:
+        with TemporaryDirectory(prefix='zb2-msvc-',dir=output) as temporary:
             script = Path(temporary)/'environment.cmd'
             script.write_text('@echo off\ncall "'+str(Path(found)/'VC/Auxiliary/Build/vcvars64.bat')+'" >nul\nset\n')
             initialized = run(['cmd.exe', '/d', '/c', str(script)], env=env, capture_output=True, text=True, check=True)
@@ -43,11 +43,11 @@ if not names: raise SystemExit('Unknown test name')
 for name in names:
     executable = output/(name + ('.exe' if os.name == 'nt' else ''))
     unit = source/'tests'/(name+'.cpp')
-    command = ([compiler, '/nologo', '/std:c++17', '/EHsc', '/W4', '/WX', '/O2', str(unit),
+    command = ([compiler, '/nologo', '/std:c++17', '/EHsc', '/W4', '/WX', '/O2', '/I'+str(source), str(unit),
                 '/Fe:'+str(executable), '/Fo:'+str(output/(name+'.obj'))] if msvc else
-               [compiler, '-std=c++17', '-O2', '-Wall', '-Wextra', '-Werror', '-pthread', str(unit), '-o', str(executable)])
+               [compiler, '-std=c++17', '-O2', '-Wall', '-Wextra', '-Werror', '-pthread', '-I'+str(source), str(unit), '-o', str(executable)])
     if name == 'esp_render_tests':
-        if name == 'esp_render_tests': command += [str(source/'esp_layout.cpp')]
+        if name == 'esp_render_tests': command += [str(source/'src/menu/esp_layout.cpp')]
         command += [str(source/'imgui'/(name+'.cpp')) for name in ['imgui','imgui_draw','imgui_tables','imgui_widgets']]
         command += ['user32.lib','/link','/IGNORE:4099']
         command = [item for item in command if not item.startswith('/Fo:')]

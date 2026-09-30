@@ -1,4 +1,4 @@
-#include "../gui.cpp"
+#include "../src/menu/gui.cpp"
 #include <cstdlib>
 #include <fstream>
 namespace Log { const char* GetDir(){return ".";} void Infof(const char*,...){} }

@@ -4,7 +4,7 @@
 
 | Local | Conteúdo | Enviar? |
 |---|---|---|
-| apps, imgui, kiero, injector, managed e arquivos C++ da raiz | Fontes e dependências do menu/loader/admin | Não |
+| apps, src/menu, imgui, kiero, injector e managed | Fontes e dependências do menu/loader/admin | Não |
 | scripts, tests, docs, packaging, memory | Compilação, testes, guias, chave pública e conhecimento técnico | Não |
 | .git | Histórico do repositório | Não |
 | .agents, .opencode | Ferramentas e dependências dos agentes | Não |
@@ -17,8 +17,8 @@
 | dist/entrega/01-CLIENTE-INICIAL.zip | Primeiro envio ao cliente, sem licença | Sim |
 | dist/entrega/01-EQUIPE-INICIAL.zip | Primeiro envio à equipe, sem autorização | Sim |
 
-Arquivos .cpp/.h na raiz pertencem ao projeto Visual Studio. Não movê-los por
-extensão: includes e projeto precisam acompanhar qualquer reorganização.
+Os arquivos .cpp/.h/.inl do menu ficam em src/menu. O projeto Visual Studio permanece
+na raiz; includes, referências de projeto e testes foram ajustados juntos.
 node_modules do OpenCode são dependências, não lixo do produto; ficam fora dos ZIPs.
 
 ## Dados: C:/Users/WeFagundes/Documents/ZB2Menu
@@ -41,3 +41,5 @@ Mapa de código, explicação de cada arquivo de Release_x64 e política de cach
 O Admin oferece análise prévia e limpeza limitada de serviços antigos em Configurações.
 
 Entrada geral: [COMECE-AQUI.md](COMECE-AQUI.md). Resíduos e limites atuais: [RETENCAO-E-LIMPEZA.md](RETENCAO-E-LIMPEZA.md).
+
+Organização atual: fontes nativos em `src/menu/`. Consulte [DESENVOLVIMENTO.md](DESENVOLVIMENTO.md).

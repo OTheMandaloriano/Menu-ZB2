@@ -1,5 +1,5 @@
-#include "../runtime_settings.h"
-#include "../runtime_gate.h"
+#include "../src/menu/runtime_settings.h"
+#include "../src/menu/runtime_gate.h"
 #include <atomic>
 #include <thread>
 #include <cstdio>

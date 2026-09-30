@@ -1,62 +1,33 @@
-<div align="center">
+# DEADBLOCK
 
-# Menu ZB2
+Native menu, Windows loader and license administration panel for Zumbi Blocks 2.
+This private repository contains source code, tests, assets and documentation.
 
-A development menu for Zumbi Blocks 2 with a D3D11 interface and Unity Mono integration.
+## Components
 
-[![C++](https://img.shields.io/badge/C++-17-00599C?style=for-the-badge&logo=cplusplus&logoColor=white)](../../kiero-dx11-base.vcxproj)
-[![Status](https://img.shields.io/badge/status-in_development-orange?style=flat-square)](../../CHANGELOG.md)
-[![Licensing](https://img.shields.io/badge/licensing-see_NOTICE-yellow?style=flat-square)](../../NOTICE.md)
+- `src/menu/` and `managed/`: native D3D11 menu and Unity Mono integration.
+- `apps/loader/`: offline activation, package verification and loading.
+- `apps/admin/`: customer licenses, team authorization and ZIP generation.
+- `apps/shared/`: shared interface components and branding.
 
-<a href="../../README.md"><img src="https://api.iconify.design/flag/br-4x3.svg?width=26" alt="Português" title="Português" /></a>
-&nbsp;
-<a href="README.en.md"><img src="https://api.iconify.design/flag/us-4x3.svg?width=26" alt="English" title="English" /></a>
+The loader is functional. GitHub auto-updates and automatic cleanup of old client
+runtimes are not implemented. Code-signing and antivirus findings remain documented
+limitations. See the [current Portuguese README](../../README.md) and
+[handoff guide](../CONTINUIDADE.md) for the maintained release state.
 
-</div>
+## Development
 
-The native C++ module provides the interface and rendering. Managed C# adapters run inside the game's Mono environment. Features include aiming controls, weapon and movement parameters, entity/item/world overlays, presets and diagnostic logs.
-
-> [!IMPORTANT]
-> This private repository contains development sources, tests and documentation. Use the injector with its dependencies. The launcher has been withdrawn at the owner’s request. There is no stable public release. Automated tests do not establish live compatibility in solo, host and client modes.
-
-## Build
-
-Use Windows x64, Visual Studio C++ toolset v145, Windows SDK and Python 3. The managed build requires the exact game assembly hash recorded in `scripts/build_managed_aim.py`. Game binaries are not included.
+Use Windows x64, MSVC v145 and Windows SDK. Packaging also needs Python 3.12+,
+cryptography, CMake and Ninja. Game assemblies and private signing material are not
+included in the repository.
 
 ```powershell
 msbuild kiero-dx11-base.vcxproj /p:Configuration=Release /p:Platform=x64
-msbuild injector/injector.vcxproj /p:Configuration=Release /p:Platform=x64
-python scripts/build_managed_aim.py --managed "GAME_PATH/ZumbiBlocks2_Data/Managed"
-```
-
-Build output is in `build/Release_x64`. Keep the injector, configuration, native DLL, managed adapter, Harmony dependency and its license together. Preserve matching PDB/MAP files for crash diagnosis. Enter a map before running the injector; Insert toggles the menu. Current logs, presets and runtime versions live in `Documents/ZB2Menu`. NoClip defaults to N and remains configurable.
-
-## Tests
-
-```powershell
+python tests/check_repository_layout.py
 python tests/check_runtime_ownership.py
 python tests/run_aim_validation.py
-python tests/run_managed_aim_validation.py
-python tests/run_modifier_bridge_validation.py
-python tests/run_range_validation.py
 ```
 
-Managed tests require Harmony from the preceding build. UI tests use simulated data without controlling the game screen.
-
-## Known limitations
-
-- Multiplayer effects remain subject to server behavior and per-feature live validation.
-- Unimplemented controls such as manual teleport remain pending. Chams requires a compatible Built-in pipeline shader and live validation.
-- Distant unloaded entities expose known positions, not fabricated health or bones.
-- Legacy inventory, currency and unlock operations are not equivalent to reversible parameter modifiers.
-- Updates are manual. The injector does not require a GitHub token.
-- See the [inventory/NoClip/ESP audit](../INVENTARIO_NOCLIP_ESP.md).
-- Licensing provenance must be consolidated before public redistribution.
-
-See the maintained Portuguese references for [structure](../ESTRUTURA.md), [distribution planning](../DISTRIBUICAO.md), [modifier audit](../AUDITORIA_MODIFICADORES_ESP.md), [render stability](../ESTABILIDADE_RENDER.md), [changelog](../../CHANGELOG.md), [contributing](../../.github/CONTRIBUTING.md) and [licensing](../../NOTICE.md).
-
-[Hotkeys and Magnet](../CONTROLES.md)
-
-[Visual catalog, team overlay and Magnet review](../REVISAO_VISUAL_MAGNET.md)
-
-- Independent silhouette rendering has visible/occluded colors and saved thickness. Its D3D11 WARP shader tests pass; live scene-depth integration is pending. Initial support excludes MSAA. See [silhouette and network authority](../SILHUETA_E_AUTORIDADE.md).
+Build order: menu, loader, Admin, delivery ZIPs. See [development](../DESENVOLVIMENTO.md),
+[architecture](../ARQUITETURA.md), [documentation index](../README.md) and
+[licensing](../../NOTICE.md). Never distribute the repository, private profiles or build tree.

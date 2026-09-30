@@ -1,7 +1,7 @@
 """Enforce the cross-thread ownership boundary that prevents skipped overlay frames."""
 from pathlib import Path
 import re
-root=Path(__file__).resolve().parents[1]
+root=Path(__file__).resolve().parents[1]/'src/menu'
 files=['mono.cpp','aim_runtime.inl','aim_bridge.inl','world_esp.inl','distance_runtime.inl']
 used=set()
 for name in files:

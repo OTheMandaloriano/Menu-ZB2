@@ -1,5 +1,5 @@
-#include "../esp_layout.h"
-#include "../config_json.h"
+#include "../src/menu/esp_layout.h"
+#include "../src/menu/config_json.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>

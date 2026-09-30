@@ -1,7 +1,7 @@
 #include <fstream>
 #include <functional>
 #include <sstream>
-#include "../gui.cpp"
+#include "../src/menu/gui.cpp"
 #include "software_renderer.h"
 namespace Log { const char* GetDir(){return TestPlatform::directory.c_str();}void Infof(const char*,...){} }
 namespace Mono { int GetCatalog(CatalogEntry*,int){return 0;} void RequestIcon(int){} bool GetIcon(IconPixels&){return false;}  static State state;static std::vector<EspEntry> entries;const State& Get(){return state;}int GetEsp(EspEntry* out,int count){int total=std::min(count,static_cast<int>(entries.size()));std::copy_n(entries.data(),total,out);return total;} int GetWorldEsp(WorldMarker*,int){return 0;} int GetDistantEsp(DistantMarker*,int){return 0;} }

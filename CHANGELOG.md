@@ -4,6 +4,16 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Organiza 37 fontes nativos em `src/menu`, preservando o conteúdo e os nomes dos binários.
+- Atualiza o projeto Visual Studio e os testes; inclui uma verificação de caminhos do repositório.
+- Reescreve o README com a distribuição funcional, guias por público e limitações atuais.
+- Centraliza o histórico técnico no índice de documentação e mantém o guia em inglês alinhado.
+
+## Registros anteriores
+
+As entradas abaixo descrevem etapas históricas. Prévia de loader e ações demonstrativas
+foram substituídas pelo cliente funcional documentado no README atual.
+
 - Loader 0.2 adota o visual compacto aprovado, com ativação/painel e sem sidebar.
 - Separa entrada, janela, recursos D3D11, tema e telas; renderização testada em 100%/200%.
 - Mantém ações de licença e carregamento explicitamente demonstrativas.

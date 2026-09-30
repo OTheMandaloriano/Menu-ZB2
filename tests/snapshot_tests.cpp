@@ -1,4 +1,4 @@
-#include "../latest_snapshot.h"
+#include "../src/menu/latest_snapshot.h"
 #include <array>
 #include <atomic>
 #include <cstdio>

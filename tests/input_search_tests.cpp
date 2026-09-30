@@ -1,6 +1,6 @@
-#include "../item_search.h"
-#include "../ui_input_queue.h"
-#include "../ui_capture.h"
+#include "../src/menu/item_search.h"
+#include "../src/menu/ui_input_queue.h"
+#include "../src/menu/ui_capture.h"
 #include <cassert>
 #include <thread>
 #include <atomic>

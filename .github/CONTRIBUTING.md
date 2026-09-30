@@ -10,3 +10,11 @@ Leia o README, o NOTICE e as auditorias da área antes de alterar o projeto.
 - Chamadas Unity pertencem ao callback do jogo. A interface troca snapshots e não acessa objetos Unity.
 
 Use identidade Git vinculada à sua conta, preferencialmente com e-mail noreply do GitHub.
+
+## Estrutura dos fontes
+
+O menu nativo fica em `src/menu`; o projeto Visual Studio permanece na raiz.
+Admin e loader ficam em `apps`. Consulte `docs/DESENVOLVIMENTO.md` e rode
+`python tests/check_repository_layout.py` ao alterar caminhos ou referências.
+Saídas de testes/compilação ficam em `build`, entregas em `dist` e material privado
+em `.local`. Não crie cópias de fontes ou scripts de sessão na raiz.

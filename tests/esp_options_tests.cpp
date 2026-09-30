@@ -1,4 +1,4 @@
-#include "../esp_options.h"
+#include "../src/menu/esp_options.h"
 #include <cassert>
 #include <iostream>
 int main() {

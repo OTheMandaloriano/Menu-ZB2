@@ -22,11 +22,11 @@ build.mkdir(exist_ok=True)
 compiler = which("g++")
 if not compiler:
     exit("g++ with C++17 support is required for these portable tests.")
-flags = ["-std=c++17", "-O0", "-g", "-I" + str(source / "tests" / "platform")]
+flags = ["-I" + str(source),"-std=c++17", "-O0", "-g", "-I" + str(source / "tests" / "platform")]
 if args.sanitize:
     flags += ["-fsanitize=address,undefined", "-fno-omit-frame-pointer"]
 units = [source / "imgui" / (name + ".cpp") for name in ("imgui", "imgui_draw", "imgui_tables", "imgui_widgets")]
-units += [source / "esp_layout.cpp", source / "tests" / "layout_tests.cpp", source / "tests" / "gui_harness.cpp"]
+units += [source / "src/menu/esp_layout.cpp", source / "tests" / "layout_tests.cpp", source / "tests" / "gui_harness.cpp"]
 records = []
 
 
@@ -71,7 +71,7 @@ for kind in ("ClCompile", "ClInclude"):
     for item in project.findall(".//m:" + kind, namespace):
         if "Include" in item.attrib:
             assert (source / item.attrib["Include"].replace("\\", "/")).is_file()
-mono = (source / "mono.cpp").read_text(encoding="utf-8-sig")
+mono = (source / "src/menu/mono.cpp").read_text(encoding="utf-8-sig")
 assert "EspEntry tmp[128] = {};" in mono and "EspEntry tmpEn = {};" in mono
 try:
     from PIL import Image

@@ -1,4 +1,4 @@
-#include "../hotkey_toggle.h"
+#include "../src/menu/hotkey_toggle.h"
 #include <cassert>
 #include <iostream>
 int main(){

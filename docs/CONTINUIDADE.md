@@ -84,3 +84,5 @@ Informar versão de cada componente, alterações, testes realmente executados,
 limitações, quais pacotes enviar e estado da publicação no GitHub. Separar recursos
 implementados de propostas. Usar texto simples e não prometer zero resíduos ou
 ausência de detecção por antivírus.
+
+Organização atual: fontes nativos em `src/menu/`. Consulte [DESENVOLVIMENTO.md](DESENVOLVIMENTO.md).

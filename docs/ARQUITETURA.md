@@ -59,7 +59,7 @@ pequeno com o executável e, no pacote ativado, a licença. Ele não recebe Rele
 
 | Local | Responsabilidade |
 |---|---|
-| main.cpp, mono.cpp, gui.cpp e módulos .inl/.h da raiz | Inicialização do menu, acesso ao jogo e interface interna |
+| src/menu/main.cpp, mono.cpp, gui.cpp e módulos .inl/.h dessa pasta | Inicialização do menu, acesso ao jogo e interface interna |
 | managed/ e scripts/build_managed_aim.py | Código gerenciado e compilação da ponte |
 | injector/ | Helper nativo usado pelo carregador |
 | apps/loader/controller.cpp | Estados e execução do cliente |
@@ -114,3 +114,5 @@ e os 25 arquivos removidos estão em `.local/audits/2026-09-30-cleanup`.
 5. Fazer backup controlado da estação e testar recuperação, sem incluir esse backup nos ZIPs.
 
 Consulte também ADMIN.md, ATUALIZACOES.md, BRAND.md e ANTIVIRUS.md.
+
+Organização atual: fontes nativos em `src/menu/`. Consulte [DESENVOLVIMENTO.md](DESENVOLVIMENTO.md).

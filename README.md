@@ -1,136 +1,99 @@
-> **Manutenção e distribuição:** comece por [docs/COMECE-AQUI.md](docs/COMECE-AQUI.md). Para uma nova sessão de desenvolvimento, leia [docs/CONTINUIDADE.md](docs/CONTINUIDADE.md).
-
 <div align="center">
-
-# Menu ZB2
-
-Menu de desenvolvimento para Zumbi Blocks 2, com interface D3D11, visualização de entidades e integração com Unity Mono.
-
-[![C++](https://img.shields.io/badge/C++-17-00599C?style=for-the-badge&logo=cplusplus&logoColor=white)](kiero-dx11-base.vcxproj)
-[![Windows](https://img.shields.io/badge/Windows-x64-0078D4?style=for-the-badge)](docs/ESTRUTURA.md)
-[![Estado](https://img.shields.io/badge/estado-em_desenvolvimento-orange?style=flat-square)](CHANGELOG.md)
-[![Licenciamento](https://img.shields.io/badge/licenciamento-ver_NOTICE-yellow?style=flat-square)](NOTICE.md)
-
-<a href="README.md"><img src="https://api.iconify.design/flag/br-4x3.svg?width=26" alt="Português" title="Português" /></a>
-&nbsp;
-<a href="docs/idiomas/README.en.md"><img src="https://api.iconify.design/flag/us-4x3.svg?width=26" alt="English" title="English" /></a>
-
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="apps/shared/brand/deadblock-menu.svg" />
+    <img src="apps/shared/brand/deadblock-menu-light.svg" alt="DEADBLOCK" width="340" />
+  </picture>
+  <p>Menu nativo, loader e painel de licenças para Zumbi Blocks 2.</p>
+  <p><a href="docs/COMECE-AQUI.md">Comece aqui</a> · <a href="docs/DESENVOLVIMENTO.md">Desenvolvimento</a> · <a href="docs/README.md">Documentação</a> · <a href="docs/idiomas/README.en.md">English</a></p>
 </div>
 
-<h2><img src="https://api.iconify.design/solar/info-circle-bold.svg?color=%233B82F6&width=24" alt="" /> Sobre o projeto</h2>
+## O projeto
 
-O projeto combina uma DLL nativa C++ para interface e renderização com adaptadores C# executados no ambiente Mono do jogo. Inclui controles de mira, modificadores de movimento e armas, ESP de zumbis, itens e pontos do mundo, presets e logs de diagnóstico.
+DEADBLOCK reúne três componentes: uma DLL nativa integrada ao jogo, um cliente
+Windows que valida o acesso e carrega o menu, e um Admin para emitir licenças e
+autorizar integrantes da equipe. Este repositório privado contém o código, os
+testes, os recursos visuais e a documentação.
 
-Este é o repositório privado de **código-fonte, testes e documentação**. Distribuição para usuários e atualização do menu pertencem a um canal separado. Veja [distribuição e atualizações](docs/DISTRIBUICAO.md).
+| Componente | Local | Função |
+|---|---|---|
+| Menu | `src/menu/` e `managed/` | Interface D3D11 e integração com Unity Mono |
+| Cliente | `apps/loader/` | Ativação offline, verificação do pacote e carregamento |
+| Admin | `apps/admin/` | Clientes, equipe, pacotes e limpeza limitada de cache |
+| Interface comum | `apps/shared/` | Marca, fontes, controles e renderização |
 
-> [!IMPORTANT]
-> O menu é distribuído com o injetor e suas dependências. O injetor permanece operacional; um novo loader está em fase de prévia visual, sem ativação ou carregamento reais. Não há uma versão pública estável. Testes simulados não substituem validação em partida solo, host e cliente.
+## Usar e distribuir
 
-## Requisitos de desenvolvimento
+No Admin, a aba **Como enviar** gera os programas iniciais, sem exigir ID ou solicitação.
+O cliente devolve seu ID; o integrante devolve a solicitação da estação. Depois disso,
+o proprietário gera e envia o pacote ativado ou autorizado.
 
-| Componente | Requisito |
+- [Primeiro envio para clientes e equipe](docs/ADMIN.md)
+- [Atualizar quem já utiliza o programa](docs/ATUALIZAR-USUARIOS.md)
+- [Dados pessoais, resíduos e limpeza segura](docs/RETENCAO-E-LIMPEZA.md)
+
+**Não envie o repositório ou a pasta `build`.** Os programas e ZIPs ficam em `dist`.
+Chaves, perfis e histórico não fazem parte dos pacotes.
+
+## Estado atual
+
+| Área | Situação |
 |---|---|
-| Sistema | Windows x64 |
-| Compilador nativo | Visual Studio, ferramentas C++ v145 e Windows SDK |
-| Scripts | Python 3 |
-| Jogo | Build Mono compatível com o hash registrado em `scripts/build_managed_aim.py` |
-| Dependência gerenciada | Harmony 2.3.3, obtida pelo script com hash verificado |
+| Cliente | 1.14-local; ativação e carregamento implementados |
+| Admin | Interface 1.13, com o cliente 1.14 incorporado |
+| Atualizações | Envio manual de ZIPs; atualizador GitHub ainda é uma proposta |
+| Limpeza | Serviços antigos do Admin, após análise; runtime antigo do cliente não é removido automaticamente |
+| Validação | Testes automatizados e observações locais documentados; não equivalem a homologação completa de todas as funções em partida |
+| Segurança | Sem Authenticode; detecções da amostra anterior estão documentadas, sem falso positivo confirmado |
 
-As DLLs proprietárias do jogo são referenciadas na instalação local e não são distribuídas neste repositório.
+Consulte [continuidade](docs/CONTINUIDADE.md), [estados do loader](docs/ESTADOS-LOADER.md)
+e [análise de antivírus](docs/ANALISE-VIRUSTOTAL.md) antes de uma nova entrega.
 
-## Compilar
+## Estrutura
 
-No terminal de desenvolvimento do Visual Studio:
+```text
+apps/          Admin, cliente e componentes de interface compartilhados
+src/menu/      Código nativo do menu
+managed/       Integração C# com o Mono do jogo
+injector/      Helper nativo de carregamento
+imgui/         Dependência de interface e adaptador FreeType
+kiero/         Dependência de hook gráfico
+packaging/     Manifestos e chave pública
+scripts/       Compilação e empacotamento
+tests/         Regressões e testes sem controlar o jogo
+docs/          Guias de uso, arquitetura e histórico técnico
+memory/        Referências técnicas e medições do projeto
+build/         Gerado localmente; fora do Git
+dist/          Entrega local; fora do Git
+.local/        Credenciais, recuperação e auditorias; fora do Git
+```
+
+O arquivo `kiero-dx11-base.vcxproj` permanece na raiz como entrada do Visual Studio.
+As pastas `.agents` e `.opencode` pertencem às ferramentas de desenvolvimento.
+Veja a [estrutura detalhada](docs/ESTRUTURA.md) e o [mapa do código](docs/ARQUITETURA.md).
+
+## Desenvolver
+
+Leia [AGENTS.md](AGENTS.md) e o [guia de desenvolvimento](docs/DESENVOLVIMENTO.md).
+Requisitos: Windows x64, MSVC v145, Windows SDK, Python e as ferramentas indicadas no guia.
+As assemblies proprietárias do jogo são usadas da instalação local; não estão neste repositório.
 
 ```powershell
 msbuild kiero-dx11-base.vcxproj /p:Configuration=Release /p:Platform=x64
-msbuild injector/injector.vcxproj /p:Configuration=Release /p:Platform=x64
-python scripts/build_managed_aim.py --managed "CAMINHO_DO_JOGO/ZumbiBlocks2_Data/Managed"
-```
-
-A saída fica em `build/Release_x64`. A distribuição de desenvolvimento contém o injetor, sua configuração, a DLL nativa, o adaptador gerenciado, Harmony e sua licença. Os símbolos `.pdb` e `.map` devem ser preservados por versão para investigar crashes.
-
-## Executar e diagnosticar
-
-1. Compile os componentes compatíveis com a instalação local.
-2. Entre no mapa do jogo antes de executar `injector.exe`.
-3. Use Insert para abrir ou fechar o menu.
-4. Consulte configurações e logs em `Documentos/ZB2Menu`.
-
-Use `injector.exe` com as DLLs e `config.ini` na mesma pasta. Não há atualização automática nem necessidade de token GitHub para executar. NoClip alterna com N por padrão; a tecla continua configurável.
-
-## Testes
-
-```powershell
+python tests/check_repository_layout.py
 python tests/check_runtime_ownership.py
 python tests/run_aim_validation.py
-python tests/run_managed_aim_validation.py
-python tests/run_modifier_bridge_validation.py
-python tests/run_range_validation.py
-python tests/run_player_features_validation.py
-python tests/run_catalog_validation.py
-python tests/run_chams_validation.py
 ```
 
-Os testes gerenciados exigem a dependência Harmony gerada pelo build anterior. Os testes de interface usam ImGui com dados simulados, sem controlar a tela do jogo.
+O build do menu não gera sozinho os pacotes finais. A ordem de entrega é
+**menu → loader → Admin → ZIPs**. Os comandos e verificações estão em
+[ATUALIZACOES.md](docs/ATUALIZACOES.md).
 
-<h2><img src="https://api.iconify.design/solar/danger-triangle-bold.svg?color=%23F97316&width=24" alt="" /> Limitações conhecidas</h2>
+## Contribuição e licenciamento
 
-| Área | Estado |
-|---|---|
-| Multiplayer | Há caminhos para solo, host e cliente; aceitação de efeitos pelo servidor e estabilidade prolongada precisam de validação por função. |
-| Controles pendentes | Teleporte manual e outros controles sem execução estão identificados como pendentes. |
-| ESP distante | Registros sem modelo carregado usam posição conhecida; não há vida ou ossos inventados. |
-| Modificadores legados | Inventário, moedas e desbloqueios têm comportamento distinto de restaurar parâmetros de armas e movimento. Consulte a auditoria. |
-| Distribuição | Injetor com dependências na mesma pasta. Atualização manual; launcher retirado. |
-| Licenciamento | Origem e avisos de terceiros precisam ser consolidados antes de distribuição pública. |
+- [Como contribuir](.github/CONTRIBUTING.md)
+- [Histórico de mudanças](CHANGELOG.md)
+- [Avisos e licenciamento](NOTICE.md)
+- [Índice da documentação técnica](docs/README.md)
 
-## Organização e documentação
-
-- [Estrutura e arquivos gerados](docs/ESTRUTURA.md)
-- [Auditoria de modificadores e ESP](docs/AUDITORIA_MODIFICADORES_ESP.md)
-- [Estabilidade da renderização](docs/ESTABILIDADE_RENDER.md)
-- [Alcances de entidades](docs/DISTANCIAS.md) e [raios independentes](docs/RAIOS_ESP.md)
-- [Histórico](CHANGELOG.md), [contribuição](.github/CONTRIBUTING.md) e [licenciamento](NOTICE.md)
-
-[Atalhos e Magnet](docs/CONTROLES.md)
-
-[Equipe, itens e filtros do Magnet](docs/EQUIPE_ITENS_MAGNET.md)
-
-[Catálogo visual, Chams e revisão do Magnet](docs/REVISAO_VISUAL_MAGNET.md)
-
-[Itens permitidos e estado dos módulos Magnet](docs/MAGNET_ITENS_PERMITIDOS.md)
-
-[Entrada do menu e animação de surgimento](docs/ENTRADA_E_SURGIMENTO.md)
-
-[Saúde remota, Item Magnet e ponto fixo](docs/MAPA_INTEIRO_E_SAUDE.md)
-
-[Uso do Item Magnet e limites cooperativos](docs/LOOT_USO_E_COOPERACAO.md)
-
-[Silhueta e limites de autoridade do Magnet](docs/SILHUETA_E_AUTORIDADE.md)
-
-[Auditoria de HP dos aliados e Magnet fixo](docs/AUDITORIA_HP_MAGNET_FIXO.md)
-
-[Auditoria CE/dnSpy, ESP e navegação dos braseiros](docs/AUDITORIA_ESP_BRASEIROS.md)
-
-[God Mode e diagnóstico da silhueta](docs/GOD_MODE_E_SILHUETA.md)
-
-[Magnet sobreposto, braseiros e alinhamento da silhueta](docs/MAGNET_SIL_3.md)
-
-[Organização do menu e retenção do Magnet](docs/MENU_FIX_4.md)
-
-[Chegada ao alcance dos braseiros](docs/BRAZIER_FIX_5.md)
-
-[Auditoria do Magnet, mira e custo de atualização](docs/MAGNET_AUDIT_6.md)
-
-[Grupo único, rigs e Fast Knife](docs/GROUP_MELEE_7.md)
-
-[ESP, alcance e rigs](docs/ESP_RANGE_8.md)
-
-[Retenção de LOD e independência do NoClip](docs/MAGNET_LEASE_9.md)
-
-[Controles de combate e inventário](docs/COMBAT_ITEMS_10.md)
-
-[Utilidades e controles de sessão](docs/UTILITIES_11.md)
-
-[Prévia do loader e empacotamento](docs/LOADER_PREVIEW.md)
+Não inclua credenciais, licenças reais, dados de clientes, binários do jogo ou logs
+pessoais em commits. Alterações de caminhos devem atualizar projetos e testes juntos.
