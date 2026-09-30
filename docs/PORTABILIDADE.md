@@ -30,7 +30,7 @@ e `Deadblock.Menu.dll`. O identificador interno da rotina de mira passa a
 `DeadblockAim`. Aplique juntos projeto, DLL, DllImport da ponte gerenciada, helper,
 configuração, manifesto, leitura de módulos e testes. Uma troca isolada não é segura.
 
-Essa migração foi validada em cópia isolada e aplicada aos fontes do projeto oficial.
+Essa migração foi validada em cópia isolada, aplicada aos fontes e instalada localmente no cliente 1.15 e Admin 1.14.
 A compilação e testes fora do jogo não substituem validação da nova DLL em partida.
 
 O reconhecimento do nome antigo pode continuar no código exclusivamente para

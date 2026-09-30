@@ -20,7 +20,7 @@ real do disco e do Git. Este arquivo não substitui testes nem uma inspeção at
 - Cliente instalado: 1.15-local, com mensagens de monitoramento corrigidas e Detalhes.
 - Admin: interface 1.14, recompilada incorporando o cliente 1.15.
 - Auto-inject existe. Não confundir com auto-update, que não existe ainda.
-- Runtime empacotado declarado nos builds: commit 21759653045fed481d11e6ccd02122ad558250e7.
+- Runtime da entrega de identidade 1.15: commit 5fdee1018aea00b548abbba61fd580efc5e651fa.
   Isso identifica o runtime da entrega, não prova que a árvore atual gere os mesmos bytes.
 - A identidade visual é DEADBLOCK. Identificador assinado de produto continua Menu-ZB2.
 - Licenças/autorizações são offline; não há sincronização nem revogação instantânea.
