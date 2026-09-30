@@ -14,11 +14,17 @@ def run(command,env=None):
     logs.append(result.stdout+result.stderr);(output/'build.log').write_text('\n'.join(logs),encoding='utf-8');print(logs[-1],flush=True)
     if result.returncode:raise SystemExit(result.returncode)
 csc=Path('C:/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe')
+client=ROOT/'dist/loader/ZB2Menu.exe'
+if not client.exists():raise SystemExit('Build the client loader before the Admin.')
 run([csc,'/nologo','/target:exe','/platform:x64','/optimize+','/warnaserror+',
      '/out:'+str(output/'ZB2AdminBackend.exe'),'/r:System.Core.dll','/r:System.Security.dll','/r:System.Web.Extensions.dll',
-     '/resource:'+str(ROOT/'packaging/loader-public-key.json')+',Admin.Public',ROOT/'apps/admin/Core.cs',ROOT/'apps/admin/Backend.cs'])
+     '/r:System.IO.Compression.dll','/r:System.IO.Compression.FileSystem.dll',
+     '/resource:'+str(ROOT/'packaging/loader-public-key.json')+',Admin.Public',
+     '/resource:'+str(client)+',Admin.Client',ROOT/'apps/admin/Core.cs',ROOT/'apps/admin/Packages.cs',ROOT/'apps/admin/Backend.cs'])
 (output/'backend.sha256').write_text(hashlib.sha256((output/'ZB2AdminBackend.exe').read_bytes()).hexdigest(),encoding='ascii')
 resources=['501 RCDATA "ZB2AdminBackend.exe"','502 RCDATA "backend.sha256"']
+notices='\n\n'.join((assets/name).read_text(encoding='utf-8') for name in ['Lexend-OFL.txt','FontAwesome-LICENSE.txt','IconFontCppHeaders-LICENSE.txt','DearImGui-LICENSE.txt'])
+(output/'notices.txt').write_text(notices,encoding='utf-8');resources.append('205 RCDATA "notices.txt"')
 for resource,name in [(201,'Lexend-SemiBold.ttf'),(202,'Lexend-Bold.ttf'),(203,'Lexend-Black.ttf'),(204,'fa-solid-900.ttf'),(206,'Lexend-Regular.ttf')]:
     shutil.copyfile(assets/name,output/name);resources.append(f'{resource} RCDATA "{name}"')
 (output/'admin.rc').write_text('\n'.join(resources)+'\n',encoding='ascii')

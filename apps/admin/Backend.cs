@@ -48,6 +48,32 @@ namespace Zb2Admin
                     LicenseRecord issued=store.Issue(args[0],args[1],Number(args[2]));
                     Row(extra,"X",issued.Token,"Licenca-"+issued.Id.Substring(0,8)+".zb2license");
                     notice="Licença gerada. Salve o arquivo e envie ao cliente.";break;
+                case "issue_package":
+                    Crypto.Require(args.Length==4,"Informe cliente, computador, prazo e destino do ZIP.");
+                    Packages.CheckDestination(args[3]);
+                    LicenseRecord packed=store.Issue(args[0],args[1],Number(args[2]));
+                    Row(extra,"X",packed.Token,"Licenca-"+packed.Id.Substring(0,8)+".zb2license");
+                    try { Packages.Client(args[3],packed);notice="ZIP pronto. Envie somente esse ZIP ao cliente."; }
+                    catch(Exception error){notice="Licença salva no histórico; ZIP não concluído: "+error.Message+" Selecione a licença e use Gerar ZIP, sem emitir novamente.";}
+                    break;
+                case "client_package":
+                    Crypto.Require(args.Length==2,"Selecione uma licença e o destino do ZIP.");
+                    Crypto.Require(store.MaxDays()>0,"Esta estação não está autorizada.");
+                    LicenseRecord existing=store.History().SingleOrDefault(record=>record.Id==args[0]);
+                    Crypto.Require(existing!=null,"Licença não encontrada no histórico desta estação.");
+                    Packages.Client(args[1],existing);notice="ZIP pronto. Envie somente esse ZIP ao cliente.";break;
+                case "team_package":
+                    Crypto.Require(args.Length==3 && store.Current.Role=="owner" && store.MaxDays()>0,"Somente o proprietário prepara pacotes da equipe.");
+                    Grant team=store.TeamHistory().SingleOrDefault(entry=>entry.Id==args[0]);Crypto.Require(team!=null,"Selecione uma autorização da equipe.");
+                    Packages.Team(args[1],args[2],team);notice="ZIP pronto para o integrante autorizado. Ele extrai e abre o Admin no PC da solicitação.";break;
+                case "authorize_package":
+                    Crypto.Require(args.Length==5,"Selecione a solicitação, os limites e o destino do ZIP.");
+                    Packages.CheckDestination(args[3]);Request candidate=store.ParseRequest(args[0]);
+                    string approval=store.Authorize(candidate,Number(args[1]),Number(args[2]));
+                    Row(extra,"X",approval,"Autorizacao-"+candidate.Id.Substring(0,8)+".zb2issuer");
+                    try { Packages.Team(args[3],args[4],Crypto.ReadGrant(approval,store.RootPublic,Crypto.Now()));notice="Integrante autorizado. Envie o ZIP pronto para o PC da solicitação."; }
+                    catch(Exception error){notice="Autorização salva; ZIP não concluído: "+error.Message+" Selecione a autorização e use Gerar ZIP do integrante.";}
+                    break;
                 case "create_station":
                     Crypto.Require(args.Length==1,"Informe o nome do integrante.");store.CreateStation(args[0]);
                     Row(extra,"X",store.ExportRequest(),"Solicitacao-"+store.Current.Id.Substring(0,8)+".zb2station");
@@ -66,7 +92,7 @@ namespace Zb2Admin
                 case "import_authorization":
                     Crypto.Require(args.Length==1,"Selecione a autorização.");store.ImportAuthorization(AdminStore.ReadLimited(args[0]));notice="Estação autorizada para emitir licenças.";break;
                 case "import_owner":
-                    Crypto.Require(args.Length==2,"Informe nome e chave do proprietário.");store.ImportOwner(args[0],args[1]);notice="Proprietário configurado neste perfil do Windows.";break;
+                    Crypto.Require(args.Length==2,"Informe nome e chave do proprietário.");store.RecoverOwner(args[0],args[1]);notice="Proprietário confirmado pela chave original. Histórico preservado.";break;
                 default:throw new InvalidDataException("Ação não reconhecida. Atualize o Admin.");
             }
             int maxDays=0;string problem="";string grantExpiry="";
@@ -89,12 +115,25 @@ namespace Zb2Admin
             byte[] response;
             try
             {
-                Crypto.Require(args.Length==2 && args[0]=="--data","Pasta da estação não informada.");
+                Crypto.Require((args.Length==2||args.Length==4) && args[0]=="--data","Pasta da estação não informada.");
+                string startupNotice="";
+                if(args.Length==4 && args[2]=="--authorization")
+                {
+                    AdminStore station=new AdminStore(args[1],PublicKey());
+                    if(station.Current.Role=="operator")try
+                    {
+                        string grant=AdminStore.ReadLimited(args[3]).Trim();
+                        if(grant!=station.Current.Certificate)station.ImportAuthorization(grant);
+                    }
+                    catch(Exception error){startupNotice="Autorização do pacote não aplicada: "+error.Message;}
+                }
                 using(BinaryReader reader=new BinaryReader(Console.OpenStandardInput(),Utf8,true))
                 {
                     int length=reader.ReadInt32();Crypto.Require(length>0 && length<=131072,"Pedido fora do limite.");
                     byte[] request=reader.ReadBytes(length);Crypto.Require(request.Length==length,"Pedido incompleto.");
-                    response=Utf8.GetBytes(Execute(args[1],Utf8.GetString(request)));
+                    string result=Execute(args[1],Utf8.GetString(request));
+                    if(startupNotice.Length>0)result += "W\t"+Field(startupNotice)+"\n";
+                    response=Utf8.GetBytes(result);
                 }
             }
             catch(Exception error){StringBuilder text=new StringBuilder();Row(text,"ERR",error.Message);response=Utf8.GetBytes(text.ToString());}

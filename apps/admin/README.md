@@ -31,7 +31,6 @@ SHA-256 e iniciado sem console. O canal herda somente os handles necessários.
 Requests e respostas têm limites; ações de emissão não são repetidas automaticamente.
 Uma falha de comunicação exige conferir o histórico antes de uma nova tentativa.
 
-As atribuições de dependências são distribuídas em AVISOS.txt, fora das telas
-de uso. `scripts/package_delivery.py` produz CLIENTE.zip e EQUIPE.zip por allowlist.
+As atribuições das dependências estão embutidas em Créditos, sem arquivo AVISOS.txt. `scripts/package_delivery.py` produz CLIENTE.zip e EQUIPE.zip por allowlist.
 
 Operação: [guia da equipe](../../docs/ADMIN.md).

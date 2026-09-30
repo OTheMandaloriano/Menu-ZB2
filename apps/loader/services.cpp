@@ -124,6 +124,17 @@ void SaveState(const fs::path& root,const Stored& value) {
 }
 void CheckClock(const Stored& state,int64_t now) {Require(now>=state.lastSeen-120,u8"Relógio retrocedeu. Corrija a data do Windows antes de continuar.");}
 bool ReadAuto(const fs::path& root){auto file=root/L"auto-inject.txt";if(!fs::exists(file))return true;return ReadFile(file,8)=="1";}
+std::string AdjacentLicense(const fs::path& executable){auto file=executable.parent_path()/L"licenca.zb2license";if(!fs::exists(file))return {};return License::Normalize(ReadFile(file,8192));}
+bool ImportPackageLicense(const fs::path& executable,const fs::path& root,const std::string& device,int64_t now,const std::vector<unsigned char>& key,Stored& stored,std::string& warning){
+    CheckClock(stored,now);const auto current=License::Validate(stored.token,device,now,key);
+    try{
+        const auto token=AdjacentLicense(executable);if(token.empty())return false;
+        auto candidate=License::Validate(token,device,now,key);
+        if(!candidate.valid){if(!current.valid)warning=candidate.error;return false;}
+        if(current.valid&&(stored.token==token||candidate.expires<=current.expires))return false;
+        Stored next{token,std::max(stored.lastSeen,now)};SaveState(root,next);stored=std::move(next);return true;
+    }catch(const std::exception& error){warning=error.what();return false;}
+}
 void SaveAuto(const fs::path& root,bool enabled){CheckPath(root);fs::create_directories(root);auto file=root/L"auto-inject.txt",temporary=root/(L"auto-"+std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(GetTickCount64())+L".tmp");WriteNew(temporary,enabled?"1":"0");if(!MoveFileExW(temporary.c_str(),file.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)){DeleteFileW(temporary.c_str());throw std::runtime_error("Falha ao salvar AUTO-INJECT.");}}
 Process FindGame() {
     Process result;Handle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0));

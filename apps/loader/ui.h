@@ -5,6 +5,7 @@ struct LoaderUiState {
     unsigned long lastPid=0;
     char license[8193]={};
     std::string localMessage;
+    bool credits=false;
     LoaderSnapshot snapshot;
 };
 constexpr int LoaderWidth=440;

@@ -67,6 +67,12 @@ internal static class AdminCoreTests
                 fixtures["over_limit"] = Crypto.Envelope("ZB2L2", Encoding.ASCII.GetBytes(longPayload), key) + "." + delegatedParts[3] + "." + delegatedParts[4];
             }
             File.WriteAllText(Path.Combine(directory, "fixtures.json"), json.Serialize(fixtures), new UTF8Encoding(false));
+            string oldStation=File.ReadAllText(Path.Combine(directory,"member","station.json"));
+            member.RecoverOwner(args[0],"WeFagundes");
+            Check(member.Current.Role=="owner" && member.Current.Name=="WeFagundes" && member.MaxDays()==3650,"Verified recovery from mistaken member registration");
+            Check(member.History().Count==1,"Recovery preserves license history");
+            string[] backups=Directory.GetFiles(Path.Combine(directory,"member","backups"),"*.json");
+            Check(backups.Length==1 && File.ReadAllText(backups[0])==oldStation,"Recovery retains protected old station backup");
             Console.WriteLine(checks + " admin core checks passed.");
             return 0;
         }

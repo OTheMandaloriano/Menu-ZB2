@@ -1,106 +1,90 @@
-# ZB2 Admin — guia da equipe
+# ZB2 Admin — guia simples (1.4)
 
-São dois aplicativos diferentes:
+## Você é o proprietário
 
-| Aplicativo | Quem usa | Para quê |
-|---|---|---|
-| **ZB2 Menu** | Cliente | Ativar a licença e carregar o menu no jogo |
-| **ZB2 Admin** | Proprietário e integrantes autorizados | Emitir licenças, escolher prazos e consultar o histórico local |
+Neste computador, a estação verificada é **WeFagundes — Proprietário**.
+Abra o atalho **ZB2 Admin - Proprietario**. Seu nome e papel aparecem no topo.
+Você não precisa criar uma solicitação de integrante para usar sua própria conta.
 
-O Admin é um executável Windows. A equipe não precisa de Python nem de terminal.
-As duas interfaces usam Dear ImGui, sem barra de título ou controles WinForms.
-Os avisos de dependências ficam em AVISOS.txt, fora das telas de uso.
-Sua chave principal não é incluída em nenhum dos executáveis distribuídos.
-A estação do proprietário foi configurada no usuário Windows WeFagundes.
-A cópia protegida para esse usuário fica em
-`D:/ZB2-Retomada/loader-private/issuer-owner.dpapi`; ela não deve ser enviada à equipe.
+- **Clientes:** preparar o ZIP para quem vai usar o menu no jogo.
+- **Minha equipe:** autorizar outro PC a gerar licenças para clientes.
+- **Meu acesso:** consultar o acesso deste computador. Criar solicitação nesta
+  tela configura ESTE PC como integrante; não cadastra outra pessoa à distância.
+- **Ajuda:** explica os destinos dentro do aplicativo.
 
-## Emitir uma licença para um cliente
+## Enviar ao cliente: um único ZIP
 
-1. Peça ao cliente para abrir **ZB2 Menu → Copiar ID** e enviar o ID.
-2. Abra **ZB2 Admin → Licenças**.
-3. Preencha **Nome do cliente** e **ID do computador do cliente**.
-4. Escolha o **Prazo de uso**: 7, 15, 30, 90, 180 ou 365 dias. Para outro prazo,
-   digite a quantidade no campo numérico. O limite da sua estação aparece abaixo.
-5. Confira a data em **Válida até** e clique em **Gerar licença**.
-6. Clique em **Salvar** e envie o `.zb2license` ao cliente.
-7. O cliente usa **Abrir arquivo** no loader e clica em **Ativar**.
+1. Peça ao cliente o ID exibido no ZB2 Menu. Se ele ainda não possui o programa,
+   envie o CLIENTE.zip inicial para ele abrir e clicar em Copiar ID.
+2. Abra **Clientes** no Admin.
+3. Preencha nome, ID do computador e prazo em dias.
+4. Clique em **Gerar ZIP do cliente** e escolha onde salvar.
+5. Envie SOMENTE o ZIP gerado para esse cliente.
 
-O prazo começa quando a licença é gerada. Gerar novamente cria outra licença;
-não cancela automaticamente a anterior. O histórico permite buscar pelo nome,
-ID do computador ou integrante e copiar/salvar uma emissão anterior.
-O badge “Ativa” informa a validade por data; não significa que o cliente já ativou.
-Cada linha permite copiar a licença diretamente e mostra datas com dígitos de largura fixa.
+O ZIP personalizado contém `ZB2Menu.exe` e `licenca.zb2license`.
+O cliente extrai TUDO para uma pasta e abre `ZB2Menu.exe`. A licença é verificada
+para aquele PC e aplicada automaticamente. Não executar diretamente dentro do ZIP.
 
-## Autorizar um integrante que usa outro PC
+A opção **Gerar somente a chave** continua disponível. Também é possível copiar
+uma licença na linha do histórico e o cliente colar a chave manualmente.
 
-**No PC do integrante:**
+Para reenviar uma emissão existente, selecione-a no histórico e use **Gerar ZIP
+pronto**. Isso não cria outra licença nem reinicia o prazo. O prazo começa na emissão.
+Uma renovação válida com vencimento posterior é aplicada ao abrir o novo pacote.
 
-1. Entregue a ele **EQUIPE.zip**, gerado em `dist/entrega`.
-2. Ele extrai o pacote e abre `ZB2Admin.exe`. Na primeira abertura, o aplicativo mostra **Minha estação**.
-3. Ele informa o nome e clica em **Criar solicitação**.
-4. Salva o arquivo `.zb2station` e envia para você. Esse arquivo contém apenas
-   identificação e chave pública; a chave privada permanece no PC dele.
+## Enviar a um integrante que vai emitir
 
-**No seu PC, como proprietário:**
+O integrante precisa preparar o próprio PC uma única vez:
 
-1. Abra **Equipe → Abrir solicitação** e selecione o arquivo recebido.
-2. Confira o nome do integrante.
-3. Escolha **Autorização para emitir (dias)** e **Máximo de dias por licença**.
-4. Clique em **Gerar autorização** e envie o arquivo `.zb2issuer` ao integrante.
+1. Envie o EQUIPE.zip inicial. Ele extrai e abre o Admin.
+2. Em **Meu acesso**, ele informa o próprio nome e cria uma solicitação.
+3. Ele envia o `.zb2station` para você.
+4. Você abre **Minha equipe → Abrir solicitação** e escolhe os limites.
+5. Clique em **Autorizar e gerar ZIP** e envie o ZIP gerado ao integrante.
+6. Ele extrai tudo e abre `ZB2Admin.exe` no PC que criou a solicitação.
+   A autorização incluída é importada automaticamente.
 
-Exemplo: autorização por **365 dias**, com máximo de **30 dias por licença**.
-Durante a autorização, ele poderá emitir licenças de 7, 15 ou 30 dias, mas não de
-90 dias. Uma licença também não pode ultrapassar a validade da autorização dele.
+O ZIP personalizado contém `ZB2Admin.exe` e `autorizacao.zb2issuer`.
+Para reenviar, selecione a autorização na lista e use **Gerar ZIP do integrante**.
 
-**De volta ao PC do integrante:**
+Exemplo de limites: autorização por 365 dias, licenças de no máximo 30 dias.
+O integrante não recebe sua chave principal nem pode autorizar outros integrantes.
+Se alguém da equipe apenas vai jogar, envie o pacote DE CLIENTE, não o Admin.
 
-1. Abra **Minha estação → Importar autorização**.
-2. Selecione o `.zb2issuer` recebido para a estação daquele integrante.
-3. Abra **Licenças** e emita dentro dos limites concedidos.
+## Cadastrei este PC como integrante por engano
 
-Você pode reenviar a autorização pela lista **Equipe → Estações autorizadas →
-Salvar autorização selecionada**. Renovar a autorização não invalida uma anterior
-que ainda esteja dentro do prazo. Não há revogação instantânea offline.
+A opção **Sou o proprietário: recuperar acesso** exige a chave original do
+proprietário, protegida pelo Windows. Ela não promove ninguém apenas pelo nome.
+A recuperação preserva o histórico e guarda uma cópia protegida da configuração
+anterior. Não envie a chave `.dpapi` a clientes ou integrantes.
 
-## Não confundir os arquivos
+No seu perfil WeFagundes, a chave de manutenção fica em
+`D:/ZB2-Retomada/loader-private/issuer-owner.dpapi`; o Admin já está configurado.
+Os dados ficam em `%LOCALAPPDATA%/ZB2Admin`. Não distribua essa pasta.
 
-**Cliente:** envie **CLIENTE.zip** e o `.zb2license` gerado para o computador dele.
-**Integrante emissor:** envie **EQUIPE.zip**; após receber a solicitação dele,
-devolva o `.zb2issuer`. Um integrante que apenas joga recebe o pacote de cliente.
-Não envie a pasta build, a chave principal ou a pasta de dados de uma estação.
+## O que não vai no ZIP
 
-| Arquivo | Destino |
-|---|---|
-| `.zb2license` | Cliente: ativação no ZB2 Menu |
-| `.zb2station` | Proprietário: solicitação pública de uma estação da equipe |
-| `.zb2issuer` | Integrante: autorização para emitir naquele PC |
-| `.dpapi` | Chave principal protegida: somente o proprietário; não enviar à equipe ou ao cliente |
+Nenhum AVISOS.txt, chave privada, histórico, pedido de estação ou arquivo de build
+é colocado no pacote personalizado. Atribuições das dependências ficam embutidas,
+acessíveis em Créditos, sem arquivos extras na pasta do cliente.
 
-## Dados e limites desta fase offline
+Os ZIPs iniciais CLIENTE.zip/EQUIPE.zip servem para começar o cadastro; ainda não
+contêm uma licença/autorização pessoal. Os ZIPs prontos são gerados dentro do Admin.
 
-- Os dados do Admin ficam em `%LOCALAPPDATA%/ZB2Admin`. A nova interface lê a
-  mesma pasta e preserva as estações, licenças e autorizações já existentes.
-- Cada integrante possui histórico local no próprio PC. Não existe lista central
-  automática de todas as emissões da equipe, sincronização ou painel na nuvem.
-- A proteção DPAPI depende do usuário/perfil Windows. Copiar apenas os arquivos
-  para outro usuário não migra a chave. Faça backup protegido do perfil e dos dados.
-- O aplicativo não controla pagamentos ou quantidade de emissões. O limite
-  configurável é de **dias por licença**, validado também pelo loader.
-- Os registros locais não são um log inviolável. Os arquivos de licença e de
-  autorização possuem assinaturas; alterar seus limites invalida a assinatura.
-- A proteção direta da DLL continua fora desta revisão. Consulte as limitações
-  do [loader offline](LOADER.md) antes de usar o sistema comercialmente.
+## Limites offline
 
-## Manutenção técnica
+Cada PC mantém seu próprio histórico. Não há sincronização automática, controle
+de pagamento ou revogação imediata. O ID do cliente e a solicitação do integrante
+continuam necessários para vincular o acesso ao computador correto.
 
-`scripts/build_admin.py --tests` compila o frontend ImGui com MSVC e o serviço
-sem interface com o compilador .NET Framework. `tests/run_admin_validation.py
---key CAMINHO_DPAPI` verifica o emissor e a interoperabilidade C++. O teste
-`tests/test_admin_bridge.py --key CAMINHO_DPAPI` percorre os pipes reais entre
-o código nativo e o serviço. `build/admin-native/admin-native-tests.exe` renderiza
-as telas em 100%, 150% e 200% e verifica navegação/ID completo, sem controlar a tela.
+A proteção direta da DLL e a validação real do AUTO-INJECT em partida continuam
+com os limites documentados em [LOADER.md](LOADER.md) e [AUTO_INJECT.md](AUTO_INJECT.md).
 
-Licenças antigas ZB2L1 permanecem aceitas. As novas ZB2L2 carregam uma assinatura
-do integrante e uma autorização assinada pelo proprietário. O loader confere
-produto, identidade, assinatura, prazo da autorização e duração da licença.
+## Validação técnica
+
+- `scripts/build_loader.py`: primeiro compilar o cliente.
+- `scripts/build_admin.py --tests`: embutir esse cliente no Admin e compilar.
+- `tests/test_personalized_packages.py --key CAMINHO_DPAPI`: ZIPs, importação,
+  recuperação, renovação, PC incorreto e preservação do histórico.
+- `tests/run_admin_validation.py --key CAMINHO_DPAPI`: assinatura e permissões.
+- `scripts/package_delivery.py`: produzir os ZIPs iniciais sem dados pessoais.

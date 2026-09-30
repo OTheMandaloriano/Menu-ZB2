@@ -217,6 +217,18 @@ namespace Zb2Admin
             return StationRequest();
         }
 
+        public void RecoverOwner(string path,string name)
+        {
+            name=Crypto.CheckName(name);
+            Crypto.Require(new FileInfo(path).Length<8192,"Arquivo de chave incorreto.");
+            byte[] protectedKey=File.ReadAllBytes(path);
+            byte[] raw=ProtectedData.Unprotect(protectedKey,null,DataProtectionScope.CurrentUser);
+            try {using(CngKey key=CngKey.Import(raw,CngKeyBlobFormat.Pkcs8PrivateBlob))Crypto.Require(Crypto.Public(key)==RootPublic,"Essa chave não pertence ao proprietário deste produto.");}
+            finally {Array.Clear(raw,0,raw.Length);}
+            if(!String.IsNullOrEmpty(Current.ProtectedKey))AtomicWrite(Path.Combine(Root,"backups","station-"+Guid.NewGuid().ToString("N")+".json"),json.Serialize(Current));
+            Save(new Station {Role="owner",Name=name,Id=Guid.NewGuid().ToString("N"),KeyFormat="PKCS8_PRIVATEKEY",ProtectedKey=Convert.ToBase64String(protectedKey)});
+        }
+
         public Request StationRequest()
         {
             Crypto.Require(Current.Role == "operator", "Somente estações de integrantes precisam de solicitação.");

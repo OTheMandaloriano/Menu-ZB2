@@ -30,6 +30,7 @@ Snapshot DecodeResponse(const std::string& response){
         else if(type=="G"&&fields.size()==5)model.grants.push_back({fields[0],fields[1],fields[2],fields[3],fields[4]});
         else if(type=="X"&&fields.size()==2){model.output=fields[0];model.filename=fields[1];}
         else if(type=="R"&&fields.size()==3){model.requestName=fields[0];model.requestId=fields[1];model.requestText=fields[2];}
+        else if(type=="W"&&fields.size()==1){model.notice=fields[0];model.error=true;}
         else throw std::runtime_error("Resposta do servico incompatível.");
     }
     if(!ok||!state)throw std::runtime_error("Resposta incompleta do servico.");model.initialized=true;return model;

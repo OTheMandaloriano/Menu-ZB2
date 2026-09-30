@@ -68,7 +68,14 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show){
             if(dpiChanged){ImGui_ImplDX11_InvalidateDeviceObjects();ConfigureUiTheme(nextScale);dpiChanged=false;}
             if(controller)state.data=controller->Get();
             ImGui_ImplDX11_NewFrame();ImGui_ImplWin32_NewFrame();ImGui::NewFrame();Admin::Draw(state);ImGui::Render();
-            if(state.send){if(controller)controller->Submit(state.action);state.send=false;}
+            if(state.send){
+                state.send=false;
+                bool teamPackage=state.action.command=="team_package"||state.action.command=="authorize_package";
+                bool package=state.action.command=="issue_package"||state.action.command=="client_package"||teamPackage;
+                if(package){auto path=Pick(window,true,teamPackage?"Equipe-pronta.zip":"Cliente-pronto.zip",L"Pacote pronto ZIP\0*.zip\0\0");
+                    if(!path.empty()){if(path.extension()!=L".zip")path+=L".zip";state.action.args.push_back(path.u8string());if(controller)controller->Submit(state.action);}
+                }else if(controller)controller->Submit(state.action);
+            }
             if(state.copy){ImGui::SetClipboardText(state.copyText.c_str());state.copy=false;}
             if(state.pick!=Admin::Picker::None&&controller){
                 const auto action=state.pick;state.pick=Admin::Picker::None;

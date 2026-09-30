@@ -4,7 +4,7 @@ Implementação offline, Windows x64, 440 × 270 unidades lógicas. A revisão v
 segue a referência Activation / WARDOGS escolhida pelo usuário após a versão 1.0,
 com título centralizado e controles neutros. Lexend e
 FontAwesome 6 Free ficam embutidos no executável. As atribuições são fornecidas
-em AVISOS.txt no pacote de entrega, sem ocupar a página de informações do menu.
+embutidas em Créditos, sem ocupar a página de informações do menu.
 
 | Arquivo | Responsabilidade |
 |---|---|

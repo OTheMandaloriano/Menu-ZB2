@@ -2,17 +2,13 @@
 
 ## Entrega ao cliente
 
-Entregar `dist/entrega/CLIENTE.zip`, produzido por `scripts/package_delivery.py`.
-O pacote contém executável, instruções e avisos técnicos. A licença é enviada separadamente,
-como texto ou arquivo `.zb2license` cujo conteúdo pode ser colado na ativação.
-Não enviar a pasta build, o Admin ou a chave privada ao cliente. Integrantes
-emissores recebem EQUIPE.zip e seguem o [guia da equipe](ADMIN.md).
+No Admin, use **Clientes → Gerar ZIP do cliente**. O pacote personalizado
+contém o executável e `licenca.zb2license`. O cliente extrai tudo e abre o
+programa; a licença assinada é verificada para o PC dele e importada automaticamente.
+Também é possível colar uma chave ou importar um arquivo manualmente.
 
-1. Abrir o loader e clicar em Copiar ID.
-2. O proprietário emite a licença para esse ID e define o número de dias.
-3. Usar **Abrir arquivo** para selecionar a licença recebida e clicar em **Ativar**.
-4. Abrir o jogo compatível e entrar no mapa.
-5. Deixar AUTO-INJECT ativado para carregar quando a cena estiver pronta, ou usar **Injetar agora**. Depois, usar INSERT.
+O pacote inicial `dist/entrega/CLIENTE.zip` contém apenas o executável, para coletar
+o ID antes de emitir. Integrantes emissores seguem o [guia simples](ADMIN.md).
 
 O programa não solicita administrador automaticamente, não instala driver,
 não altera o antivírus e não faz conexão com servidores. Atualizações são
@@ -56,7 +52,7 @@ versionados; não é necessário baixar fontes durante o build. O script opciona
 `prepare_loader_assets.py` exige fontTools 4.60.1 e registra proveniência SHA-256.
 
 ```powershell
-python scripts/build_loader.py --runtime "D:/Projeto/ZB2 Menu/build/Release_x64" --runtime-commit 21759653045fed481d11e6ccd02122ad558250e7 --version 1.3-local --key D:/ZB2-Retomada/loader-private/issuer-owner.dpapi --public packaging/loader-public-key.json --tests
+python scripts/build_loader.py --runtime "D:/Projeto/ZB2 Menu/build/Release_x64" --runtime-commit 21759653045fed481d11e6ccd02122ad558250e7 --version 1.4-local --key D:/ZB2-Retomada/loader-private/issuer-owner.dpapi --public packaging/loader-public-key.json --tests
 ```
 
 O helper é recompilado dos fontes atuais. Os três DLLs são copiados sem alteração

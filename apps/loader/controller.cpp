@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <ctime>
 #include <stdexcept>
+#include <Windows.h>
 namespace {
 std::string Date(int64_t value){time_t date=static_cast<time_t>(value);tm result{};gmtime_s(&result,&date);char text[40]{};strftime(text,sizeof(text),"%d/%m/%Y %H:%M UTC",&result);return text;}
 }
@@ -20,7 +21,11 @@ void LoaderController::Run(){
     LoaderSnapshot state;LoaderServices::Stored stored;std::filesystem::path root,runtime;
     std::vector<unsigned char> publicKey;bool initialized=false;std::string actionError;
     LoaderServices::Readiness readiness;AutoInjectGate gate;
-    try{root=LoaderServices::DataDirectory();state.device=License::DeviceId();publicKey=LoaderServices::PublicKey();state.version=LoaderServices::BundleVersion();LoaderServices::VerifyBundle();stored=LoaderServices::ReadState(root);autoInject_.store(LoaderServices::ReadAuto(root));initialized=true;}
+    try{root=LoaderServices::DataDirectory();state.device=License::DeviceId();publicKey=LoaderServices::PublicKey();state.version=LoaderServices::BundleVersion();LoaderServices::VerifyBundle();stored=LoaderServices::ReadState(root);autoInject_.store(LoaderServices::ReadAuto(root));
+        LoaderServices::CheckClock(stored,License::Now());
+        wchar_t executable[32768]{};GetModuleFileNameW(nullptr,executable,32768);
+        LoaderServices::ImportPackageLicense(executable,root,state.device,License::Now(),publicKey,stored,actionError);
+        initialized=true;}
     catch(const std::exception& error){state.phase=LoaderPhase::Error;state.message=error.what();Publish(state);}
     auto stopped=[this](){std::lock_guard<std::mutex> lock(mutex_);return stop_;};
     while(true){

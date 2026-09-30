@@ -8,6 +8,13 @@ void Check(bool value,const char* message){if(!value)throw std::runtime_error(me
 std::string Utf8(const wchar_t* value){int n=WideCharToMultiByte(CP_UTF8,0,value,-1,nullptr,0,nullptr,nullptr);std::string output(static_cast<size_t>(n),'\0');WideCharToMultiByte(CP_UTF8,0,value,-1,output.data(),n,nullptr,nullptr);output.pop_back();return output;}
 int wmain(int argc,wchar_t** argv){
     try{
+        if(argc==3&&std::wstring(argv[1])==L"render-profile"){
+            Admin::UiState state;state.data=Admin::Backend(std::filesystem::path(argv[2])).Call({"snapshot",{}});state.data.revision=1;
+            Check(state.data.role=="owner"&&state.data.maxDays>0,"Owner access is not usable");
+            ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={Admin::Width,Admin::Height};io.DeltaTime=1.f/60;
+            ConfigureUiTheme(1);io.Fonts->Build();for(int frame=0;frame<3;++frame){ImGui::NewFrame();Admin::Draw(state);ImGui::Render();}
+            Check(RenderPpm("owner-profile.ppm",1),"Owner UI render failed");ImGui::DestroyContext();std::cout<<state.data.name<<" owner verified";return 0;
+        }
         if(argc>=4&&std::wstring(argv[1])==L"rpc"){
             Admin::Request request;request.command=Utf8(argv[3]);for(int i=4;i<argc;++i)request.args.push_back(Utf8(argv[i]));
             auto model=Admin::Backend(std::filesystem::path(argv[2])).Call(request);
@@ -31,6 +38,9 @@ int wmain(int argc,wchar_t** argv){
             Admin::UiState state;state.data.initialized=true;state.data.busy=false;state.data.hasKey=true;state.data.revision=1;state.data.maxDays=30;state.data.role="owner";state.data.device=std::string(64,'a');
             auto frame=[&](float x,float y,bool down){io.MousePos=Ui::P(x,y);io.MouseDown[0]=down;ImGui::NewFrame();Admin::Draw(state);ImGui::Render();};
             state.data.licenses.push_back({"test","Cliente",std::string(64,'1'),"Equipe","copy-exact-token","29/10/2026 12:00","30",u8"Válida"});
+            strcpy_s(state.customer,"Cliente UI");strcpy_s(state.device,std::string(64,'1').c_str());
+            frame(188,474,false);frame(188,474,true);frame(188,474,false);Check(state.send&&state.action.command=="issue_package","primary must generate ready ZIP");state.send=false;
+            frame(188,516,true);frame(188,516,false);Check(state.send&&state.action.command=="issue","manual key path must remain available");state.send=false;
             frame(786,276,false);frame(786,276,true);frame(786,276,false);Check(state.copy&&state.copyText=="copy-exact-token","inline row copy failed");state.copy=false;
             frame(740,96,false);frame(740,96,true);frame(740,96,false);Check(state.page==Admin::Page::Help,"in-app help navigation failed");
             state.page=Admin::Page::Station;frame(190,286,false);frame(190,286,true);frame(190,286,false);Check(state.copy&&state.copyText==state.data.device,"copy must preserve all 64 ID characters");

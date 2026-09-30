@@ -15,7 +15,7 @@ struct Handle {
 };
 void Require(bool condition,const char* message){if(!condition)throw std::runtime_error(message);}
 void SafePath(const fs::path& path){fs::path current;for(const auto& part:fs::absolute(path)){current/=part;DWORD a=GetFileAttributesW(current.c_str());if(a!=INVALID_FILE_ATTRIBUTES&&(a&FILE_ATTRIBUTE_REPARSE_POINT))throw std::runtime_error("Pasta redirecionada nao suportada para o servico.");}}
-std::string FileBytes(const fs::path& path){std::ifstream file(path,std::ios::binary|std::ios::ate);Require(bool(file),"Nao foi possivel ler o servico local.");auto n=file.tellg();Require(n>0&&n<2*1024*1024,"Servico local incorreto.");std::string result(static_cast<size_t>(n),'\0');file.seekg(0);file.read(result.data(),n);Require(bool(file),"Servico local incompleto.");return result;}
+std::string FileBytes(const fs::path& path){std::ifstream file(path,std::ios::binary|std::ios::ate);Require(bool(file),"Nao foi possivel ler o servico local.");auto n=file.tellg();Require(n>0&&n<32*1024*1024,"Servico local incorreto.");std::string result(static_cast<size_t>(n),'\0');file.seekg(0);file.read(result.data(),n);Require(bool(file),"Servico local incompleto.");return result;}
 void ReadBounded(HANDLE pipe,HANDLE process,void* buffer,DWORD length,ULONGLONG deadline){
     auto* out=static_cast<unsigned char*>(buffer);DWORD done=0;
     while(done<length){DWORD available=0;
@@ -38,7 +38,10 @@ fs::path Backend::Executable(){
     if(!MoveFileExW(temporary.c_str(),executable.c_str(),MOVEFILE_WRITE_THROUGH)){DeleteFileW(temporary.c_str());throw std::runtime_error("Nao foi possivel concluir a instalacao do servico.");}return executable;
 }
 Snapshot Backend::Call(const Request& request){
-    auto executable=Executable();std::string input=EncodeRequest(request);
+    auto executable=Executable();wchar_t self[32768]{};GetModuleFileNameW(nullptr,self,32768);Request actual=request;
+    if(actual.command=="team_package"&&actual.args.size()==2)actual.args.push_back(fs::path(self).u8string());
+    if(actual.command=="authorize_package"&&actual.args.size()==4)actual.args.push_back(fs::path(self).u8string());
+    std::string input=EncodeRequest(actual);
     SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES),nullptr,TRUE};Handle readInput,writeInput,readOutput,writeOutput,errors;
     Require(CreatePipe(&readInput.value,&writeInput.value,&security,131080)&&CreatePipe(&readOutput.value,&writeOutput.value,&security,0),"Nao foi possivel abrir o canal local.");
     Require(SetHandleInformation(writeInput.value,HANDLE_FLAG_INHERIT,0)&&SetHandleInformation(readOutput.value,HANDLE_FLAG_INHERIT,0),"Falha ao proteger o canal local.");
@@ -51,6 +54,8 @@ Snapshot Backend::Call(const Request& request){
     HANDLE inherited[]={readInput.value,writeOutput.value,errors.value};
     BOOL updated=UpdateProcThreadAttribute(startup.lpAttributeList,0,PROC_THREAD_ATTRIBUTE_HANDLE_LIST,inherited,sizeof(inherited),nullptr,nullptr);
     std::wstring command=L"\""+executable.wstring()+L"\" --data \""+root_.wstring()+L"\"";PROCESS_INFORMATION process{};
+    auto authorization=fs::path(self).parent_path()/L"autorizacao.zb2issuer";
+    if(fs::exists(authorization))command+=L" --authorization \""+authorization.wstring()+L"\"";
     BOOL launched=updated&&CreateProcessW(executable.c_str(),command.data(),nullptr,nullptr,TRUE,CREATE_NO_WINDOW|EXTENDED_STARTUPINFO_PRESENT,nullptr,executable.parent_path().c_str(),&startup.StartupInfo,&process);
     DeleteProcThreadAttributeList(startup.lpAttributeList);Require(launched,"Nao foi possivel iniciar o servico do Admin.");
     Handle child,thread;child.value=process.hProcess;thread.value=process.hThread;

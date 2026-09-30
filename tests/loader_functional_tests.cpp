@@ -11,6 +11,18 @@ std::string Read(const fs::path& path){std::ifstream in(path,std::ios::binary);r
 int wmain(int argc,wchar_t** argv){
     try{
         if(argc>1 && std::wstring(argv[1])==L"device"){std::cout<<License::DeviceId();return 0;}
+        if(argc==6 && std::wstring(argv[1])==L"import-package"){
+            std::wstring wide=argv[4];std::string device;for(wchar_t ch:wide){if(ch>127)return 2;device+=static_cast<char>(ch);}
+            auto stored=LoaderServices::ReadState(argv[2]);std::string warning;auto now=std::stoll(argv[5]);
+            LoaderServices::ImportPackageLicense(argv[3],argv[2],device,now,LoaderServices::PublicKey(),stored,warning);
+            auto result=License::Validate(stored.token,device,now,LoaderServices::PublicKey());std::cout<<result.expires;return result.valid?0:2;
+        }
+        if(argc==5 && std::wstring(argv[1])==L"adjacent"){
+            std::wstring wide=argv[3];std::string device;for(wchar_t ch:wide){if(ch>127)return 2;device+=static_cast<char>(ch);}
+            auto token=LoaderServices::AdjacentLicense(std::filesystem::path(argv[2]));
+            auto result=License::Validate(token,device,std::stoll(argv[4]),LoaderServices::PublicKey());
+            std::cout<<(result.valid?"VALID":result.error);return result.valid?0:2;
+        }
         if(argc==5 && std::wstring(argv[1])==L"validate"){
             auto token=Read(argv[2]);while(!token.empty()&&(token.back()=='\r'||token.back()=='\n'))token.pop_back();
             const std::wstring wideDevice=argv[3];std::string device;

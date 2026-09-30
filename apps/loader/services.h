@@ -21,4 +21,6 @@ void PrepareReadiness(const Process& game,const std::filesystem::path& runtime);
 bool SceneReady(const Process& game);
 bool ReadAuto(const std::filesystem::path& root);
 void SaveAuto(const std::filesystem::path& root,bool enabled);
+std::string AdjacentLicense(const std::filesystem::path& executable);
+bool ImportPackageLicense(const std::filesystem::path& executable,const std::filesystem::path& root,const std::string& device,int64_t now,const std::vector<unsigned char>& key,Stored& stored,std::string& warning);
 }
