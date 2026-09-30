@@ -404,9 +404,11 @@ static void PauseExit(bool nowait) {
 
 int main(int argc, char** argv) {
     bool nowait = false;
+    bool readinessProbe = false;
     DWORD requestedPid = 0;
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "--nowait") == 0 || strcmp(argv[i], "-n") == 0) nowait = true;
+        else if(strcmp(argv[i],"--readiness-probe")==0)readinessProbe=true;
         else if (strcmp(argv[i], "--pid") == 0) {
             if (++i >= argc) return 6;
             const char* end = argv[i] + strlen(argv[i]);
@@ -432,6 +434,7 @@ int main(int argc, char** argv) {
     Cfg cfg;
     LoadConfig(cfg);
     if (requestedPid) { cfg.retry = 1; cfg.bootstrapDelay = 0; cfg.timeout = 0; }
+    if(readinessProbe){if(!requestedPid)return 6;wcscpy_s(cfg.dll,L"ZB2.Readiness.dll");}
     char procA[64] = { 0 }, dllA[MAX_PATH] = { 0 };
     WideCharToMultiByte(CP_ACP, 0, cfg.process, -1, procA, sizeof(procA), nullptr, nullptr);
     WideCharToMultiByte(CP_ACP, 0, cfg.dll, -1, dllA, sizeof(dllA), nullptr, nullptr);

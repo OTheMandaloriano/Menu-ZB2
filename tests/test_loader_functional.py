@@ -76,7 +76,7 @@ class LoaderTests(unittest.TestCase):
         first=self.call('install',self.root)
         self.assertEqual(first.returncode,0,first.stderr)
         path=Path(first.stdout)
-        self.assertEqual(len(list(path.iterdir())),6)
+        self.assertEqual(len(list(path.iterdir())),7)
         self.assertEqual(self.call('install',self.root).returncode,0)
         with (path/'config.ini').open('ab') as stream:
             stream.write(b'\ntampered')

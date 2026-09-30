@@ -12,7 +12,7 @@ emissores recebem EQUIPE.zip e seguem o [guia da equipe](ADMIN.md).
 2. O proprietário emite a licença para esse ID e define o número de dias.
 3. Usar **Abrir arquivo** para selecionar a licença recebida e clicar em **Ativar**.
 4. Abrir o jogo compatível e entrar no mapa.
-5. Marcar **No mapa** e clicar em **Carregar menu**. Após a confirmação, usar INSERT.
+5. Deixar AUTO-INJECT ativado para carregar quando a cena estiver pronta, ou usar **Injetar agora**. Depois, usar INSERT.
 
 O programa não solicita administrador automaticamente, não instala driver,
 não altera o antivírus e não faz conexão com servidores. Atualizações são
@@ -56,12 +56,12 @@ versionados; não é necessário baixar fontes durante o build. O script opciona
 `prepare_loader_assets.py` exige fontTools 4.60.1 e registra proveniência SHA-256.
 
 ```powershell
-python scripts/build_loader.py --runtime "D:/Projeto/ZB2 Menu/build/Release_x64" --runtime-commit 21759653045fed481d11e6ccd02122ad558250e7 --version 1.1-local --key D:/ZB2-Retomada/loader-private/issuer-owner.dpapi --public packaging/loader-public-key.json --tests
+python scripts/build_loader.py --runtime "D:/Projeto/ZB2 Menu/build/Release_x64" --runtime-commit 21759653045fed481d11e6ccd02122ad558250e7 --version 1.3-local --key D:/ZB2-Retomada/loader-private/issuer-owner.dpapi --public packaging/loader-public-key.json --tests
 ```
 
 O helper é recompilado dos fontes atuais. Os três DLLs são copiados sem alteração
 do runtime selecionado. `runtime_commit` identifica a origem dessas DLLs; não
-substitui o SHA-256 individual de cada entrada. O manifesto lista os seis arquivos
+substitui o SHA-256 individual de cada entrada. O manifesto lista os sete arquivos
 permitidos, tamanho e hash e recebe assinatura ECDSA. Cada arquivo é comprimido
 com MSZIP e embutido em recursos PE. Assinaturas ECDSA e timestamps do compilador
 podem tornar dois binários diferentes: não se promete reprodutibilidade bit a bit.
@@ -69,6 +69,8 @@ podem tornar dois binários diferentes: não se promete reprodutibilidade bit a 
 `build/loader/build-metadata.json` registra hashes do executável, da chave pública
 e de todas as entradas. `build/loader/build.log` guarda a compilação. Fontes,
 símbolos, ferramentas de teste e credenciais não são copiados para dist.
+
+O AUTO-INJECT e seus limites estão documentados em [AUTO_INJECT.md](AUTO_INJECT.md).
 
 ## Instalação e recuperação
 
@@ -109,7 +111,7 @@ entradas excessivas/truncadas, DPAPI, rollback, instalação repetida, corrupç�
 arquivos e recursos PE e bloqueio de redirecionamento. Não usa o jogo.
 
 O segundo renderiza os estados reais do ImGui a 100%, 150% e 200% e testa cliques
-sintéticos, confirmação de mapa, mudança de PID, ativação e fechamento. Os cliques
+sintéticos, toggle AUTO-INJECT, acionamento manual, ativação e fechamento. Os cliques
 são do contexto de teste; não controlam a tela, mouse ou teclado do usuário.
 
 A validação final em partida, DPI entre monitores reais e um segundo PC sem ambiente

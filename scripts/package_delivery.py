@@ -18,7 +18,8 @@ Voce recebe este pacote e um arquivo .zb2license separado.
 1. Extraia esta pasta e abra ZB2Menu.exe.
 2. Clique em Copiar ID e envie o ID completo a equipe.
 3. Quando receber a licenca, use Abrir arquivo e clique em Ativar.
-4. Abra o jogo, entre no mapa e confirme no loader antes de carregar.
+4. Abra o jogo e entre na partida. AUTO-INJECT aguarda a cena ficar pronta.
+   Para acionar manualmente, desligue o toggle e use Injetar agora.
 5. No jogo, use INSERT para abrir o menu.
 
 O cliente nao precisa do ZB2 Admin, de uma solicitacao .zb2station ou de uma

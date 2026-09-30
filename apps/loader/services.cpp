@@ -1,4 +1,5 @@
 #include "services.h"
+#include "readiness_protocol.h"
 #include <Windows.h>
 #include <TlHelp32.h>
 #include <ShlObj.h>
@@ -18,7 +19,7 @@ struct Handle {
     ~Handle(){if(value && value!=INVALID_HANDLE_VALUE)CloseHandle(value);}
     Handle(const Handle&)=delete;Handle& operator=(const Handle&)=delete;
 };
-constexpr const char* names[]={"injector.exe","config.ini","kiero-dx11-base.dll","Zb2.AimBridge.dll","0Harmony.dll","Harmony.LICENSE"};
+constexpr const char* names[]={"injector.exe","config.ini","kiero-dx11-base.dll","Zb2.AimBridge.dll","0Harmony.dll","Harmony.LICENSE","ZB2.Readiness.dll"};
 struct File { std::string name,hash;size_t size=0; };
 struct Bundle {std::string version;std::vector<File> files;};
 void Require(bool value,const char* message){if(!value)throw std::runtime_error(message);}
@@ -81,12 +82,12 @@ std::string Transform(const std::string& value,bool decrypt) {
     Require(ok,u8"Estado local ilegível. A licença pertence a outro usuário ou o arquivo está danificado.");
     std::string result(reinterpret_cast<char*>(output.pbData),output.cbData);LocalFree(output.pbData);return result;
 }
-bool HasModule(DWORD pid) {
+bool HasModule(DWORD pid,const wchar_t* name=L"kiero-dx11-base.dll") {
     Handle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPMODULE|TH32CS_SNAPMODULE32,pid));
     Require(snapshot.value!=INVALID_HANDLE_VALUE,u8"Não foi possível verificar os módulos do jogo. Confira as permissões.");
     MODULEENTRY32W entry{};entry.dwSize=sizeof(entry);
     Require(Module32FirstW(snapshot.value,&entry),u8"Jogo encerrou durante a verificação. Abra-o novamente.");
-    do{if(_wcsicmp(entry.szModule,L"kiero-dx11-base.dll")==0)return true;}while(Module32NextW(snapshot.value,&entry));
+    do{if(_wcsicmp(entry.szModule,name)==0)return true;}while(Module32NextW(snapshot.value,&entry));
     return false;
 }
 }
@@ -122,6 +123,8 @@ void SaveState(const fs::path& root,const Stored& value) {
     }
 }
 void CheckClock(const Stored& state,int64_t now) {Require(now>=state.lastSeen-120,u8"Relógio retrocedeu. Corrija a data do Windows antes de continuar.");}
+bool ReadAuto(const fs::path& root){auto file=root/L"auto-inject.txt";if(!fs::exists(file))return true;return ReadFile(file,8)=="1";}
+void SaveAuto(const fs::path& root,bool enabled){CheckPath(root);fs::create_directories(root);auto file=root/L"auto-inject.txt",temporary=root/(L"auto-"+std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(GetTickCount64())+L".tmp");WriteNew(temporary,enabled?"1":"0");if(!MoveFileExW(temporary.c_str(),file.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)){DeleteFileW(temporary.c_str());throw std::runtime_error("Falha ao salvar AUTO-INJECT.");}}
 Process FindGame() {
     Process result;Handle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0));
     Require(snapshot.value!=INVALID_HANDLE_VALUE,"Falha ao consultar processos.");
@@ -134,7 +137,9 @@ Process FindGame() {
         Require(process.value!=nullptr,u8"Jogo sem acesso de leitura. Confira as permissões.");
         wchar_t path[32768]{};DWORD length=32768;
         Require(QueryFullProcessImageNameW(process.value,0,path,&length),"Caminho do jogo indisponivel.");
-        result.pid=entry.th32ProcessID;result.executable=path;result.loaded=HasModule(result.pid);
+        FILETIME started{},ended{},kernel{},user{};Require(GetProcessTimes(process.value,&started,&ended,&kernel,&user),"Identidade do processo indisponivel.");
+        result.pid=entry.th32ProcessID;result.created=ReadyProtocol::FileTime(started);result.executable=path;result.loaded=HasModule(result.pid);
+        result.probeLoaded=HasModule(result.pid,L"ZB2.Readiness.dll");result.monoLoaded=HasModule(result.pid,L"mono-2.0-bdwgc.dll");
     }while(Process32NextW(snapshot.value,&entry));return result;
 }
 std::string BundleVersion(){return ParseBundle().version;}
@@ -167,15 +172,18 @@ fs::path InstallBundle(const fs::path& root) {
     }
     return directory;
 }
-void LoadRuntime(const Process& game,const fs::path& runtime) {
+static void LaunchHelper(const Process& game,const fs::path& runtime,bool probe) {
     Require(game.pid!=0 && !game.loaded,"Jogo ausente ou menu ja carregado.");
     Handle target(OpenProcess(SYNCHRONIZE|PROCESS_QUERY_LIMITED_INFORMATION,FALSE,game.pid));
     Require(target.value!=nullptr && WaitForSingleObject(target.value,0)==WAIT_TIMEOUT,"Jogo encerrou. Abra-o novamente.");
-    auto current=FindGame();Require(current.pid==game.pid && current.executable==game.executable && !current.loaded,"O processo mudou. Confira o jogo e tente novamente.");
+    auto current=FindGame();Require(current.pid==game.pid && current.created==game.created && current.executable==game.executable && !current.loaded,"O processo mudou. Confira o jogo e tente novamente.");
+    if(probe)Require(!current.probeLoaded,"Sonda ja carregada neste processo.");
+    else Require(SceneReady(current),"A cena ainda nao esta pronta. Aguarde a partida carregar.");
     auto assembly=ReadFile(game.executable.parent_path()/L"ZumbiBlocks2_Data"/L"Managed"/L"Assembly-CSharp.dll",64*1024*1024);
     Require(License::Sha256(assembly.data(),assembly.size())=="c41a298975d35f0dad0a05531bce6e0b6e274d0ddf265217d65ce3ac5cbc84e1",u8"Versão do jogo incompatível. Atualize o menu antes de carregar.");
     auto executable=runtime/L"injector.exe";
     std::wstring command=L"\""+executable.wstring()+L"\" --nowait --pid "+std::to_wstring(game.pid);
+    if(probe)command+=L" --readiness-probe";
     STARTUPINFOW startup{};startup.cb=sizeof(startup);PROCESS_INFORMATION process{};
     SECURITY_ATTRIBUTES attributes{sizeof(SECURITY_ATTRIBUTES),nullptr,TRUE};
     auto logPath=runtime.parent_path().parent_path()/L"last-load.log";CheckPath(logPath);
@@ -188,6 +196,15 @@ void LoadRuntime(const Process& game,const fs::path& runtime) {
     DWORD wait=WaitForSingleObject(helper.value,45000),exit=1;
     Require(wait==WAIT_OBJECT_0,"Carregamento sem resposta. Nao tente novamente nesta sessao; reinicie o jogo.");
     Require(GetExitCodeProcess(helper.value,&exit) && exit==0,"Carregamento falhou. Consulte o log do carregador; reinicie o jogo antes de tentar novamente.");
-    Require(WaitForSingleObject(target.value,0)==WAIT_TIMEOUT && HasModule(game.pid),"O modulo nao foi confirmado no jogo. Reinicie o jogo e confira o log.");
+    Require(WaitForSingleObject(target.value,0)==WAIT_TIMEOUT && HasModule(game.pid,probe?L"ZB2.Readiness.dll":L"kiero-dx11-base.dll"),"O modulo nao foi confirmado no jogo. Reinicie o jogo e confira o log.");
+}
+void LoadRuntime(const Process& game,const fs::path& runtime){LaunchHelper(game,runtime,false);}
+void PrepareReadiness(const Process& game,const fs::path& runtime){LaunchHelper(game,runtime,true);}
+bool SceneReady(const Process& game){
+    wchar_t name[96]{};swprintf_s(name,L"Local\\ZB2.Ready.%lu",game.pid);Handle mapping(OpenFileMappingW(FILE_MAP_READ,FALSE,name));if(!mapping.value)return false;
+    auto* shared=static_cast<const ReadyProtocol::State*>(MapViewOfFile(mapping.value,FILE_MAP_READ,0,0,sizeof(ReadyProtocol::State)));if(!shared)return false;
+    bool ready=false;
+    for(int attempt=0;attempt<3;++attempt){LONG before=shared->sequence;if(before&1)continue;MemoryBarrier();ReadyProtocol::State state{};memcpy(&state,shared,sizeof(state));MemoryBarrier();if(before==shared->sequence){ready=ReadyProtocol::Ready(state,game.pid,game.created,GetTickCount64());break;}}
+    UnmapViewOfFile(shared);return ready;
 }
 }

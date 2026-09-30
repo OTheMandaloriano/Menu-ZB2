@@ -83,11 +83,12 @@ def main():
             raise SystemExit(result.returncode)
     flags = ['/nologo','/std:c++17','/EHsc','/O2','/MT','/MP4','/W4','/WX','/utf-8','/DUNICODE','/D_UNICODE','/DNOMINMAX']
     run([cl, *flags, str(ROOT/'injector/injector.cpp'), '/Fe:injector.exe', '/link', 'advapi32.lib','shell32.lib','ole32.lib'])
+    run([cl,*flags,'/LD',str(ROOT/'apps/loader/readiness_probe.cpp'),'/Fe:ZB2.Readiness.dll'])
     names = json.loads((ROOT/'packaging/runtime-files.json').read_text())['files']
     records = []
     resources = []
     for index, name in enumerate(names):
-        path = out/name if name == 'injector.exe' else args.runtime/name
+        path = out/name if name in ('injector.exe','ZB2.Readiness.dll') else args.runtime/name
         if path.is_symlink() or not path.is_file() or path.stat().st_size > 64*1024*1024:
             parser.error('Invalid runtime file: '+name)
         data = path.read_bytes()
@@ -120,7 +121,7 @@ def main():
     resources.append('206 RCDATA "Lexend-Regular.ttf"')
     (out/'loader.rc').write_text('\n'.join(resources)+'\n', encoding='ascii')
     run([shutil.which('rc.exe',path=env['PATH']),'/nologo','/fo','loader.res','loader.rc'])
-    core = ['license','services','controller','ui']
+    core = ['license','services','controller','ui','readiness']
     sources = [str(ROOT/'apps/loader'/f'{name}.cpp') for name in core]
     sources += [str(ROOT/'apps/shared'/f'{name}.cpp') for name in ['theme','widgets','resources']]
     imgui = [str(ROOT/'imgui'/f'{name}.cpp') for name in ['imgui','imgui_draw','imgui_tables','imgui_widgets']]
@@ -129,6 +130,7 @@ def main():
          str(ROOT/'imgui/imgui_impl_win32.cpp'),str(ROOT/'imgui/imgui_impl_dx11.cpp'),'loader.res','/Fe:ZB2Menu.exe',
          '/link','/SUBSYSTEM:WINDOWS',*libraries,'dwmapi.lib','d3d11.lib','d3dcompiler.lib'])
     if args.tests:
+        run([cl,*flags,str(ROOT/'tests/auto_inject_tests.cpp'),str(ROOT/'apps/loader/readiness.cpp'),'/Fe:auto-inject-tests.exe','/link','shell32.lib','ole32.lib'])
         run([cl,*flags,*sources,*imgui,str(ROOT/'tests/loader_functional_tests.cpp'),'loader.res',
              '/Fe:loader-tests.exe','/link',*libraries])
     dist = ROOT/'dist/loader'

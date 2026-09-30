@@ -29,7 +29,8 @@ A cópia protegida para esse usuário fica em
 O prazo começa quando a licença é gerada. Gerar novamente cria outra licença;
 não cancela automaticamente a anterior. O histórico permite buscar pelo nome,
 ID do computador ou integrante e copiar/salvar uma emissão anterior.
-“Válida” informa a validade por data; não significa que o cliente já ativou.
+O badge “Ativa” informa a validade por data; não significa que o cliente já ativou.
+Cada linha permite copiar a licença diretamente e mostra datas com dígitos de largura fixa.
 
 ## Autorizar um integrante que usa outro PC
 

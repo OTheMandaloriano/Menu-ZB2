@@ -29,7 +29,7 @@ LRESULT CALLBACK WindowProc(HWND window,UINT message,WPARAM w,LPARAM l){
     case WM_NCHITTEST:{
         POINT point={GET_X_LPARAM(l),GET_Y_LPARAM(l)};ScreenToClient(window,&point);
         float dpi=GetDpiForWindow(window)/96.f;
-        if(point.y>=0 && point.y<56*dpi && point.x<300*dpi)return HTCAPTION;
+        if(point.y>=0 && point.y<48*dpi && point.x<344*dpi)return HTCAPTION;
         break;
     }
     case WM_DESTROY:PostQuitMessage(0);return 0;
@@ -62,6 +62,7 @@ int RunLoaderWindow(HINSTANCE instance,int show){
         ImGui_ImplDX11_NewFrame();ImGui_ImplWin32_NewFrame();ImGui::NewFrame();DrawLoader(state);ImGui::Render();
         if(state.activate){controller.Activate(state.license);state.activate=false;}
         if(state.load){controller.Load();state.load=false;}
+        if(state.autoChanged){controller.SetAutoInject(state.autoValue);state.autoChanged=false;}
         if(state.retry){controller.Retry();state.retry=false;}
         if(state.importLicense){
             state.importLicense=false;wchar_t path[32768]{};OPENFILENAMEW dialog{};dialog.lStructSize=sizeof(dialog);dialog.hwndOwner=window;

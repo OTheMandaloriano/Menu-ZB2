@@ -23,7 +23,10 @@ Snapshot DecodeResponse(const std::string& response){
         if(type=="OK"&&fields.size()==1){ok=true;model.notice=fields[0];}
         else if(type=="S"&&fields.size()==8){model.role=fields[0];model.name=fields[1];model.stationId=fields[2];model.maxDays=Number(fields[3]);model.problem=fields[4];model.grantExpiry=fields[5];model.user=fields[6];model.hasKey=fields[7]=="1";state=true;}
         else if(type=="N"&&fields.size()==2){model.total=Number(fields[0]);model.matched=Number(fields[1]);}
-        else if(type=="L"&&fields.size()==8)model.licenses.push_back({fields[0],fields[1],fields[2],fields[3],fields[4],fields[5],fields[6],fields[7]});
+        else if(type=="L"&&(fields.size()==8||fields.size()==9)){
+            model.licenses.push_back({fields[0],fields[1],fields[2],fields[3],fields[4],fields[5],fields[6],fields[7]});
+            if(fields.size()==9){auto& value=model.licenses.back().expires;auto parsed=std::from_chars(fields[8].data(),fields[8].data()+fields[8].size(),value);if(parsed.ec!=std::errc()||parsed.ptr!=fields[8].data()+fields[8].size()||value<=0)throw std::runtime_error("Data de validade incorreta.");}
+        }
         else if(type=="G"&&fields.size()==5)model.grants.push_back({fields[0],fields[1],fields[2],fields[3],fields[4]});
         else if(type=="X"&&fields.size()==2){model.output=fields[0];model.filename=fields[1];}
         else if(type=="R"&&fields.size()==3){model.requestName=fields[0];model.requestId=fields[1];model.requestText=fields[2];}

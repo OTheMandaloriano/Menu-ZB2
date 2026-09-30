@@ -80,7 +80,7 @@ namespace Zb2Admin
             Row(output,"S",store.Current.Role,store.Current.Name,store.Current.Id,maxDays.ToString(CultureInfo.InvariantCulture),problem,grantExpiry,Environment.UserName,String.IsNullOrEmpty(store.Current.ProtectedKey)?"0":"1");
             IEnumerable<LicenseRecord> filtered=history.Where(record=>(record.Customer+" "+record.Device+" "+record.Operator).IndexOf(query,StringComparison.OrdinalIgnoreCase)>=0);
             Row(output,"N",history.Count.ToString(CultureInfo.InvariantCulture),filtered.Count().ToString(CultureInfo.InvariantCulture));
-            foreach(LicenseRecord record in filtered.Take(100))Row(output,"L",record.Id,record.Customer,record.Device,record.Operator,record.Token,record.DateText,record.Days.ToString(CultureInfo.InvariantCulture),record.Status);
+            foreach(LicenseRecord record in filtered.Take(100))Row(output,"L",record.Id,record.Customer,record.Device,record.Operator,record.Token,record.DateText,record.Days.ToString(CultureInfo.InvariantCulture),record.Status,record.Expires.ToString(CultureInfo.InvariantCulture));
             foreach(Grant entry in grants.Take(100))Row(output,"G",entry.Id,entry.Name,entry.DateText,entry.MaxDays.ToString(CultureInfo.InvariantCulture),entry.Token);
             output.Append(extra);return output.ToString();
         }

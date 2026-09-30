@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 namespace LoaderServices {
-struct Process { unsigned long pid=0; bool loaded=false; std::filesystem::path executable; };
+struct Process { unsigned long pid=0; bool loaded=false,probeLoaded=false,monoLoaded=false; uint64_t created=0; std::filesystem::path executable; };
 struct Stored { std::string token; int64_t lastSeen=0; };
 std::string Resource(int id);
 std::vector<unsigned char> PublicKey();
@@ -17,4 +17,8 @@ std::string BundleVersion();
 void VerifyBundle();
 std::filesystem::path InstallBundle(const std::filesystem::path& root);
 void LoadRuntime(const Process& game,const std::filesystem::path& runtime);
+void PrepareReadiness(const Process& game,const std::filesystem::path& runtime);
+bool SceneReady(const Process& game);
+bool ReadAuto(const std::filesystem::path& root);
+void SaveAuto(const std::filesystem::path& root,bool enabled);
 }

@@ -1,8 +1,9 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <cstdint>
 namespace Admin {
-struct LicenseRow {std::string id,customer,device,issuer,token,expiry,days,status;};
+struct LicenseRow {std::string id,customer,device,issuer,token,expiry,days,status;int64_t expires=0;};
 struct GrantRow {std::string id,name,expiry,days,token;};
 struct Snapshot {
     bool busy=true,initialized=false,hasKey=false,error=false;

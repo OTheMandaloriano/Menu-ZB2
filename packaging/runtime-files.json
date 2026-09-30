@@ -6,6 +6,7 @@
     "kiero-dx11-base.dll",
     "Zb2.AimBridge.dll",
     "0Harmony.dll",
-    "Harmony.LICENSE"
+    "Harmony.LICENSE",
+    "ZB2.Readiness.dll"
   ]
 }

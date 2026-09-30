@@ -28,7 +28,7 @@ void Text(float x,float y,float width,float height,const char* content,ImU32 col
     ImGui::GetWindowDrawList()->AddText(face,face->FontSize,ImVec2(IM_ROUND(left),IM_ROUND(top)),Alpha(color),content);
 }
 bool ReducedMotion(){BOOL animated=TRUE;SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION,0,&animated,0);return !animated;}
-bool Button(float x,float y,float width,float height,const char* label,bool quiet,bool selected){
+bool Button(float x,float y,float width,float height,const char* label,bool quiet,bool selected,const char* icon){
     ImGui::SetCursorPos(P(x,y));ImGui::PushFont(regular);ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize,0);
     ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(0,0,0,0));
     ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0,0,0,0));ImGui::PushStyleColor(ImGuiCol_ButtonHovered,ImVec4(0,0,0,0));ImGui::PushStyleColor(ImGuiCol_ButtonActive,ImVec4(0,0,0,0));
@@ -38,19 +38,56 @@ bool Button(float x,float y,float width,float height,const char* label,bool quie
     float target=selected?1.f:hot?.6f:0.f;
     static const bool reduced=ReducedMotion();
     fade=reduced?target:ImLerp(fade,target,1.f-std::exp(-ImGui::GetIO().DeltaTime/.04f));storage->SetFloat(id,fade);
+    const bool primary=!quiet&&selected;const float scale=primary&&pressed&&!disabled?.98f:1.f;
     ImU32 fill=quiet?IM_COL32(47,47,52,static_cast<int>(fade*180)):IM_COL32(static_cast<int>(34+fade*15),static_cast<int>(34+fade*15),static_cast<int>(38+fade*17),255);
-    if(pressed&&!disabled)fill=IM_COL32(62,62,68,255);
-    ImGui::GetWindowDrawList()->AddRectFilled(P(x,y),P(x+width,y+height),Alpha(fill),5*uiScale);
-    Text(x,y,width,height,label,disabled?IM_COL32(108,111,120,255):selected||!quiet?text:muted,regular,1);
+    if(primary)fill=pressed?IM_COL32(29,78,190,255):hot?IM_COL32(48,111,246,255):IM_COL32(37,99,235,255);
+    else if(pressed&&!disabled)fill=IM_COL32(62,62,68,255);
+    auto a=P(x+width*(1-scale)*.5f,y+height*(1-scale)*.5f),b=P(x+width*(1+scale)*.5f,y+height*(1+scale)*.5f);
+    auto* draw=ImGui::GetWindowDrawList();draw->AddRectFilled(a,b,Alpha(fill),5*uiScale);
+    if(!quiet&&!primary)draw->AddRect(a,b,Alpha(IM_COL32(255,255,255,20)),5*uiScale,0,uiScale);
+    const auto color=primary?IM_COL32(255,255,255,255):disabled?IM_COL32(140,145,154,255):selected||!quiet?text:muted;
+    float textWidth=regular->CalcTextSizeA(regular->FontSize,10000,0,label).x;
+    float iconWidth=icon?16*uiScale:0, gap=icon?8*uiScale:0;
+    const auto labelInk=Measure(regular,label);float left=(x+width*.5f)*uiScale-(textWidth+iconWidth+gap)*scale*.5f;
+    auto emit=[&](const char* content,float at,float boxWidth){auto ink=Measure(regular,content);float px=at+(boxWidth-(ink.right-ink.left)*scale)*.5f-ink.left*scale;float py=(y+height*.5f)*uiScale-(ink.top+ink.bottom)*scale*.5f;draw->AddText(regular,regular->FontSize*scale,ImVec2(IM_ROUND(px),IM_ROUND(py)),Alpha(color),content);};
+    if(icon){emit(icon,left,iconWidth*scale);left+=(iconWidth+gap)*scale;}
+    (void)labelInk;emit(label,left,textWidth*scale);
     if(ImGui::IsItemFocused()&&ImGui::GetIO().NavVisible)ImGui::GetWindowDrawList()->AddRect(P(x+2,y+2),P(x+width-2,y+height-2),Alpha(IM_COL32(170,180,200,255)),4*uiScale);
     ImGui::PopStyleColor(4);ImGui::PopStyleVar();ImGui::PopFont();return clicked;
 }
-bool Input(float x,float y,float width,float height,const char* id,const char* hint,char* buffer,int capacity,ImGuiInputTextFlags flags){
+bool Input(float x,float y,float width,float height,const char* id,const char* hint,char* buffer,int capacity,ImGuiInputTextFlags flags,const char* icon){
     ImGui::SetCursorPos(P(x,y));ImGui::PushFont(regular);auto ink=Measure(regular,"Ag");
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,ImVec2(12*uiScale,height*.5f*uiScale-(ink.top+ink.bottom)*.5f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,ImVec2((icon?36:12)*uiScale,height*.5f*uiScale-(ink.top+ink.bottom)*.5f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize,1*uiScale);
     bool result=ImGui::InputTextEx(id,hint,buffer,capacity,P(width,height),flags);
-    ImGui::PopStyleVar(2);ImGui::PopFont();return result;
+    ImGui::PopStyleVar(2);ImGui::PopFont();if(icon)Text(x+12,y,16,height,icon,muted,regular,1);return result;
+}
+bool Toggle(float x,float y,float width,const char* label,bool& enabled){
+    ImGui::SetCursorPos(P(x,y));bool changed=ImGui::InvisibleButton(label,P(width,32));if(changed)enabled=!enabled;
+    Text(x,y,width-112,32,label,text,regular);
+    Text(x+width-124,y,68,32,enabled?"ATIVADO":"DESLIGADO",enabled?IM_COL32(110,210,170,255):muted,caption,2);
+    auto* draw=ImGui::GetWindowDrawList();const float left=x+width-48;draw->AddRectFilled(P(left,y+4),P(left+48,y+28),Alpha(enabled?IM_COL32(37,99,235,255):IM_COL32(70,73,80,255)),12*uiScale);
+    draw->AddCircleFilled(P(left+(enabled?36:12),y+16),9*uiScale,Alpha(IM_COL32(255,255,255,255)));return changed;
+}
+float TabularWidth(const char* value){float cell=0;for(char c='0';c<='9';++c)cell=std::max(cell,caption->FindGlyph(c)->AdvanceX);float width=0;for(const char* p=value;*p;++p)width+=*p>='0'&&*p<='9'?cell:caption->FindGlyph(static_cast<ImWchar>(*p))->AdvanceX;return width;}
+void Tabular(const char* value){
+    auto pos=ImGui::GetCursorScreenPos();float cell=0;for(char c='0';c<='9';++c)cell=std::max(cell,caption->FindGlyph(c)->AdvanceX);
+    for(const char* p=value;*p;++p){char one[2]={*p,0};auto glyph=caption->FindGlyph(static_cast<ImWchar>(*p));float advance=*p>='0'&&*p<='9'?cell:glyph->AdvanceX;ImGui::GetWindowDrawList()->AddText(caption,caption->FontSize,ImVec2(pos.x+(advance-glyph->AdvanceX)*.5f,pos.y),ImGui::GetColorU32(ImGuiCol_Text),one);pos.x+=advance;}
+    ImGui::Dummy(ImVec2(TabularWidth(value),caption->FontSize));
+}
+void Badge(const char* label,bool active){
+    auto at=ImGui::GetCursorScreenPos();float width=caption->CalcTextSizeA(caption->FontSize,10000,0,label).x+26*uiScale,height=24*uiScale;
+    auto* draw=ImGui::GetWindowDrawList();auto foreground=active?IM_COL32(124,222,169,255):IM_COL32(235,158,149,255);
+    draw->AddRectFilled(at,ImVec2(at.x+width,at.y+height),Alpha(active?IM_COL32(20,58,44,255):IM_COL32(63,34,35,255)),12*uiScale);
+    draw->AddCircleFilled(ImVec2(at.x+10*uiScale,at.y+height*.5f),2.5f*uiScale,Alpha(foreground));auto ink=Measure(caption,label);
+    draw->AddText(caption,caption->FontSize,ImVec2(at.x+18*uiScale,at.y+height*.5f-(ink.top+ink.bottom)*.5f),Alpha(foreground),label);
+    ImGui::Dummy(ImVec2(width,height));
+}
+bool RowCopy(const char* icon){
+    auto at=ImGui::GetCursorScreenPos();ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(.15f,.15f,.17f,1));ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,P(6,4));ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(0,0,0,0));
+    bool clicked=ImGui::Button("##copy",P(62,24));ImGui::PopStyleColor(2);ImGui::PopStyleVar();
+    auto* draw=ImGui::GetWindowDrawList();auto ink=Measure(regular,icon);draw->AddText(regular,regular->FontSize,ImVec2(at.x+7*uiScale,at.y+12*uiScale-(ink.top+ink.bottom)*.5f),Alpha(text),icon);
+    ink=Measure(caption,"Copiar");draw->AddText(caption,caption->FontSize,ImVec2(at.x+27*uiScale,at.y+12*uiScale-(ink.top+ink.bottom)*.5f),Alpha(text),"Copiar");return clicked;
 }
 void Hint(const char* content){if(ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))ImGui::SetTooltip("%s",content);}
 void Panel(float x,float y,float width,float height){auto* draw=ImGui::GetWindowDrawList();draw->AddRectFilled(P(x,y),P(x+width,y+height),Alpha(IM_COL32(31,31,35,255)),6*uiScale);draw->AddRect(P(x,y),P(x+width,y+height),Alpha(IM_COL32(47,47,52,255)),6*uiScale);}
