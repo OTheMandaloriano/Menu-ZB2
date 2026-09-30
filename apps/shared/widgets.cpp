@@ -1,4 +1,5 @@
 #include "widgets.h"
+#include "brand/mark.h"
 #include "../../imgui/imgui_internal.h"
 #include <Windows.h>
 #include <algorithm>
@@ -27,6 +28,12 @@ void Text(float x,float y,float width,float height,const char* content,ImU32 col
     if(align==2)left=(x+width)*uiScale-ink.right;
     float top=(y+height*.5f)*uiScale-(ink.top+ink.bottom)*.5f;
     ImGui::GetWindowDrawList()->AddText(face,face->FontSize,ImVec2(IM_ROUND(left),IM_ROUND(top)),Alpha(color),content);
+}
+void Brand(float x,float y,const char* role){
+    Deadblock::Draw(ImGui::GetWindowDrawList(),x*uiScale,(y+2)*uiScale,32*uiScale);
+    Text(x+44,y,220,20,"DEADBLOCK",text,heading);
+    const std::string subtitle=std::string("ZB2 / ")+role;
+    Text(x+44,y+24,220,12,subtitle.c_str(),muted,caption);
 }
 bool ReducedMotion(){BOOL animated=TRUE;SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION,0,&animated,0);return forceReducedMotion||!animated;}
 void SetReducedMotion(bool enabled){forceReducedMotion=enabled;}
@@ -57,16 +64,17 @@ bool Button(float x,float y,float width,float height,const char* label,bool quie
     if(ImGui::IsItemFocused()&&ImGui::GetIO().NavVisible)ImGui::GetWindowDrawList()->AddRect(P(x+2,y+2),P(x+width-2,y+height-2),Alpha(IM_COL32(170,180,200,255)),4*uiScale);
     ImGui::PopStyleColor(4);ImGui::PopStyleVar();ImGui::PopFont();return clicked;
 }
+float ButtonWidth(const char* label,const char* icon){return regular->CalcTextSizeA(regular->FontSize,10000,0,label).x/uiScale+48.f+(icon?24.f:0.f);}
 bool Input(float x,float y,float width,float height,const char* id,const char* hint,char* buffer,int capacity,ImGuiInputTextFlags flags,const char* icon){
-    auto* draw=ImGui::GetWindowDrawList();draw->AddRectFilled(P(x,y),P(x+width,y+height),Alpha(IM_COL32(24,28,38,255)),4*uiScale);
+    auto* draw=ImGui::GetWindowDrawList();draw->AddRectFilled(P(x,y),P(x+width,y+height),Alpha(IM_COL32(25,29,40,255)),4*uiScale);
     const float gutter=icon?32.f:0.f;
     ImGui::SetCursorPos(P(x+gutter,y));ImGui::PushFont(regular);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,P(14,10));ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize,0);
     ImGui::PushStyleColor(ImGuiCol_FrameBg,ImVec4(0,0,0,0));ImGui::PushStyleColor(ImGuiCol_FrameBgHovered,ImVec4(0,0,0,0));ImGui::PushStyleColor(ImGuiCol_FrameBgActive,ImVec4(0,0,0,0));
     bool result=ImGui::InputTextEx(id,hint,buffer,capacity,P(width-gutter,height),flags);
     bool active=ImGui::IsItemActive();ImGui::PopStyleColor(3);ImGui::PopStyleVar(2);ImGui::PopFont();
-    draw->AddRect(P(x,y),P(x+width,y+height),Alpha(active?IM_COL32(90,130,210,255):IM_COL32(255,255,255,15)),4*uiScale,0,uiScale);
-    if(icon)Text(x+12,y,16,height,icon,muted,regular,1);return result;
+    draw->AddRect(P(x,y),P(x+width,y+height),Alpha(active?IM_COL32(36,97,217,153):IM_COL32(255,255,255,15)),4*uiScale,0,uiScale);
+    if(icon){auto latin=Measure(regular,"Ag");float center=10.f+(latin.top+latin.bottom)/(2*uiScale);Text(x+12,y+center-height*.5f,16,height,icon,muted,regular,1);}return result;
 }
 bool Toggle(float x,float y,float width,const char* label,bool& enabled){
     ImGui::SetCursorPos(P(x,y));bool changed=ImGui::InvisibleButton(label,P(width,32));if(changed)enabled=!enabled;
@@ -105,7 +113,7 @@ bool RowAction(const char* icon){
     return clicked;
 }
 void Hint(const char* content){if(ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))ImGui::SetTooltip("%s",content);}
-void Panel(float x,float y,float width,float height){auto* draw=ImGui::GetWindowDrawList();draw->AddRectFilled(P(x,y),P(x+width,y+height),Alpha(IM_COL32(18,21,28,255)),6*uiScale);draw->AddRect(P(x,y),P(x+width,y+height),Alpha(IM_COL32(255,255,255,15)),6*uiScale);}
+void Panel(float x,float y,float width,float height){auto* draw=ImGui::GetWindowDrawList();draw->AddRectFilled(P(x,y),P(x+width,y+height),Alpha(IM_COL32(19,22,32,255)),6*uiScale);draw->AddRect(P(x,y),P(x+width,y+height),Alpha(IM_COL32(255,255,255,18)),6*uiScale);}
 void Device(float x,float y,float width,const std::string& device){
     Panel(x,y,width,36);const auto shown=device.size()==64?"HWID: "+device.substr(0,8)+"..."+device.substr(55):std::string("HWID indisponível");
     Text(x+12,y,16,36,"\xef\x8b\x9b",muted,regular,1);

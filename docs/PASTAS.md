@@ -1,7 +1,7 @@
-# Pastas de uso
+# Pastas e envios
 
-A versão 1.6 corrige a separação entre arquivos do projeto e dados pessoais.
-Consulte [ESTRUTURA.md](ESTRUTURA.md) para os destinos atuais e critérios de limpeza.
+Guia de uso: [ADMIN.md](ADMIN.md).
 
-Documentos mantém a estação, configurações, histórico, logs e pacotes gerados.
-Executáveis, ícones e documentação ficam no projeto.
+Estrutura oficial: [ESTRUTURA.md](ESTRUTURA.md).
+
+Procedimento de atualização: [ATUALIZACOES.md](ATUALIZACOES.md).

@@ -39,6 +39,7 @@ fs::path Backend::Executable(){
 }
 Snapshot Backend::Call(const Request& request){
     auto executable=Executable();wchar_t self[32768]{};GetModuleFileNameW(nullptr,self,32768);Request actual=request;
+    if(actual.command=="team_starter"&&actual.args.size()==1)actual.args.push_back(fs::path(self).u8string());
     if(actual.command=="team_package"&&actual.args.size()==2)actual.args.push_back(fs::path(self).u8string());
     if(actual.command=="authorize_package"&&actual.args.size()==4)actual.args.push_back(fs::path(self).u8string());
     std::string input=EncodeRequest(actual);

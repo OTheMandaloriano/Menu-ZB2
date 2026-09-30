@@ -1,0 +1,14 @@
+{
+  "name": "DEADBLOCK",
+  "author": "Original geometric design for WeFagundes",
+  "format": "SVG outlines and native ImGui polygons",
+  "fonts": "Lexend Bold and Medium",
+  "sha256": {
+    "deadblock-symbol.svg": "868fc6d6b485be760bd6ae207b9112fa815503b34945b39bcd2cb80ede502998",
+    "deadblock-admin.svg": "dc6e328337a72f78eee85b0bec502d2876e729d6195370fea360056459f94a8a",
+    "deadblock-menu.svg": "40ad868fe17722d146700bb77f0b31aa738fd61449cd8805eefe3a6fe6fd4e95",
+    "deadblock-admin.png": "ded3feb20f5cfb7fe55137c544c82758f7244c166c13f1228ee518cec2e735da",
+    "deadblock-menu.png": "3f8597cf3539050176b01808dbb8e545c72b403bf242ef79fc2ab72d40683788",
+    "mark.h": "1cd05aa388f55df3001db85ab47d0e84a3644fc7a328cd6e3b9ccad5cfe19714"
+  }
+}

@@ -39,6 +39,19 @@ namespace Zb2Admin
             }
             finally {if(File.Exists(temporary))File.Delete(temporary);}
         }
+        public static void ClientStarter(string path)
+        {
+            using(Stream stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("Admin.Client"))
+            {
+                Crypto.Require(stream!=null && stream.Length<32*1024*1024,"Programa do cliente indisponível.");
+                using(MemoryStream output=new MemoryStream()){stream.CopyTo(output);Write(path,output.ToArray(),"ZB2Menu.exe",null,null);}
+            }
+        }
+        public static void TeamStarter(string path,string executable)
+        {
+            Crypto.Require(File.Exists(executable) && new FileInfo(executable).Length<32*1024*1024,"Programa da equipe indisponível.");
+            Write(path,File.ReadAllBytes(executable),"ZB2Admin.exe",null,null);
+        }
         public static void Client(string path,LicenseRecord license)
         {
             Crypto.Require(license.Expires>Crypto.Now(),"Esta licença expirou. Gere uma renovação antes de preparar o pacote.");

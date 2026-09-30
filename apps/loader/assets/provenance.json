@@ -46,5 +46,9 @@
     "source": "Lexend-variable.ttf",
     "weight": 900,
     "sha256": "aa927ca672684b032cf16bcb644526dd8c4639234fdb267120c83c50206f19b7"
+  },
+  "Lexend-Medium.ttf": {
+    "source": "Lexend-variable.ttf, static wght=500 using fontTools 4.60.1",
+    "sha256": "f41c32317ed47237db61da6c39de53e8605e4a64d456e2cf87c47a8dbe21f895"
   }
 }

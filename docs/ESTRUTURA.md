@@ -1,47 +1,43 @@
-# Estrutura do projeto e dados de uso
+# Estrutura oficial: DEADBLOCK / ZB2
 
-## Projeto — D:/Projeto/ZB2 Menu
+## Projeto: D:/Projeto/ZB2 Menu
 
-- `apps/`: código dos aplicativos; `apps/shared/brand` é a única fonte dos ícones.
-- `scripts/`, `tests/`, `docs/`, `packaging/`: desenvolvimento, validação e documentação.
-- `build/`: arquivos intermediários, testes e diagnósticos de compilação. Não enviar.
-- `dist/admin/ZB2Admin.exe`: Admin atual para uso.
-- `dist/loader/ZB2Menu.exe`: cliente atual para uso.
-- `dist/entrega/`: ZIPs iniciais sem licenças pessoais.
-- `.local/private/`: material de emissão protegido por DPAPI, ignorado pelo Git.
-- `.local/backups/`: cópias de recuperação pessoais, ignoradas pelo Git.
+| Local | Conteúdo | Enviar? |
+|---|---|---|
+| apps, imgui, kiero, injector, managed e arquivos C++ da raiz | Fontes e dependências do menu/loader/admin | Não |
+| scripts, tests, docs, packaging, memory | Compilação, testes, guias, chave pública e conhecimento técnico | Não |
+| .git | Histórico do repositório | Não |
+| .agents, .opencode | Ferramentas e dependências dos agentes | Não |
+| .local/private e .local/backups | Chave privada e recuperação | Nunca |
+| .local/audits | Inventário completo e comprovantes de limpeza | Não |
+| build/Release_x64 | Runtime do menu necessário para montar o cliente | Não enviar a pasta |
+| build | Compilação, dependências verificadas e evidências de testes | Não |
+| dist/admin/ZB2Admin.exe | Seu painel atual | Use localmente |
+| dist/loader/ZB2Menu.exe | Programa atual do cliente | Prefira o ZIP |
+| dist/entrega/01-CLIENTE-INICIAL.zip | Primeiro envio ao cliente, sem licença | Sim |
+| dist/entrega/01-EQUIPE-INICIAL.zip | Primeiro envio à equipe, sem autorização | Sim |
 
-Não colocar ícones originais, executáveis de desenvolvimento ou documentação
-duplicada em Documentos. Não enviar o repositório inteiro ou `.local` a ninguém.
+Arquivos .cpp/.h na raiz pertencem ao projeto Visual Studio. Não movê-los por
+extensão: includes e projeto precisam acompanhar qualquer reorganização.
+node_modules do OpenCode são dependências, não lixo do produto; ficam fora dos ZIPs.
 
-## Documentos/ZB2Menu — somente dados de uso
+## Dados: C:/Users/WeFagundes/Documents/ZB2Menu
 
-- `Admin/`: estação, histórico, autorizações, preferências e serviço local necessário.
-- `loader/`: ativação, preferências, runtime do cliente e último log de carga.
-- `configs/`, `imgui.ini`, `logs/`: configurações e logs do menu existente.
-- `Pacotes/`: destino inicial dos ZIPs personalizados que o usuário decide salvar.
+`Admin` guarda estação, chave protegida, histórico e serviço em uso.
+`loader` guarda ativação e runtime do cliente. `configs`, `imgui.ini` e `logs`
+pertencem ao menu. `Pacotes` recebe os ZIPs que você salva para enviar.
 
-O serviço local extraído em `Admin/runtime/<hash>` faz parte do funcionamento,
-não é lixo por existir. Não apagar o serviço em uso. Logs e backups não são
-descartados automaticamente. Escritas atômicas usam `.tmp` junto ao destino,
-sem depender da pasta TEMP global.
+Não apagar licenças, configurações, logs ou backups por idade. Serviços antigos
+do Admin podem ser removidos pela ferramenta do painel após análise. Ela preserva
+o serviço atual e os arquivos em uso. Limpeza externa manual exige aplicativos fechados. O runtime do jogo não é tratado como cache descartável.
 
-## Configurações do Admin
+## Atualizações e limpeza
 
-A aba permite reduzir movimento (persistido em Admin/preferences.txt), abrir
-dados/pacotes/aplicativo/logs e exportar diagnóstico mínimo: versão, plataforma,
-papel e contagens. O diagnóstico não inclui nomes, IDs, tokens ou chaves.
-Nenhum botão apaga licenças/histórico ou limpa Temp indiscriminadamente.
+Veja [ATUALIZACOES.md](ATUALIZACOES.md) para a rotina técnica e [ADMIN.md](ADMIN.md)
+para o fluxo de cliente/equipe. Inventários e manifestos de remoção ficam em
+`.local/audits`; não contêm o conteúdo de chaves ou licenças e não vão ao Git.
 
-## Limpeza realizada
+Mapa de código, explicação de cada arquivo de Release_x64 e política de cache: [ARQUITETURA.md](ARQUITETURA.md).
+O Admin oferece análise prévia e limpeza limitada de serviços antigos em Configurações.
 
-Duplicatas produzidas por esta implementação só são excluídas após comparação
-SHA-256 com o destino correto. Distribuições versionadas antigas em `dist/admin-1.*`
-e `dist/loader-1.*` são outputs anteriores, preservados nesta rodada para recuperação. Fontes,
-commits e artefatos de diagnóstico não relacionados permanecem intactos.
-
-Referência: [separação de estado e conteúdo da aplicação, Microsoft](https://learn.microsoft.com/en-us/windows/apps/develop/windows-app-restore).
-
-Limpeza comprovada nesta rodada: 18.619.367 bytes em dez duplicatas idênticas
-retiradas de Documentos. Chave e backups pessoais foram transferidos individualmente
-para .local com comparação de hash, sem apagar o conteúdo recuperável.
+Entrada geral: [COMECE-AQUI.md](COMECE-AQUI.md). Resíduos e limites atuais: [RETENCAO-E-LIMPEZA.md](RETENCAO-E-LIMPEZA.md).

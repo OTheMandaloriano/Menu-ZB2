@@ -15,7 +15,7 @@ void LoaderController::SetAutoInject(bool value){autoInject_.store(value);{std::
 LoaderSnapshot LoaderController::Snapshot(){std::lock_guard<std::mutex> lock(mutex_);return snapshot_;}
 void LoaderController::Publish(LoaderSnapshot value){value.autoInject=autoInject_.load();std::lock_guard<std::mutex> lock(mutex_);snapshot_=std::move(value);}
 bool LoaderController::Activate(std::string token){std::lock_guard<std::mutex> lock(mutex_);if(busy_||pending_!=Action::None)return false;token_=std::move(token);pending_=Action::Activate;busy_=true;wake_.notify_one();return true;}
-bool LoaderController::Load(){std::lock_guard<std::mutex> lock(mutex_);if(busy_||pending_!=Action::None||!snapshot_.licensed||!snapshot_.pid||snapshot_.phase==LoaderPhase::Loading||snapshot_.phase==LoaderPhase::Success)return false;pending_=Action::Load;busy_=true;wake_.notify_one();return true;}
+bool LoaderController::Load(){std::lock_guard<std::mutex> lock(mutex_);if(busy_||pending_!=Action::None||!snapshot_.licensed||!snapshot_.pid||!snapshot_.gameVerified||snapshot_.phase==LoaderPhase::Loading||snapshot_.phase==LoaderPhase::Success)return false;pending_=Action::Load;busy_=true;wake_.notify_one();return true;}
 bool LoaderController::Retry(){std::lock_guard<std::mutex> lock(mutex_);if(busy_||pending_!=Action::None)return false;pending_=Action::Retry;busy_=true;wake_.notify_one();return true;}
 void LoaderController::Run(){
     LoaderSnapshot state;LoaderServices::Stored stored;std::filesystem::path root,runtime;
@@ -41,7 +41,7 @@ void LoaderController::Run(){
                 stored={token,std::max(stored.lastSeen,now)};LoaderServices::SaveState(root,stored);
             }
             auto license=License::Validate(stored.token,state.device,now,publicKey);state.licensed=license.valid;state.expiry=license.valid?Date(license.expires):"";
-            auto game=LoaderServices::FindGame();state.pid=game.pid;
+            state.sceneReady=false;state.gameVerified=false;auto game=LoaderServices::FindGame();state.pid=game.pid;state.gameVerified=game.pid!=0;
             if(gate.process!=game.created){gate.Observe(game.created);actionError.clear();}
             if(action==Action::Load&&game.pid)gate.manual=true;
             const bool assemblies=!game.loaded&&readiness.Poll(game);
@@ -63,16 +63,16 @@ void LoaderController::Run(){
                 }
             }
             if(!license.valid){state.phase=LoaderPhase::Activation;state.message=stored.token.empty()?u8"Ative seu acesso neste computador.":license.error;}
-            else if(game.loaded){state.phase=LoaderPhase::Success;state.message="Menu carregado. Use INSERT no jogo.";}
+            else if(game.loaded){actionError.clear();state.phase=LoaderPhase::Success;state.message="Menu carregado. Use INSERT no jogo.";}
             else if(!game.pid){state.phase=LoaderPhase::Waiting;state.message="Aguardando o Zumbi Blocks 2.";}
             else if(gate.failed||gate.menuAttempt==game.created||(gate.probeAttempt==game.created&&!game.probeLoaded)){state.phase=LoaderPhase::Error;state.message=u8"Tentativa não confirmada. Reinicie o jogo.";}
-            else if(!assemblies){state.phase=LoaderPhase::Waiting;state.message=u8"Aguardando inicialização dos assemblies.";}
+            else if(!assemblies){state.phase=LoaderPhase::Waiting;state.message=u8"O jogo está iniciando. Aguarde carregar.";}
             else if(!state.sceneReady){state.phase=LoaderPhase::Waiting;state.message=gate.Wanted(autoInject_.load())?(readiness.World()?u8"Mapa carregando. Aguardando prontidão.":u8"Entre em uma partida para carregar o menu."):u8"Automático desligado. Injeção manual disponível.";}
             else{state.phase=LoaderPhase::Ready;state.message=u8"Cena pronta para injeção.";}
             if(license.valid&&now-stored.lastSeen>=60){stored.lastSeen=now;LoaderServices::SaveState(root,stored);}
             if(!actionError.empty()){state.phase=LoaderPhase::Error;state.message=actionError;}
             Publish(state);
-        }catch(const std::exception& error){if(attempted)gate.failed=true;state.phase=LoaderPhase::Error;state.message=error.what();actionError=state.message;Publish(state);}
+        }catch(const std::exception& error){if(attempted)gate.failed=true;state.phase=LoaderPhase::Error;state.message=error.what();if(attempted||action==Action::Activate)actionError=state.message;Publish(state);}
         std::unique_lock<std::mutex> lock(mutex_);busy_=false;
         wake_.wait_for(lock,std::chrono::milliseconds(250),[this]{return stop_||pending_!=Action::None||preferencesDirty_;});
     }

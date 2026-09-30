@@ -27,6 +27,14 @@ def automatic(root,authorization):
     output=r.stdout[4:4+size].decode('utf-8');checks+=1;return output
 with tempfile.TemporaryDirectory(prefix='packages-',dir=ROOT/'build/admin-native') as temp:
     root=Path(temp);owner=root/'owner';member=root/'member'
+    initial_client=root/'01-CLIENTE-INICIAL.zip';initial_team=root/'01-EQUIPE-INICIAL.zip'
+    rpc(owner,'client_starter',initial_client);rpc(owner,'team_starter',initial_team)
+    with zipfile.ZipFile(initial_client) as z:
+        assert z.namelist()==['ZB2Menu.exe'] and z.testzip() is None
+        assert hashlib.sha256(z.read('ZB2Menu.exe')).digest()==hashlib.sha256((ROOT/'dist/loader/ZB2Menu.exe').read_bytes()).digest()
+    with zipfile.ZipFile(initial_team) as z:assert z.namelist()==['ZB2Admin.exe'] and z.testzip() is None
+    assert not list((owner/'licenses').glob('*.json'))
+    checks+=3
     rpc(owner,'import_owner',args.key,'WeFagundes')
     archive=root/'Cliente ação.zip'
     result=rpc(owner,'issue_package','Cliente pronto','1'*64,'7',archive)

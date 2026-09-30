@@ -1,3 +1,5 @@
+> **Manutenção e distribuição:** comece por [docs/COMECE-AQUI.md](docs/COMECE-AQUI.md). Para uma nova sessão de desenvolvimento, leia [docs/CONTINUIDADE.md](docs/CONTINUIDADE.md).
+
 <div align="center">
 
 # Menu ZB2

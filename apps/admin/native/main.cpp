@@ -1,6 +1,7 @@
 #include "controller.h"
 #include "ui.h"
 #include "settings.h"
+#include "../../shared/resources.h"
 #include "../../shared/widgets.h"
 #include "../../shared/graphics.h"
 #include "../../shared/theme.h"
@@ -79,9 +80,11 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show){
             ImGui_ImplDX11_NewFrame();ImGui_ImplWin32_NewFrame();ImGui::NewFrame();Admin::Draw(state);ImGui::Render();
             if(state.send){
                 state.send=false;
-                bool teamPackage=state.action.command=="team_package"||state.action.command=="authorize_package";
-                bool package=state.action.command=="issue_package"||state.action.command=="client_package"||teamPackage;
-                if(package){auto path=Pick(window,true,teamPackage?"Equipe-pronta.zip":"Cliente-pronto.zip",L"Pacote pronto ZIP\0*.zip\0\0");
+                bool teamPackage=state.action.command=="team_package"||state.action.command=="authorize_package"||state.action.command=="team_starter";
+                bool package=state.action.command=="issue_package"||state.action.command=="client_package"||state.action.command=="client_starter"||teamPackage;
+                if(package){bool starter=state.action.command=="client_starter"||state.action.command=="team_starter";
+                    const char* packageName=starter?(teamPackage?"01-EQUIPE-INICIAL.zip":"01-CLIENTE-INICIAL.zip"):(teamPackage?"02-EQUIPE-AUTORIZADA.zip":"02-CLIENTE-ATIVADO.zip");
+                    auto path=Pick(window,true,packageName,L"Pacote pronto ZIP\0*.zip\0\0");
                     if(!path.empty()){if(path.extension()!=L".zip")path+=L".zip";state.action.args.push_back(path.u8string());if(controller)controller->Submit(state.action);}
                 }else if(controller)controller->Submit(state.action);
             }
@@ -91,6 +94,8 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show){
                 auto path=state.openFolder==1?root:state.openFolder==2?root.parent_path()/L"Pacotes":state.openFolder==3?applicationDirectory:root.parent_path()/L"logs";
                 state.openFolder=0;try{std::filesystem::create_directories(path);if(reinterpret_cast<INT_PTR>(ShellExecuteW(window,L"open",path.c_str(),nullptr,nullptr,SW_SHOWNORMAL))<=32)throw std::runtime_error("Não foi possível abrir a pasta.");}catch(const std::exception& error){state.message=error.what();}
             }
+            if(state.inspectCache){state.inspectCache=false;try{state.cachePlan=Admin::InspectCache(root,AppResources::Read(502));state.cacheReviewed=true;state.cacheSummary=state.cachePlan.entries.empty()?"Nenhum resíduo seguro para remover.":std::to_string(state.cachePlan.entries.size())+" arquivos antigos; "+std::to_string(state.cachePlan.bytes/1024)+" KB. Confira e clique em Limpar.";}catch(const std::exception& error){state.cacheReviewed=false;state.cacheSummary=error.what();}}
+            if(state.cleanCache){state.cleanCache=false;try{auto result=Admin::CleanCache(root,state.cachePlan,AppResources::Read(502));state.cachePlan={};state.cacheReviewed=false;state.cacheSummary=std::to_string(result.removed)+" removidos; "+std::to_string(result.kept)+" preservados (em uso ou alterados).";}catch(const std::exception& error){state.cacheSummary=error.what();state.cacheReviewed=false;}}
             if(state.exportDiagnostics){state.exportDiagnostics=false;auto path=Pick(window,true,"ZB2-diagnostico.txt",L"Diagnostico de suporte\0*.txt\0\0");if(!path.empty())try{Admin::WriteDiagnostics(path,state.data.role=="owner",state.data.total,static_cast<int>(state.data.grants.size()));state.message="Diagnóstico salvo sem dados sensíveis.";}catch(const std::exception& error){state.message=error.what();}}
             if(state.pick!=Admin::Picker::None&&controller){
                 const auto action=state.pick;state.pick=Admin::Picker::None;

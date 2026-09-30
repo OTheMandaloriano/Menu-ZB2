@@ -3,14 +3,16 @@
 #include "assets/IconsFontAwesome6.h"
 namespace {
 using namespace UiTheme;
-void Status(const LoaderUiState& state){
+void Status(LoaderUiState& state){
     std::string message=state.localMessage.empty()?state.snapshot.message:state.localMessage;
     if(state.snapshot.phase==LoaderPhase::Activation&&state.localMessage.empty())return;
     std::string shown=message;
-    while(!shown.empty()&&caption->CalcTextSizeA(caption->FontSize,10000,0,(shown+"...").c_str()).x>400*uiScale){size_t n=shown.size()-1;while(n&&(static_cast<unsigned char>(shown[n])&0xc0)==0x80)--n;shown.resize(n);}
+    const bool error=state.snapshot.phase==LoaderPhase::Error;
+    while(!shown.empty()&&caption->CalcTextSizeA(caption->FontSize,10000,0,(shown+"...").c_str()).x>(error?308:400)*uiScale){size_t n=shown.size()-1;while(n&&(static_cast<unsigned char>(shown[n])&0xc0)==0x80)--n;shown.resize(n);}
     if(shown!=message)shown+="...";
     Ui::Text(20,244,400,12,shown.c_str(),state.snapshot.phase==LoaderPhase::Error?IM_COL32(235,153,150,255):muted,caption);
-    ImGui::SetCursorPos(Ui::P(20,240));ImGui::InvisibleButton("##status",Ui::P(400,20));Ui::Hint(message.c_str());
+    ImGui::SetCursorPos(Ui::P(20,240));ImGui::InvisibleButton("##status",Ui::P(error?308.f:400.f,20));Ui::Hint(message.c_str());
+    if(error&&Ui::Button(336,238,84,24,"Detalhes",true))state.diagnostics=true;
 }
 void Row(float y,const char* icon,const char* label,const char* value){Ui::Text(32,y,16,16,icon,muted,regular,1);Ui::Text(56,y,100,16,label,muted,caption);Ui::Text(168,y,240,16,value,text,caption,2);}
 }
@@ -19,10 +21,16 @@ void DrawLoader(LoaderUiState& state){
     state.autoValue=current.autoInject;
     ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
     ImGui::Begin("ZB2 Menu",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoScrollbar);
-    Ui::Text(20,12,260,32,state.help?"Como usar":"ZB2 Menu",text,heading);
+    Ui::Brand(20,12,state.help?"AJUDA":"MENU");
     if(Ui::Button(360,16,24,24,ICON_FA_CIRCLE_INFO,true)){state.about=!state.about;state.help=false;}Ui::Hint("Sobre o menu");
     if(Ui::Button(396,16,24,24,ICON_FA_XMARK,true))state.close=true;
-    if(state.about){
+    if(state.diagnostics){
+        Ui::Text(20,56,400,24,"O que aconteceu",text,heading);
+        ImGui::SetCursorPos(Ui::P(20,92));ImGui::BeginChild("diagnostic-details",Ui::P(400,104));
+        const auto message=state.localMessage.empty()?current.message:state.localMessage;ImGui::TextWrapped("%s",message.c_str());ImGui::EndChild();
+        if(Ui::Button(20,208,194,28,"Copiar detalhes",false,false,ICON_FA_COPY)){auto report="DEADBLOCK "+current.version+"\nPID: "+std::to_string(current.pid)+"\n"+message;ImGui::SetClipboardText(report.c_str());}
+        if(Ui::Button(226,208,194,28,"Voltar",false,false,ICON_FA_ARROW_LEFT))state.diagnostics=false;
+    }else if(state.about){
         if(state.credits){
             Ui::Panel(20,56,400,180);
             Ui::Text(36,64,368,28,"ZB2 Pro Menu",text,regular,1);
@@ -53,12 +61,12 @@ void DrawLoader(LoaderUiState& state){
         if(Ui::Button(226,196,194,28,"Copiar ID",false,false,ICON_FA_COPY)&&!current.device.empty()){ImGui::SetClipboardText(current.device.c_str());state.localMessage=u8"ID copiado. Envie-o à equipe.";}
     }else{
         Ui::Panel(20,56,400,80);
-        Row(64,ICON_FA_DESKTOP,"Jogo",current.pid?(current.sceneReady?"Cena pronta":"Inicializando") :"Aguardando");
+        Row(64,ICON_FA_DESKTOP,"Jogo",!current.gameVerified&&current.phase==LoaderPhase::Error?"Verificação pendente":current.phase==LoaderPhase::Success?"Menu carregado":current.pid?(current.sceneReady?"Cena pronta":"Inicializando"):"Jogo fechado");
         Row(88,ICON_FA_KEY,"Expira em",current.expiry.c_str());Row(112,ICON_FA_CODE_BRANCH,u8"Versão",current.version.c_str());
         if(Ui::Toggle(20,148,400,"AUTO-INJECT",state.autoValue))state.autoChanged=true;
-        ImGui::BeginDisabled(busy||!current.pid||current.phase==LoaderPhase::Success);
-        if(Ui::Button(20,192,400,40,current.phase==LoaderPhase::Success?"Menu carregado":busy?"Carregando...":"Injetar agora",false,true,current.phase==LoaderPhase::Success?ICON_FA_CHECK:ICON_FA_BOLT))state.load=true;
+        ImGui::BeginDisabled(busy||!current.pid||!current.gameVerified||current.phase==LoaderPhase::Success);
+        if(Ui::Button(20,192,400,40,current.phase==LoaderPhase::Success?"Menu carregado":busy?"Carregando...":!current.gameVerified?"Aguardando verificação":"Injetar agora",false,true,current.phase==LoaderPhase::Success?ICON_FA_CHECK:ICON_FA_BOLT))state.load=true;
         ImGui::EndDisabled();
     }
-    Status(state);ImGui::End();
+    if(!state.diagnostics)Status(state);ImGui::End();
 }

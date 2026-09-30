@@ -10,6 +10,10 @@ void Require(bool value,const char* text){if(!value)throw std::runtime_error(tex
 std::string Read(const fs::path& path){std::ifstream in(path,std::ios::binary);return {std::istreambuf_iterator<char>(in),{}};}
 int wmain(int argc,wchar_t** argv){
     try{
+        if(argc==2 && std::wstring(argv[1])==L"game-status"){
+            const auto game=LoaderServices::FindGame();
+            std::cout<<"pid="<<game.pid<<" menu="<<game.loaded<<" probe="<<game.probeLoaded<<" mono="<<game.monoLoaded<<" identity="<<game.created<<'\n';return 0;
+        }
         if(argc>1 && std::wstring(argv[1])==L"device"){std::cout<<License::DeviceId();return 0;}
         if(argc==6 && std::wstring(argv[1])==L"import-package"){
             std::wstring wide=argv[4];std::string device;for(wchar_t ch:wide){if(ch>127)return 2;device+=static_cast<char>(ch);}
@@ -53,7 +57,7 @@ int wmain(int argc,wchar_t** argv){
             ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={LoaderWidth*scale,LoaderHeight*scale};io.DeltaTime=1.f/60;
             ConfigureUiTheme(scale);io.Fonts->Build();
             for(int page=0;page<10;++page){
-                LoaderUiState state;state.snapshot.version="1.7-local";state.snapshot.device=std::string(64,'a');state.snapshot.expiry="29/10/2026 14:00 UTC";
+                LoaderUiState state;state.snapshot.gameVerified=true;state.snapshot.version="1.14-local";state.snapshot.device=std::string(64,'a');state.snapshot.expiry="29/10/2026 14:00 UTC";
                 state.snapshot.phase=static_cast<LoaderPhase>(page<7?page:2);state.snapshot.licensed=page>=2;state.snapshot.pid=page>=3?1234:0;
                 const char* messages[]={u8"Verificando licença e pacote...",u8"Ative seu acesso neste computador.","Abra o Zumbi Blocks 2 para continuar.","Aguardando a cena da partida.",u8"Carregando o menu. Aguarde a confirmação...","Menu carregado. Pressione INSERT no jogo.",u8"Falha ao carregar. Confira as permissões e tente novamente."};
                 state.snapshot.message=messages[page<7?page:2];
@@ -62,9 +66,13 @@ int wmain(int argc,wchar_t** argv){
                 for(int frame=0;frame<2;++frame){ImGui::NewFrame();DrawLoader(state);ImGui::Render();}
                 Require(RenderPpm("loader-"+std::to_string(page)+"-"+std::to_string(static_cast<int>(scale*100))+".ppm",1),"render");
             }
-            LoaderUiState state;state.snapshot.phase=LoaderPhase::Ready;state.snapshot.licensed=true;state.snapshot.pid=77;state.snapshot.version="1.0";
+            LoaderUiState state;state.snapshot.gameVerified=true;state.snapshot.phase=LoaderPhase::Ready;state.snapshot.licensed=true;state.snapshot.pid=77;state.snapshot.version="1.0";
             auto frame=[&](float x,float y,bool down){io.MousePos={x*scale,y*scale};io.MouseDown[0]=down;ImGui::NewFrame();DrawLoader(state);ImGui::Render();};
             frame(200,212,false);frame(200,212,true);frame(200,212,false);Require(state.load,"manual injection click");
+            state.load=false;state.snapshot.gameVerified=false;state.snapshot.phase=LoaderPhase::Error;
+            frame(200,212,true);frame(200,212,false);Require(!state.load,"unknown game state must block injection");
+            frame(370,250,true);frame(370,250,false);Require(state.diagnostics,"error details action");
+            state.diagnostics=false;state.snapshot.phase=LoaderPhase::Ready;state.snapshot.gameVerified=true;
             frame(380,164,true);frame(380,164,false);Require(state.autoChanged&&!state.autoValue,"auto toggle off");
             state.snapshot.phase=LoaderPhase::Activation;state.snapshot.licensed=false;
             frame(200,164,true);frame(200,164,false);Require(!state.activate,"empty license must not submit");

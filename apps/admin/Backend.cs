@@ -41,6 +41,12 @@ namespace Zb2Admin
             StringBuilder extra=new StringBuilder();string notice="";string query="";
             switch(command)
             {
+                case "client_starter":
+                    Crypto.Require(args.Length==1,"Escolha onde salvar o programa inicial do cliente.");
+                    Packages.ClientStarter(args[0]);notice="Programa inicial salvo. Envie o ZIP; o cliente abre e clica em Copiar ID.";break;
+                case "team_starter":
+                    Crypto.Require(args.Length==2,"Escolha onde salvar o programa inicial da equipe.");
+                    Packages.TeamStarter(args[0],args[1]);notice="Programa inicial salvo. O integrante abre Meu acesso, cria a solicitação e envia para você.";break;
                 case "snapshot":
                     Crypto.Require(args.Length<=1,"Consulta incorreta.");query=args.Length==1?args[0]:"";break;
                 case "issue":

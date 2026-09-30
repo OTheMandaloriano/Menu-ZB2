@@ -7,7 +7,7 @@
 enum class LoaderPhase {Checking,Activation,Waiting,Ready,Loading,Success,Error};
 struct LoaderSnapshot {
     LoaderPhase phase=LoaderPhase::Checking;
-    bool licensed=false,autoInject=true,sceneReady=false;
+    bool licensed=false,autoInject=true,sceneReady=false,gameVerified=false;
     unsigned long pid=0;
     std::string device,version,expiry,message=u8"Verificando licença e pacote...";
 };

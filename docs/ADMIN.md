@@ -1,120 +1,75 @@
-# ZB2 Admin — guia simples (1.8)
+# Como enviar o DEADBLOCK: passo a passo
 
-## Você é o proprietário
+## Primeiro: escolha quem vai receber
 
-Neste computador, a estação verificada é **WeFagundes — Proprietário**.
-Abra o atalho **ZB2 Admin - Proprietario**. Seu nome e papel aparecem no topo.
-Você não precisa criar uma solicitação de integrante para usar sua própria conta.
+- **Cliente** é quem vai jogar. Recebe o ZB2Menu.exe.
+- **Equipe** é quem vai emitir licenças para outros clientes. Recebe o ZB2Admin.exe.
+- Você, WeFagundes, já é o proprietário neste PC. Não crie uma solicitação para si.
 
-- **Clientes:** preparar o ZIP para quem vai usar o menu no jogo.
-- **Minha equipe:** autorizar outro PC a gerar licenças para clientes.
-- **Meu acesso:** consultar o acesso deste computador. Criar solicitação nesta
-  tela configura ESTE PC como integrante; não cadastra outra pessoa à distância.
-- **Ajuda:** explica os destinos dentro do aplicativo.
+## Cliente novo: ainda não tenho o ID
 
-## Enviar ao cliente: um único ZIP
+1. No Admin, abra **Como enviar → CLIENTE → Salvar programa inicial**.
+2. Salve `01-CLIENTE-INICIAL.zip` e envie esse ZIP ao cliente. **Não precisa de ID.**
+3. O cliente extrai o ZIP, abre `ZB2Menu.exe` e clica em **Copiar ID**.
+4. Ele manda o ID para você por mensagem. O programa abre sem licença; o acesso
+   ao menu só é liberado depois da ativação.
+5. No seu Admin, abra **Clientes**, preencha nome, ID completo e dias de uso.
+6. Clique em **Gerar ZIP do cliente**, salve `02-CLIENTE-ATIVADO.zip` e envie esse
+   segundo ZIP ao mesmo cliente.
+7. Ele extrai o segundo ZIP e abre o `ZB2Menu.exe` que veio nele. A licença incluída
+   é reconhecida automaticamente. Não precisa digitar uma chave nesse caminho.
 
-1. Peça ao cliente o ID exibido no ZB2 Menu. Se ele ainda não possui o programa,
-   envie o CLIENTE.zip inicial para ele abrir e clicar em Copiar ID.
-2. Abra **Clientes** no Admin.
-3. Preencha nome, ID do computador e prazo em dias.
-4. Clique em **Gerar ZIP do cliente** e escolha onde salvar.
-5. Envie SOMENTE o ZIP gerado para esse cliente.
+O primeiro ZIP contém somente o programa. O segundo contém programa + licença.
+O prazo começa quando você emite a licença, não quando salva o programa inicial.
+Não emita uma licença antes de obter o ID real do cliente.
 
-O ZIP personalizado contém `ZB2Menu.exe` e `licenca.zb2license`.
-O cliente extrai TUDO para uma pasta e abre `ZB2Menu.exe`. A licença é verificada
-para aquele PC e aplicada automaticamente. Não executar diretamente dentro do ZIP.
+## Integrante novo da equipe: ainda não tenho a solicitação
 
-A opção **Gerar somente a chave** continua disponível. Também é possível copiar
-uma licença na linha do histórico e o cliente colar a chave manualmente.
+1. Abra **Como enviar → EQUIPE → Salvar programa inicial**.
+2. Envie `01-EQUIPE-INICIAL.zip` ao integrante.
+3. Ele extrai, abre `ZB2Admin.exe` e entra em **Meu acesso**.
+4. Ele informa o próprio nome, clica em **Criar solicitação**, salva o arquivo
+   `.zb2station` e envia esse arquivo para você.
+5. No SEU Admin, abra **Minha equipe → Abrir solicitação**.
+6. Abra o arquivo recebido e defina por quantos dias o integrante poderá emitir
+   e qual será o prazo máximo de cada licença que ele emitir.
+7. Clique em **Autorizar e gerar ZIP**, salve `02-EQUIPE-AUTORIZADA.zip` e envie
+   esse segundo ZIP ao integrante.
+8. Ele extrai o segundo ZIP e abre o Admin no mesmo PC que criou a solicitação.
+   A autorização é reconhecida automaticamente.
 
-Para reenviar uma emissão existente, use o ícone **ZIP** na linha do histórico.
-Isso não cria outra licença nem reinicia o prazo. O prazo começa na emissão.
-Uma renovação válida com vencimento posterior é aplicada ao abrir o novo pacote.
+Não envie seu perfil de proprietário. O integrante cria sua própria chave no PC
+dele; você envia somente a autorização. Quem só vai jogar recebe o pacote CLIENTE.
 
-## Enviar a um integrante que vai emitir
+## Onde estão os arquivos prontos
 
-O integrante precisa preparar o próprio PC uma única vez:
+Também existem duas cópias iniciais prontas em `dist/entrega/`:
+`01-CLIENTE-INICIAL.zip` e `01-EQUIPE-INICIAL.zip`.
+Os botões de **Como enviar** funcionam mesmo no Admin distribuído sozinho;
+não dependem da pasta do projeto e não enviam nada pela internet automaticamente.
 
-1. Envie o EQUIPE.zip inicial. Ele extrai e abre o Admin.
-2. Em **Meu acesso**, ele informa o próprio nome e cria uma solicitação.
-3. Ele envia o `.zb2station` para você.
-4. Você abre **Minha equipe → Abrir solicitação** e escolhe os limites.
-5. Clique em **Autorizar e gerar ZIP** e envie o ZIP gerado ao integrante.
-6. Ele extrai tudo e abre `ZB2Admin.exe` no PC que criou a solicitação.
-   A autorização incluída é importada automaticamente.
+ZIPs personalizados são salvos onde você escolher; o destino inicial é
+`Documentos/ZB2Menu/Pacotes`. Um arquivo salvo não foi enviado: anexe-o na conversa
+com a pessoa que deve recebê-lo.
 
-O ZIP personalizado contém `ZB2Admin.exe` e `autorizacao.zb2issuer`.
-Para reenviar, clique com o botão direito na estação da lista e use **Salvar ZIP desta estação**.
+## Reenviar ou renovar
 
-Exemplo de limites: autorização por 365 dias, licenças de no máximo 30 dias.
-O integrante não recebe sua chave principal nem pode autorizar outros integrantes.
-Se alguém da equipe apenas vai jogar, envie o pacote DE CLIENTE, não o Admin.
+- Para reenviar a mesma licença, use o ícone ZIP na linha do histórico. Isso não
+  reinicia o prazo nem cria outra licença.
+- Para renovar, emita uma nova licença com o ID e o prazo desejados.
+- Para recuperar o ZIP da equipe, clique com o botão direito na estação autorizada.
+- A opção de copiar e colar a chave continua disponível, mas o ZIP ativado é mais simples.
 
-## Cadastrei este PC como integrante por engano
+## Arquivos que nunca devem ser enviados
 
-A opção **Sou o proprietário: recuperar acesso** exige a chave original do
-proprietário, protegida pelo Windows. Ela não promove ninguém apenas pelo nome.
-A recuperação preserva o histórico e guarda uma cópia protegida da configuração
-anterior. Não envie a chave `.dpapi` a clientes ou integrantes.
+Não envie `.local`, a pasta `Documentos/ZB2Menu/Admin`, arquivos `.dpapi`, histórico,
+backups, fontes ou builds. Use apenas os ZIPs produzidos pelos botões acima.
+Cada PC mantém seu histórico local; não há sincronização nem revogação instantânea offline.
 
-No seu perfil WeFagundes, a chave de manutenção fica em
-`D:/Projeto/ZB2 Menu/.local/private/issuer-owner.dpapi`; o Admin já está configurado.
-Os dados ficam em `Documentos/ZB2Menu/Admin`. Não distribua essa pasta.
+## Limpeza no painel
 
-## O que não vai no ZIP
-
-Nenhum AVISOS.txt, chave privada, histórico, pedido de estação ou arquivo de build
-é colocado no pacote personalizado. Atribuições das dependências ficam embutidas,
-nos recursos do executável, sem telas jurídicas nem arquivos extras na pasta do cliente.
-
-Os ZIPs iniciais CLIENTE.zip/EQUIPE.zip servem para começar o cadastro; ainda não
-contêm uma licença/autorização pessoal. Os ZIPs prontos são gerados dentro do Admin.
-
-## Limites offline
-
-Cada PC mantém seu próprio histórico. Não há sincronização automática, controle
-de pagamento ou revogação imediata. O ID do cliente e a solicitação do integrante
-continuam necessários para vincular o acesso ao computador correto.
-
-A proteção direta da DLL e a validação real do AUTO-INJECT em partida continuam
-com os limites documentados em [LOADER.md](LOADER.md) e [AUTO_INJECT.md](AUTO_INJECT.md).
-
-## Validação técnica
-
-- `scripts/build_loader.py`: primeiro compilar o cliente.
-- `scripts/build_admin.py --tests`: embutir esse cliente no Admin e compilar.
-- `tests/test_personalized_packages.py --key CAMINHO_DPAPI`: ZIPs, importação,
-  recuperação, renovação, PC incorreto e preservação do histórico.
-- `tests/run_admin_validation.py --key CAMINHO_DPAPI`: assinatura e permissões.
-- `scripts/package_delivery.py`: produzir os ZIPs iniciais sem dados pessoais.
-
-Organização de pastas e ícones: [PASTAS.md](PASTAS.md).
-
-## Configurações
-
-Use a aba Configurações para reduzir movimento, abrir dados/pacotes/aplicativo/logs
-e salvar um diagnóstico sem dados pessoais. A limpeza preserva licenças, chaves e
-histórico. Veja [ESTRUTURA.md](ESTRUTURA.md).
-
-## Acabamento 1.7
-
-Prazo em um único campo de dias; busca filtra as linhas carregadas enquanto digita.
-O HWID é abreviado visualmente e o botão copia todos os 64 caracteres. Créditos
-mostram o projeto; atribuições permanecem nos recursos, sem botão Dependências nem TXT de entrega.
-
-## Acabamento 1.8
-
-O formulário mostra o prazo da próxima emissão. Cada linha do histórico conserva o
-prazo originalmente emitido; alterar o campo não renova uma licença antiga.
-Ao emitir, a resposta identifica a nova linha e confirma seus dias e vencimento.
-
-Use os ícones da linha para copiar a chave ou salvar o ZIP existente. O botão direito
-oferece salvar o arquivo de licença; em Minha equipe, permite recuperar o ZIP de uma
-estação autorizada. A emissão/ autorização principal não precisa ser repetida.
-
-Mensagens e ações de exportação são limpas ao navegar. Respostas recebidas depois da
-troca de aba atualizam o histórico sem trazer mensagens de outra tela.
-Créditos mostram somente o projeto. Não há botão ou popup de dependências, nem
-extração de arquivos TXT de atribuição. Os avisos redistribuídos permanecem nos
-recursos e fontes do projeto.
+Em Configurações, clique em Analisar resíduos. O painel mostra a quantidade e o espaço.
+Se houver arquivos elegíveis, Limpar analisados remove apenas serviços antigos do Admin.
+O serviço atual, dados pessoais, licenças, backups, logs e runtime do jogo são preservados.
+Arquivos que mudaram ou ficaram em uso depois da análise também são preservados.
+Não apague a pasta Documentos/ZB2Menu inteira. Consulte ARQUITETURA.md.

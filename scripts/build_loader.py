@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+from font_backend import prepare
 from license_admin import load_key, public_hex, sign
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -115,6 +116,8 @@ def main():
     notices = '\n\n'.join((assets/name).read_text(encoding='utf-8') for name in
         ['Lexend-OFL.txt','FontAwesome-LICENSE.txt','IconFontCppHeaders-LICENSE.txt'])
     notices += '\n\nDear ImGui\n'+(assets/'DearImGui-LICENSE.txt').read_text(encoding='utf-8')
+    ft_flags,ft_library,ft_license=prepare(env)
+    notices += '\n\n'+ft_license.read_text(encoding='utf-8')
     (out/'attributions.bin').write_text(notices, encoding='utf-8')
     resources.append('205 RCDATA "attributions.bin"')
     regular=assets/'Lexend-Regular.ttf'
@@ -122,13 +125,20 @@ def main():
         parser.error('Regular font hash mismatch')
     shutil.copyfile(regular,out/regular.name)
     resources.append('206 RCDATA "Lexend-Regular.ttf"')
+    medium=assets/'Lexend-Medium.ttf'
+    if hashlib.sha256(medium.read_bytes()).hexdigest()!=provenance[medium.name]['sha256']:parser.error('Medium font hash mismatch')
+    shutil.copyfile(medium,out/medium.name)
+    resources.append('207 RCDATA "Lexend-Medium.ttf"')
     (out/'loader.rc').write_text('\n'.join(resources)+'\n', encoding='ascii')
     run([shutil.which('rc.exe',path=env['PATH']),'/nologo','/fo','loader.res','loader.rc'])
+    ft_flags,ft_library,ft_license=prepare(env)
+    flags += ft_flags
     core = ['license','services','controller','ui','readiness']
     sources = [str(ROOT/'apps/loader'/f'{name}.cpp') for name in core]
+    sources += [str(ROOT/'imgui/misc/freetype/imgui_freetype.cpp')]
     sources += [str(ROOT/'apps/shared'/f'{name}.cpp') for name in ['theme','widgets','resources']]
     imgui = [str(ROOT/'imgui'/f'{name}.cpp') for name in ['imgui','imgui_draw','imgui_tables','imgui_widgets']]
-    libraries = ['user32.lib','gdi32.lib','imm32.lib','bcrypt.lib','crypt32.lib','advapi32.lib','shell32.lib','ole32.lib','cabinet.lib','comdlg32.lib']
+    libraries = [ft_library,'user32.lib','gdi32.lib','imm32.lib','bcrypt.lib','crypt32.lib','advapi32.lib','shell32.lib','ole32.lib','cabinet.lib','comdlg32.lib']
     run([cl,*flags,*sources,*imgui,*[str(ROOT/'apps/loader'/f'{name}.cpp') for name in ['main','window']],str(ROOT/'apps/shared/graphics.cpp'),
          str(ROOT/'imgui/imgui_impl_win32.cpp'),str(ROOT/'imgui/imgui_impl_dx11.cpp'),'loader.res','/Fe:ZB2Menu.exe',
          '/link','/SUBSYSTEM:WINDOWS',*libraries,'dwmapi.lib','d3d11.lib','d3dcompiler.lib'])

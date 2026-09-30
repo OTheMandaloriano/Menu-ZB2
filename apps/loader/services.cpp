@@ -82,13 +82,26 @@ std::string Transform(const std::string& value,bool decrypt) {
     Require(ok,u8"Estado local ilegível. A licença pertence a outro usuário ou o arquivo está danificado.");
     std::string result(reinterpret_cast<char*>(output.pbData),output.cbData);LocalFree(output.pbData);return result;
 }
-bool HasModule(DWORD pid,const wchar_t* name=L"kiero-dx11-base.dll") {
-    Handle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPMODULE|TH32CS_SNAPMODULE32,pid));
-    Require(snapshot.value!=INVALID_HANDLE_VALUE,u8"Não foi possível verificar os módulos do jogo. Confira as permissões.");
-    MODULEENTRY32W entry{};entry.dwSize=sizeof(entry);
-    Require(Module32FirstW(snapshot.value,&entry),u8"Jogo encerrou durante a verificação. Abra-o novamente.");
-    do{if(_wcsicmp(entry.szModule,name)==0)return true;}while(Module32NextW(snapshot.value,&entry));
-    return false;
+struct Modules {bool menu=false,probe=false,mono=false;};
+std::runtime_error ModuleError(DWORD code){
+    std::string advice=code==ERROR_ACCESS_DENIED?u8"Acesso ao jogo negado. Feche jogo e loader e abra ambos no mesmo nível de permissão.":
+        code==ERROR_BAD_LENGTH||code==ERROR_PARTIAL_COPY?u8"O jogo está alterando seus módulos. Aguarde a próxima verificação.":
+        code==ERROR_INVALID_PARAMETER?u8"O processo do jogo mudou ou encerrou. Aguardando nova verificação.":u8"Não foi possível consultar o jogo. Aguarde; se persistir, envie este código ao suporte.";
+    return std::runtime_error(advice+" [MOD-"+std::to_string(code)+"]");
+}
+Modules ReadModules(DWORD pid){
+    for(int attempt=0;attempt<4;++attempt){
+        Handle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPMODULE|TH32CS_SNAPMODULE32,pid));
+        if(snapshot.value==INVALID_HANDLE_VALUE){DWORD code=GetLastError();if(code==ERROR_BAD_LENGTH){Sleep(15);continue;}throw ModuleError(code);}
+        MODULEENTRY32W entry{};entry.dwSize=sizeof(entry);Modules result;
+        if(!Module32FirstW(snapshot.value,&entry)){DWORD code=GetLastError();if(code==ERROR_BAD_LENGTH||code==ERROR_PARTIAL_COPY){Sleep(15);continue;}throw ModuleError(code);}
+        do{result.menu|=_wcsicmp(entry.szModule,L"kiero-dx11-base.dll")==0;result.probe|=_wcsicmp(entry.szModule,L"ZB2.Readiness.dll")==0;result.mono|=_wcsicmp(entry.szModule,L"mono-2.0-bdwgc.dll")==0;}while(Module32NextW(snapshot.value,&entry));
+        DWORD code=GetLastError();if(code==ERROR_NO_MORE_FILES)return result;
+        if(code!=ERROR_BAD_LENGTH&&code!=ERROR_PARTIAL_COPY)throw ModuleError(code);Sleep(15);
+    }throw ModuleError(ERROR_BAD_LENGTH);
+}
+bool HasModule(DWORD pid,const wchar_t* name=L"kiero-dx11-base.dll"){
+    auto modules=ReadModules(pid);return _wcsicmp(name,L"ZB2.Readiness.dll")==0?modules.probe:modules.menu;
 }
 }
 std::string Resource(int id) {
@@ -149,8 +162,7 @@ Process FindGame() {
         wchar_t path[32768]{};DWORD length=32768;
         Require(QueryFullProcessImageNameW(process.value,0,path,&length),"Caminho do jogo indisponivel.");
         FILETIME started{},ended{},kernel{},user{};Require(GetProcessTimes(process.value,&started,&ended,&kernel,&user),"Identidade do processo indisponivel.");
-        result.pid=entry.th32ProcessID;result.created=ReadyProtocol::FileTime(started);result.executable=path;result.loaded=HasModule(result.pid);
-        result.probeLoaded=HasModule(result.pid,L"ZB2.Readiness.dll");result.monoLoaded=HasModule(result.pid,L"mono-2.0-bdwgc.dll");
+        result.pid=entry.th32ProcessID;result.created=ReadyProtocol::FileTime(started);result.executable=path;auto modules=ReadModules(result.pid);result.loaded=modules.menu;result.probeLoaded=modules.probe;result.monoLoaded=modules.mono;
     }while(Process32NextW(snapshot.value,&entry));return result;
 }
 std::string BundleVersion(){return ParseBundle().version;}

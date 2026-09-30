@@ -1,5 +1,6 @@
 #pragma once
 #include "model.h"
+#include "settings.h"
 namespace Admin {
 constexpr int Width=840,Height=600;
 enum class Page {Licenses,Team,Station,Help,Settings};
@@ -11,6 +12,7 @@ struct UiState {
     bool started=false,credits=false;unsigned revision=0;float fade=1;
     bool reducedMotion=false,saveSettings=false,exportDiagnostics=false;
     int openFolder=0;
+    bool inspectCache=false,cleanCache=false,cacheReviewed=false;CachePlan cachePlan;std::string cacheSummary;
     int visibleLicenseCount=0;
     std::string dataPath,applicationPath;
     Picker pick=Picker::None;Request action;
