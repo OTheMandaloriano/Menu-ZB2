@@ -70,3 +70,11 @@ Organização dos fontes: menu nativo em `src/menu/`; detalhes em [docs/DESENVOL
   manifesto, leitura de módulos e testes. Não renomear o executável isoladamente.
 - Preservar avisos de licença e procedência dos componentes de terceiros.
 - Leia docs/PORTABILIDADE.md. A migração Deadblock.Menu está aplicada nos fontes. Validar uma nova sessão do jogo antes de declarar a entrega homologada.
+
+## Instalação sem identificação pessoal fixa
+
+- Nunca pedir nome da conta Windows para montar o caminho de instalação: consultar Known Folders.
+- Os guias também entram na verificação check_portable_identity.py.
+- Não distribuir atalhos --data do ambiente de desenvolvimento, relatórios brutos ou backups pessoais.
+- Não usar uma cópia antiga de D:/ZB2-Retomada como base de atualização do projeto oficial.
+- Conferir Unicode, permissões e diretórios redirecionados antes de afirmar suporte a qualquer perfil.
