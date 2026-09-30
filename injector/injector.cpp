@@ -497,7 +497,7 @@ int main(int argc, char** argv) {
 
     int rc;
     if (ok) {
-        Log(Level::Ok, "SUCESSO: pressione INSERT no jogo p/ abrir o menu.");
+        Log(Level::Ok, readinessProbe ? "Monitor de prontidao carregado. O menu ainda aguarda a cena da partida." : "SUCESSO: pressione INSERT no jogo p/ abrir o menu.");
         Log(Level::Info, "Log da DLL em Documents\\%s\\logs\\debug_log.txt.", kAppFolder);
         rc = 0;
     } else {

@@ -17,4 +17,5 @@ void Device(float x,float y,float width,const std::string& device);
 bool DeviceFits(const std::string& device,float width);
 void Wrapped(float x,float y,float width,const char* content,ImU32 color=UiTheme::muted);
 bool ReducedMotion();
+void SetReducedMotion(bool enabled);
 }

@@ -54,3 +54,11 @@ pressionamento com escala 0.98. No Admin, cada linha mostra validade, badge e
 cópia imediata. “Ativa” significa dentro da validade, não ativação confirmada
 no computador do cliente. Datas usam células numéricas de avanço fixo; não se
 declara que uma propriedade CSS `tnum` é executada pelo Dear ImGui.
+
+## Validação em partida — 30/09/2026
+
+PID 7964: sonda confirmou assemblies=1, map=1, objects=1 e unsupported=0.
+O fluxo do loader carregou kiero-dx11-base.dll às 01:28:32, confirmado na lista
+de módulos; debug_log registrou Unity Update e entidades ativas. A tela inicial
+com Tecle ENTER não é uma partida e deve aguardar. Corrigida mensagem do helper
+que anunciava INSERT ao carregar somente a sonda. Não houve reinjeção da DLL.

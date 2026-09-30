@@ -33,7 +33,7 @@ for resource,name in [(201,'Lexend-SemiBold.ttf'),(202,'Lexend-Bold.ttf'),(203,'
 env=environment(output)
 run([shutil.which('rc.exe',path=env['PATH']),'/nologo','/fo','admin.res','admin.rc'],env)
 cl=shutil.which('cl.exe',path=env['PATH']);flags=['/nologo','/std:c++17','/EHsc','/O2','/MT','/MP4','/W4','/WX','/utf-8','/DUNICODE','/D_UNICODE','/DNOMINMAX']
-core=[ROOT/'apps/admin/native'/f'{name}.cpp' for name in ['model','backend','controller','ui']]
+core=[ROOT/'apps/admin/native'/f'{name}.cpp' for name in ['model','backend','controller','ui','settings']]
 shared=[ROOT/'apps/shared'/f'{name}.cpp' for name in ['theme','widgets','resources']]
 imgui=[ROOT/'imgui'/f'{name}.cpp' for name in ['imgui','imgui_draw','imgui_tables','imgui_widgets']]
 libraries=['user32.lib','gdi32.lib','imm32.lib','bcrypt.lib','advapi32.lib','shell32.lib','ole32.lib','comdlg32.lib']

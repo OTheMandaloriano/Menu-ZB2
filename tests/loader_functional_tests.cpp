@@ -52,12 +52,13 @@ int wmain(int argc,wchar_t** argv){
         for(float scale:{1.f,1.5f,2.f}){
             ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={LoaderWidth*scale,LoaderHeight*scale};io.DeltaTime=1.f/60;
             ConfigureUiTheme(scale);io.Fonts->Build();
-            for(int page=0;page<9;++page){
-                LoaderUiState state;state.snapshot.version="1.5-local";state.snapshot.device=std::string(64,'a');state.snapshot.expiry="29/10/2026 14:00 UTC";
+            for(int page=0;page<10;++page){
+                LoaderUiState state;state.snapshot.version="1.7-local";state.snapshot.device=std::string(64,'a');state.snapshot.expiry="29/10/2026 14:00 UTC";
                 state.snapshot.phase=static_cast<LoaderPhase>(page<7?page:2);state.snapshot.licensed=page>=2;state.snapshot.pid=page>=3?1234:0;
                 const char* messages[]={u8"Verificando licença e pacote...",u8"Ative seu acesso neste computador.","Abra o Zumbi Blocks 2 para continuar.","Aguardando a cena da partida.",u8"Carregando o menu. Aguarde a confirmação...","Menu carregado. Pressione INSERT no jogo.",u8"Falha ao carregar. Confira as permissões e tente novamente."};
                 state.snapshot.message=messages[page<7?page:2];
                 state.about=page>=7;state.help=page==8;
+                state.credits=page==9;
                 for(int frame=0;frame<2;++frame){ImGui::NewFrame();DrawLoader(state);ImGui::Render();}
                 Require(RenderPpm("loader-"+std::to_string(page)+"-"+std::to_string(static_cast<int>(scale*100))+".ppm",1),"render");
             }
@@ -68,11 +69,15 @@ int wmain(int argc,wchar_t** argv){
             state.snapshot.phase=LoaderPhase::Activation;state.snapshot.licensed=false;
             frame(200,164,true);frame(200,164,false);Require(!state.activate,"empty license must not submit");
             strcpy_s(state.license,"ZB2L1.test");frame(200,164,true);frame(200,164,false);Require(state.activate,"activation click");
+            std::string longToken="ZB2L1."+std::string(410,'a');strcpy_s(state.license,longToken.c_str());frame(150,112,true);frame(150,112,false);
+            io.AddKeyEvent(ImGuiKey_End,true);frame(150,112,false);io.AddKeyEvent(ImGuiKey_End,false);frame(150,112,false);
+            Require(RenderPpm("license-input-active-"+std::to_string(static_cast<int>(scale*100))+".ppm",1),"active long input render");
+            Require(std::string(state.license)==longToken,"scroll changed license bytes");
             frame(100,208,true);frame(100,208,false);Require(state.importLicense,"file import click");
             frame(408,28,true);frame(408,28,false);Require(state.close,"close click");
             ImGui::DestroyContext();
         }
-        std::cout<<"27 renders and interaction checks passed; signed package verified.\n";
+        std::cout<<"30 state renders, 3 active long inputs and interaction checks passed; signed package verified.\n";
         return 0;
     }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}
 }

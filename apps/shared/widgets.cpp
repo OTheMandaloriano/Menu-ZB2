@@ -7,6 +7,7 @@
 namespace Ui {
 using namespace UiTheme;
 namespace {
+bool forceReducedMotion=false;
 struct Ink {float left=FLT_MAX,top=FLT_MAX,right=-FLT_MAX,bottom=-FLT_MAX;};
 Ink Measure(ImFont* face,const char* content){
     Ink ink;float pen=0;
@@ -27,7 +28,8 @@ void Text(float x,float y,float width,float height,const char* content,ImU32 col
     float top=(y+height*.5f)*uiScale-(ink.top+ink.bottom)*.5f;
     ImGui::GetWindowDrawList()->AddText(face,face->FontSize,ImVec2(IM_ROUND(left),IM_ROUND(top)),Alpha(color),content);
 }
-bool ReducedMotion(){BOOL animated=TRUE;SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION,0,&animated,0);return !animated;}
+bool ReducedMotion(){BOOL animated=TRUE;SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION,0,&animated,0);return forceReducedMotion||!animated;}
+void SetReducedMotion(bool enabled){forceReducedMotion=enabled;}
 bool Button(float x,float y,float width,float height,const char* label,bool quiet,bool selected,const char* icon){
     ImGui::SetCursorPos(P(x,y));ImGui::PushFont(regular);ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize,0);
     ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(0,0,0,0));
@@ -36,9 +38,9 @@ bool Button(float x,float y,float width,float height,const char* label,bool quie
     const bool hot=ImGui::IsItemHovered(),pressed=ImGui::IsItemActive();
     auto* storage=ImGui::GetStateStorage();const auto id=ImGui::GetItemID();float fade=storage->GetFloat(id,0);
     float target=selected?1.f:hot?.6f:0.f;
-    static const bool reduced=ReducedMotion();
+    const bool reduced=ReducedMotion();
     fade=reduced?target:ImLerp(fade,target,1.f-std::exp(-ImGui::GetIO().DeltaTime/.04f));storage->SetFloat(id,fade);
-    const bool primary=!quiet&&selected;const float scale=primary&&pressed&&!disabled?.98f:1.f;
+    const bool primary=!quiet&&selected;const float scale=!quiet&&pressed&&!disabled?.98f:1.f;
     ImU32 fill=quiet?IM_COL32(47,47,52,static_cast<int>(fade*180)):IM_COL32(static_cast<int>(34+fade*15),static_cast<int>(34+fade*15),static_cast<int>(38+fade*17),255);
     if(primary)fill=pressed?IM_COL32(29,78,190,255):hot?IM_COL32(48,111,246,255):IM_COL32(37,99,235,255);
     else if(pressed&&!disabled)fill=IM_COL32(62,62,68,255);
@@ -56,11 +58,15 @@ bool Button(float x,float y,float width,float height,const char* label,bool quie
     ImGui::PopStyleColor(4);ImGui::PopStyleVar();ImGui::PopFont();return clicked;
 }
 bool Input(float x,float y,float width,float height,const char* id,const char* hint,char* buffer,int capacity,ImGuiInputTextFlags flags,const char* icon){
-    ImGui::SetCursorPos(P(x,y));ImGui::PushFont(regular);auto ink=Measure(regular,"Ag");
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,ImVec2((icon?36:12)*uiScale,height*.5f*uiScale-(ink.top+ink.bottom)*.5f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize,1*uiScale);
-    bool result=ImGui::InputTextEx(id,hint,buffer,capacity,P(width,height),flags);
-    ImGui::PopStyleVar(2);ImGui::PopFont();if(icon)Text(x+12,y,16,height,icon,muted,regular,1);return result;
+    auto* draw=ImGui::GetWindowDrawList();draw->AddRectFilled(P(x,y),P(x+width,y+height),Alpha(IM_COL32(24,28,36,255)),4*uiScale);
+    const float gutter=icon?32.f:0.f;
+    ImGui::SetCursorPos(P(x+gutter,y));ImGui::PushFont(regular);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,P(14,10));ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize,0);
+    ImGui::PushStyleColor(ImGuiCol_FrameBg,ImVec4(0,0,0,0));ImGui::PushStyleColor(ImGuiCol_FrameBgHovered,ImVec4(0,0,0,0));ImGui::PushStyleColor(ImGuiCol_FrameBgActive,ImVec4(0,0,0,0));
+    bool result=ImGui::InputTextEx(id,hint,buffer,capacity,P(width-gutter,height),flags);
+    bool active=ImGui::IsItemActive();ImGui::PopStyleColor(3);ImGui::PopStyleVar(2);ImGui::PopFont();
+    draw->AddRect(P(x,y),P(x+width,y+height),Alpha(active?IM_COL32(90,130,210,255):IM_COL32(255,255,255,20)),4*uiScale,0,uiScale);
+    if(icon)Text(x+12,y,16,height,icon,muted,regular,1);return result;
 }
 bool Toggle(float x,float y,float width,const char* label,bool& enabled){
     ImGui::SetCursorPos(P(x,y));bool changed=ImGui::InvisibleButton(label,P(width,32));if(changed)enabled=!enabled;
@@ -92,10 +98,11 @@ bool RowCopy(const char* icon){
 void Hint(const char* content){if(ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))ImGui::SetTooltip("%s",content);}
 void Panel(float x,float y,float width,float height){auto* draw=ImGui::GetWindowDrawList();draw->AddRectFilled(P(x,y),P(x+width,y+height),Alpha(IM_COL32(31,31,35,255)),6*uiScale);draw->AddRect(P(x,y),P(x+width,y+height),Alpha(IM_COL32(47,47,52,255)),6*uiScale);}
 void Device(float x,float y,float width,const std::string& device){
-    Panel(x,y,width,52);const auto first=device.substr(0,32),second=device.size()>32?device.substr(32):std::string();
-    Text(x+12,y+6,width-24,18,first.empty()?"Aguardando ID":first.c_str(),text,caption);
-    Text(x+12,y+28,width-24,18,second.c_str(),text,caption);
+    Panel(x,y,width,36);const auto shown=device.size()==64?"HWID: "+device.substr(0,8)+"..."+device.substr(55):std::string("HWID indisponível");
+    Text(x+12,y,16,36,"\xef\x8b\x9b",muted,regular,1);
+    Text(x+36,y,width-48,36,shown.c_str(),text,caption);
+    ImGui::SetCursorPos(P(x,y));ImGui::InvisibleButton("##device-info",P(width,36));Hint(device.c_str());
 }
-bool DeviceFits(const std::string& device,float width){return device.size()==64 && caption->CalcTextSizeA(caption->FontSize,10000,0,device.substr(0,32).c_str()).x<=(width-24)*uiScale && caption->CalcTextSizeA(caption->FontSize,10000,0,device.substr(32).c_str()).x<=(width-24)*uiScale;}
+bool DeviceFits(const std::string& device,float width){auto shown="HWID: "+device.substr(0,8)+"..."+(device.size()>55?device.substr(55):"");return device.size()==64&&caption->CalcTextSizeA(caption->FontSize,10000,0,shown.c_str()).x<=(width-48)*uiScale;}
 void Wrapped(float x,float y,float width,const char* content,ImU32 color){ImGui::GetWindowDrawList()->AddText(regular,regular->FontSize,P(x,y),Alpha(color),content,nullptr,width*uiScale);}
 }

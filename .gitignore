@@ -31,3 +31,4 @@ dist/
 loader-private/
 *.zb2station
 *.zb2issuer
+.local/

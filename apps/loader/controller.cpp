@@ -67,7 +67,7 @@ void LoaderController::Run(){
             else if(!game.pid){state.phase=LoaderPhase::Waiting;state.message="Aguardando o Zumbi Blocks 2.";}
             else if(gate.failed||gate.menuAttempt==game.created||(gate.probeAttempt==game.created&&!game.probeLoaded)){state.phase=LoaderPhase::Error;state.message=u8"Tentativa não confirmada. Reinicie o jogo.";}
             else if(!assemblies){state.phase=LoaderPhase::Waiting;state.message=u8"Aguardando inicialização dos assemblies.";}
-            else if(!state.sceneReady){state.phase=LoaderPhase::Waiting;state.message=gate.Wanted(autoInject_.load())?u8"Aguardando a cena da partida.":u8"Automático desligado. Injeção manual disponível.";}
+            else if(!state.sceneReady){state.phase=LoaderPhase::Waiting;state.message=gate.Wanted(autoInject_.load())?(readiness.World()?u8"Mapa carregando. Aguardando prontidão.":u8"Entre em uma partida para carregar o menu."):u8"Automático desligado. Injeção manual disponível.";}
             else{state.phase=LoaderPhase::Ready;state.message=u8"Cena pronta para injeção.";}
             if(license.valid&&now-stored.lastSeen>=60){stored.lastSeen=now;LoaderServices::SaveState(root,stored);}
             if(!actionError.empty()){state.phase=LoaderPhase::Error;state.message=actionError;}

@@ -25,21 +25,16 @@ void LicensePage(UiState& state){
     Label(24,180,"Cliente");Ui::Input(24,204,328,36,"##customer","Nome ou identificador",state.customer,sizeof(state.customer),0,ICON_FA_USER);
     Label(24,256,"ID do computador do cliente");Ui::Input(24,280,328,36,"##device","Cole os 64 caracteres",state.device,sizeof(state.device),0,ICON_FA_MICROCHIP);
     Label(24,332,"Prazo de uso");
-    std::string chosen=std::to_string(std::max(1,Number(state.days)))+" dias";
-    if(Ui::Button(24,356,192,36,chosen.c_str()))ImGui::OpenPopup("Prazo");
-    if(ImGui::BeginPopup("Prazo")){
-        for(int amount:{7,15,30,90,180,365}){ImGui::BeginDisabled(amount>state.data.maxDays);std::string label=std::to_string(amount)+" dias";if(ImGui::Selectable(label.c_str()))snprintf(state.days,sizeof(state.days),"%d",amount);ImGui::EndDisabled();}
-        ImGui::EndPopup();
-    }
-    Ui::Input(228,356,124,36,"##days","Dias",state.days,sizeof(state.days),ImGuiInputTextFlags_CharsDecimal,ICON_FA_CALENDAR);
+    Ui::Input(24,356,328,40,"##days","Quantidade de dias",state.days,sizeof(state.days),ImGuiInputTextFlags_CharsDecimal,ICON_FA_CALENDAR);
     auto limit="Limite: "+std::to_string(state.data.maxDays)+" dias por licença.";Label(24,408,limit.c_str());
     ImGui::BeginDisabled(!ValidDevice(state.device)||strlen(state.customer)<2||Number(state.days)<1||Number(state.days)>state.data.maxDays);
-    if(Ui::Button(24,452,328,44,u8"Gerar ZIP do cliente",false,true,ICON_FA_WAND_MAGIC_SPARKLES))RequestAction(state,"issue_package",{state.customer,state.device,state.days});ImGui::EndDisabled();
+    if(Ui::Button(24,440,328,40,u8"Gerar ZIP do cliente",false,true,ICON_FA_WAND_MAGIC_SPARKLES))RequestAction(state,"issue_package",{state.customer,state.device,state.days});ImGui::EndDisabled();
     ImGui::BeginDisabled(!ValidDevice(state.device)||strlen(state.customer)<2||Number(state.days)<1||Number(state.days)>state.data.maxDays);
-    if(Ui::Button(24,504,328,24,"Gerar somente a chave",true))RequestAction(state,"issue",{state.customer,state.device,state.days});ImGui::EndDisabled();
-    Ui::Input(400,180,312,36,"##search","Buscar cliente ou ID",state.search,sizeof(state.search),0,ICON_FA_MAGNIFYING_GLASS);
-    if(Ui::Button(724,180,92,36,"Buscar",false,false,ICON_FA_MAGNIFYING_GLASS))RequestAction(state,"snapshot",{state.search});
+    if(Ui::Button(24,492,328,36,"Gerar somente a chave",false,false,ICON_FA_KEY))RequestAction(state,"issue",{state.customer,state.device,state.days});ImGui::EndDisabled();
+    Ui::Input(400,180,416,40,"##search","Buscar cliente ou ID",state.search,sizeof(state.search),0,ICON_FA_MAGNIFYING_GLASS);
+
     ImGui::SetCursorPos(Ui::P(400,232));ImGui::BeginChild("license-list",Ui::P(416,228),false);
+    state.visibleLicenseCount=0;
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding,Ui::P(4,6));
     if(ImGui::BeginTable("licenses",4,ImGuiTableFlags_RowBg|ImGuiTableFlags_SizingFixedFit)){
         ImGui::TableSetupColumn("Cliente",ImGuiTableColumnFlags_WidthStretch);
@@ -47,18 +42,26 @@ void LicensePage(UiState& state){
         ImGui::TableSetupColumn("Status",ImGuiTableColumnFlags_WidthFixed,120*uiScale);
         ImGui::TableSetupColumn("",ImGuiTableColumnFlags_WidthFixed,62*uiScale);ImGui::TableHeadersRow();
         for(const auto& row:state.data.licenses){
+            std::string haystack=row.customer+" "+row.device+" "+row.issuer,query=state.search;std::transform(haystack.begin(),haystack.end(),haystack.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});std::transform(query.begin(),query.end(),query.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});if(haystack.find(query)==std::string::npos)continue;++state.visibleLicenseCount;
             ImGui::PushID(row.id.c_str());ImGui::TableNextRow(ImGuiTableRowFlags_None,36*uiScale);ImGui::TableNextColumn();
             auto at=ImGui::GetCursorScreenPos();if(ImGui::Selectable("##row",state.selectedLicense==row.id,ImGuiSelectableFlags_SpanAllColumns|ImGuiSelectableFlags_AllowItemOverlap,ImVec2(0,24*uiScale)))state.selectedLicense=row.id;
             ImGui::GetWindowDrawList()->AddText(at,ImGui::GetColorU32(ImGuiCol_Text),row.customer.c_str());
             ImGui::TableNextColumn();Ui::Tabular(row.expiry.c_str());
             ImGui::TableNextColumn();const bool active=row.expires?row.expires>License::Now():row.status==u8"Válida"||row.status=="Ativa";
-            auto label=std::string(active?"Ativa":"Expirada")+u8" · "+row.days+"d";Ui::Badge(label.c_str(),active);
+            auto label=active?std::string("Ativo")+u8" · "+row.days+"d":std::string("Expirado");Ui::Badge(label.c_str(),active);
             ImGui::TableNextColumn();if(Ui::RowCopy(ICON_FA_COPY))Copy(state,row.token);ImGui::PopID();
         }
         ImGui::EndTable();
     }
     ImGui::PopStyleVar();
-    if(state.data.licenses.empty())ImGui::TextDisabled("Nenhuma emissao encontrada.");ImGui::EndChild();
+    if(state.visibleLicenseCount==0){
+        const char* title=state.search[0]?"Nenhum resultado":u8"Seu histórico começa aqui";
+        const char* detail=state.search[0]?"Tente outro nome ou ID.":"Gere o primeiro pacote para um cliente.";
+        auto* draw=ImGui::GetWindowDrawList();auto origin=ImGui::GetWindowPos();
+        float width=regular->CalcTextSizeA(regular->FontSize,10000,0,title).x;
+        draw->AddText(regular,regular->FontSize,ImVec2(origin.x+(416*uiScale-width)*.5f,origin.y+88*uiScale),ImGui::GetColorU32(ImGuiCol_Text),title);
+        width=caption->CalcTextSizeA(caption->FontSize,10000,0,detail).x;draw->AddText(caption,caption->FontSize,ImVec2(origin.x+(416*uiScale-width)*.5f,origin.y+116*uiScale),ImGui::GetColorU32(ImGuiCol_TextDisabled),detail);
+    }ImGui::EndChild();
     const auto found=std::find_if(state.data.licenses.begin(),state.data.licenses.end(),[&](const LicenseRow& row){return row.id==state.selectedLicense;});
     ImGui::BeginDisabled(found==state.data.licenses.end());
     if(Ui::Button(400,476,202,36,"Copiar selecionada",false,false,ICON_FA_COPY)&&found!=state.data.licenses.end())Copy(state,found->token);
@@ -76,7 +79,7 @@ void TeamPage(UiState& state){
     Ui::Wrapped(24,396,328,u8"Exemplo: emitir por 365 dias, com licenças de até 30 dias.");
     const int period=Number(state.grantDays),maximum=Number(state.maxDays);
     ImGui::BeginDisabled(state.requestText.empty()||period<1||period>3650||maximum<1||maximum>period);
-    if(Ui::Button(24,452,328,44,u8"Autorizar e gerar ZIP",false,true,ICON_FA_WAND_MAGIC_SPARKLES))RequestAction(state,"authorize_package",{state.requestText,state.grantDays,state.maxDays});ImGui::EndDisabled();
+    if(Ui::Button(24,440,328,40,u8"Autorizar e gerar ZIP",false,true,ICON_FA_WAND_MAGIC_SPARKLES))RequestAction(state,"authorize_package",{state.requestText,state.grantDays,state.maxDays});ImGui::EndDisabled();
     ImGui::SetCursorPos(Ui::P(400,180));ImGui::BeginChild("team-list",Ui::P(416,280),false);
     if(ImGui::BeginTable("team",3,ImGuiTableFlags_RowBg|ImGuiTableFlags_SizingStretchProp)){
         ImGui::TableSetupColumn("Integrante");ImGui::TableSetupColumn("Validade");ImGui::TableSetupColumn("Limite");ImGui::TableHeadersRow();
@@ -88,7 +91,7 @@ void TeamPage(UiState& state){
 }
 void StationPage(UiState& state){
     Ui::Text(24,136,370,28,u8"Minha estação",text,regular);Label(24,180,"ID completo deste computador");Ui::Device(24,208,352,state.data.device);
-    if(Ui::Button(24,272,352,28,"Copiar ID completo",false,false,ICON_FA_COPY))Copy(state,state.data.device);
+    if(Ui::Button(24,256,352,36,"Copiar ID completo",false,false,ICON_FA_COPY))Copy(state,state.data.device);
     Label(24,328,u8"Estação emissora");Ui::Text(24,352,352,24,state.data.stationId.empty()?u8"Ainda não configurada":state.data.stationId.c_str(),text,caption);
     Label(24,396,u8"Usuário Windows");Ui::Text(24,420,352,24,state.data.user.c_str(),text,regular);
     Label(24,464,u8"Responsável pela estação");Ui::Wrapped(24,488,352,state.data.name.empty()?u8"Não configurado":state.data.name.c_str(),text);
@@ -116,6 +119,23 @@ void StationPage(UiState& state){
         if(Ui::Button(424,460,392,28,u8"Importar nova autorização",true))state.pick=Picker::Authorization;
     }
 }
+void SettingsPage(UiState& state){
+    Ui::Text(24,136,792,32,u8"Configurações",text,heading);
+    Ui::Text(24,184,370,24,"Aparência",text,regular);
+    if(Ui::Toggle(24,220,360,"Reduzir movimento",state.reducedMotion)){state.saveSettings=true;Ui::SetReducedMotion(state.reducedMotion);}
+    Ui::Wrapped(24,272,360,u8"Mantém os controles responsivos e desativa transições. A preferência fica salva neste perfil.");
+    Ui::Text(24,352,360,24,"Diagnóstico",text,regular);
+    Ui::Wrapped(24,392,360,u8"Exporte versão e contagens para suporte, sem nomes, IDs, chaves ou licenças.");
+    if(Ui::Button(24,456,360,40,"Exportar diagnóstico",false,true,ICON_FA_DOWNLOAD))state.exportDiagnostics=true;
+    Ui::Text(424,184,392,24,"Pastas",text,regular);
+    if(Ui::Button(424,220,188,36,"Meus dados",false,false,ICON_FA_FOLDER_OPEN))state.openFolder=1;
+    if(Ui::Button(624,220,192,36,"Pacotes",false,false,ICON_FA_FOLDER_OPEN))state.openFolder=2;
+    if(Ui::Button(424,268,188,36,"Aplicativo",false,false,ICON_FA_DESKTOP))state.openFolder=3;
+    if(Ui::Button(624,268,192,36,"Logs do menu",false,false,ICON_FA_FILE_LINES))state.openFolder=4;
+    Ui::Wrapped(424,328,392,u8"Projeto: executáveis, fontes, ícones e builds.\nDocumentos: configurações, histórico e dados de uso.");
+    Ui::Wrapped(424,408,392,u8"A limpeza não apaga licenças nem backups. Não há limpeza automática de logs ou da pasta Temp do computador.");
+    Ui::Text(424,492,392,20,"ZB2 Admin 1.7 · ImGui / x64",muted,caption);
+}
 void HelpPage(){
     Ui::Text(24,136,792,32,"Pronto para enviar",text,heading);
     Ui::Panel(24,200,380,272);Ui::Panel(424,200,392,272);
@@ -140,18 +160,29 @@ void Draw(UiState& state){
     Ui::Text(24,16,320,36,"ZB2 Admin",text,heading);const std::string identity=state.data.name+(state.data.role=="owner"&&state.data.maxDays>0?u8" · Proprietário":state.data.maxDays>0?" · Integrante":" · Sem autorização");Ui::Text(424,20,304,28,identity.c_str(),muted,caption,2);
     if(Ui::Button(748,20,28,28,ICON_FA_MINUS,true))state.minimize=true;
     if(Ui::Button(788,20,28,28,ICON_FA_XMARK,true))state.close=true;
-    const char* tabs[]={"Clientes","Minha equipe","Meu acesso","Ajuda"};
-    const char* tabIcons[]={ICON_FA_KEY,ICON_FA_USERS,ICON_FA_DESKTOP,ICON_FA_CIRCLE_QUESTION};
-    for(int i=0;i<4;++i)if(Ui::Button(24+198.f*static_cast<float>(i),80,190,36,tabs[i],true,state.page==static_cast<Page>(i),tabIcons[i]))Switch(state,static_cast<Page>(i));
+    const char* tabs[]={"Clientes","Minha equipe","Meu acesso",u8"Configurações","Ajuda"};
+    const Page tabPages[]={Page::Licenses,Page::Team,Page::Station,Page::Settings,Page::Help};
+    const char* tabIcons[]={ICON_FA_KEY,ICON_FA_USERS,ICON_FA_DESKTOP,ICON_FA_GEAR,ICON_FA_CIRCLE_QUESTION};
+    for(int i=0;i<5;++i)if(Ui::Button(24+160.f*static_cast<float>(i),80,152,36,tabs[i],true,state.page==tabPages[i],tabIcons[i]))Switch(state,tabPages[i]);
     state.fade=std::min(1.f,state.fade+ImGui::GetIO().DeltaTime/.12f);ImGui::PushStyleVar(ImGuiStyleVar_Alpha,state.fade);
     if(state.page==Page::Help){
-        if(state.credits){static const auto notices=AppResources::Read(205);ImGui::SetCursorPos(Ui::P(24,136));ImGui::BeginChild("creditos",Ui::P(792,340),false);ImGui::TextWrapped("%s",notices.c_str());ImGui::EndChild();if(Ui::Button(24,488,240,32,"Voltar à ajuda"))state.credits=false;}
+        if(state.credits){
+            Ui::Text(24,144,792,32,u8"ZB2 Pro Menu — Créditos & Equipe",text,heading);
+            Ui::Text(24,208,792,28,"WeFagundes & Equipe de Modding",text,regular);
+            Ui::Text(24,252,792,24,"Unity Mono / DirectX 11 Hook (x64)",muted,regular);
+            Ui::Text(24,292,792,24,u8"v1.7-local · Alpha Build",muted,regular);
+            Ui::Text(24,332,792,24,state.data.maxDays>0?u8"Emissão autorizada neste PC":u8"Aguardando autorização",text,regular);
+            if(Ui::Button(24,432,384,36,"Voltar à ajuda"))state.credits=false;
+            if(Ui::Button(420,432,396,36,u8"Dependências",true))ImGui::OpenPopup("Dependencias");
+            if(ImGui::BeginPopup("Dependencias")){ImGui::BeginChild("notices",Ui::P(640,240));static const auto notices=AppResources::Read(205);ImGui::TextWrapped("%s",notices.c_str());ImGui::EndChild();ImGui::EndPopup();}
+        }
         else{HelpPage();if(Ui::Button(700,492,116,28,"Créditos",true))state.credits=true;}
     }
+    else if(state.page==Page::Settings)SettingsPage(state);
     else if(!state.data.initialized){Ui::Text(24,200,792,40,state.data.busy?u8"Verificando estação...":u8"Não foi possível abrir a estação",text,heading,1);Ui::Wrapped(100,276,640,state.message.c_str());if(!state.data.busy&&Ui::Button(270,388,300,40,"Verificar novamente"))RequestAction(state,"snapshot");}
     else{ImGui::BeginDisabled(state.data.busy);switch(state.page){case Page::Licenses:LicensePage(state);break;case Page::Team:TeamPage(state);break;case Page::Station:StationPage(state);break;default:break;}ImGui::EndDisabled();}
     ImGui::PopStyleVar();ImGui::GetWindowDrawList()->AddLine(Ui::P(24,540),Ui::P(816,540),IM_COL32(49,49,55,255));
-    const std::string message=state.data.busy?"Processando...":state.message.empty()?"1.5  |  Extraia o ZIP antes de executar":state.message;
+    const std::string message=state.data.busy?"Processando...":state.message.empty()?"1.7  |  Extraia o ZIP antes de executar":state.message;
     ImGui::GetWindowDrawList()->PushClipRect(Ui::P(24,548),Ui::P(state.exportText.empty()?816.f:600.f,588),true);Ui::Text(24,548,576,28,message.c_str(),state.data.error?IM_COL32(231,153,151,255):muted,caption);ImGui::GetWindowDrawList()->PopClipRect();
     ImGui::SetCursorPos(Ui::P(24,548));ImGui::InvisibleButton("##notice",Ui::P(state.exportText.empty()?792.f:576.f,32));Ui::Hint(message.c_str());
     if(!state.exportText.empty()){

@@ -1,5 +1,7 @@
 #include "controller.h"
 #include "ui.h"
+#include "settings.h"
+#include "../../shared/widgets.h"
 #include "../../shared/graphics.h"
 #include "../../shared/theme.h"
 #include "../../loader/license.h"
@@ -44,7 +46,8 @@ LRESULT CALLBACK AdminWindowProc(HWND window,UINT message,WPARAM w,LPARAM l){
 int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show){
     try{
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-        auto root=Admin::DataRoot();int argc=0;LPWSTR* argv=CommandLineToArgvW(GetCommandLineW(),&argc);if(argc==3&&std::wstring(argv[1])==L"--data")root=argv[2];LocalFree(argv);
+        auto root=Admin::DataRoot();bool showSettings=false;int argc=0;LPWSTR* argv=CommandLineToArgvW(GetCommandLineW(),&argc);
+        for(int i=1;i<argc;++i){if(std::wstring(argv[i])==L"--data"&&i+1<argc)root=argv[++i];else if(std::wstring(argv[i])==L"--settings")showSettings=true;}LocalFree(argv);
         auto canonical=std::filesystem::absolute(root).wstring();CharUpperBuffW(canonical.data(),static_cast<DWORD>(canonical.size()));
         auto utf8=std::filesystem::path(canonical).u8string();auto identity=License::Sha256(utf8.data(),utf8.size());
         std::wstring name=L"Local\\ZB2Admin."+std::wstring(identity.begin(),identity.end());Handle mutex;mutex.value=CreateMutexW(nullptr,FALSE,name.c_str());
@@ -62,6 +65,10 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show){
         if(!ImGui_ImplWin32_Init(window)||!ImGui_ImplDX11_Init(graphics.Device(),graphics.Context()))return 3;
         std::unique_ptr<Admin::Controller> controller;if(!duplicate&&mutex.value)controller=std::make_unique<Admin::Controller>(root);
         Admin::UiState state;if(!controller){state.data.busy=false;state.message="Feche a outra versao do Admin e abra esta novamente.";}
+        wchar_t self[32768]{};GetModuleFileNameW(nullptr,self,32768);const auto applicationDirectory=std::filesystem::path(self).parent_path();
+        state.dataPath=root.u8string();state.applicationPath=applicationDirectory.u8string();
+        try{state.reducedMotion=Admin::ReadSettings(root).reducedMotion;Ui::SetReducedMotion(state.reducedMotion);}catch(const std::exception& error){state.message=error.what();}
+        if(showSettings){state.page=Admin::Page::Settings;state.started=true;}
         ShowWindow(window,show);bool done=false;
         while(!done){
             MSG message;while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)){TranslateMessage(&message);DispatchMessageW(&message);if(message.message==WM_QUIT)done=true;}
@@ -79,6 +86,12 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show){
                 }else if(controller)controller->Submit(state.action);
             }
             if(state.copy){ImGui::SetClipboardText(state.copyText.c_str());state.copy=false;}
+            if(state.saveSettings){state.saveSettings=false;try{Admin::SaveSettings(root,{state.reducedMotion});state.message="Preferência salva.";}catch(const std::exception& error){state.message=error.what();}}
+            if(state.openFolder){
+                auto path=state.openFolder==1?root:state.openFolder==2?root.parent_path()/L"Pacotes":state.openFolder==3?applicationDirectory:root.parent_path()/L"logs";
+                state.openFolder=0;try{std::filesystem::create_directories(path);if(reinterpret_cast<INT_PTR>(ShellExecuteW(window,L"open",path.c_str(),nullptr,nullptr,SW_SHOWNORMAL))<=32)throw std::runtime_error("Não foi possível abrir a pasta.");}catch(const std::exception& error){state.message=error.what();}
+            }
+            if(state.exportDiagnostics){state.exportDiagnostics=false;auto path=Pick(window,true,"ZB2-diagnostico.txt",L"Diagnostico de suporte\0*.txt\0\0");if(!path.empty())try{Admin::WriteDiagnostics(path,state.data.role=="owner",state.data.total,static_cast<int>(state.data.grants.size()));state.message="Diagnóstico salvo sem dados sensíveis.";}catch(const std::exception& error){state.message=error.what();}}
             if(state.pick!=Admin::Picker::None&&controller){
                 const auto action=state.pick;state.pick=Admin::Picker::None;
                 const auto filter=action==Admin::Picker::Request?L"Solicitacao da equipe\0*.zb2station\0\0":action==Admin::Picker::Authorization?L"Autorizacao da estacao\0*.zb2issuer\0\0":L"Chave do proprietario\0*.dpapi\0\0";

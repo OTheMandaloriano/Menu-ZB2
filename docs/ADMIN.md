@@ -59,7 +59,7 @@ A recuperação preserva o histórico e guarda uma cópia protegida da configura
 anterior. Não envie a chave `.dpapi` a clientes ou integrantes.
 
 No seu perfil WeFagundes, a chave de manutenção fica em
-`C:/Users/WeFagundes/Documents/ZB2Menu/Privado/issuer-owner.dpapi`; o Admin já está configurado.
+`D:/Projeto/ZB2 Menu/.local/private/issuer-owner.dpapi`; o Admin já está configurado.
 Os dados ficam em `Documentos/ZB2Menu/Admin`. Não distribua essa pasta.
 
 ## O que não vai no ZIP
@@ -90,3 +90,15 @@ com os limites documentados em [LOADER.md](LOADER.md) e [AUTO_INJECT.md](AUTO_IN
 - `scripts/package_delivery.py`: produzir os ZIPs iniciais sem dados pessoais.
 
 Organização de pastas e ícones: [PASTAS.md](PASTAS.md).
+
+## Configurações
+
+Use a aba Configurações para reduzir movimento, abrir dados/pacotes/aplicativo/logs
+e salvar um diagnóstico sem dados pessoais. A limpeza preserva licenças, chaves e
+histórico. Veja [ESTRUTURA.md](ESTRUTURA.md).
+
+## Acabamento 1.7
+
+Prazo em um único campo de dias; busca filtra as linhas carregadas enquanto digita.
+O HWID é abreviado visualmente e o botão copia todos os 64 caracteres. Créditos
+mostram o projeto; atribuições ficam em Dependências, sem TXT de entrega.

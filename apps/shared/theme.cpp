@@ -35,8 +35,9 @@ void ConfigureUiTheme(float dpi){
     style.ScaleAllSizes(uiScale);
     static std::array<std::string,5> fonts={AppResources::Read(201),AppResources::Read(202),AppResources::Read(203),AppResources::Read(204),AppResources::Read(206)};
     auto& atlas=*ImGui::GetIO().Fonts;atlas.Clear();
+    static const ImWchar textRanges[]={0x0020,0x00ff,0x2000,0x206f,0};
     auto add=[&](size_t index,float size){ImFontConfig config;config.FontDataOwnedByAtlas=false;
-        return atlas.AddFontFromMemoryTTF(fonts[index].data(),static_cast<int>(fonts[index].size()),size*uiScale,&config,atlas.GetGlyphRangesDefault());};
+        return atlas.AddFontFromMemoryTTF(fonts[index].data(),static_cast<int>(fonts[index].size()),size*uiScale,&config,textRanges);};
     auto merge=[&](){
         static const ImWchar ranges[]={ICON_MIN_FA,ICON_MAX_16_FA,0};ImFontConfig config;
         config.FontDataOwnedByAtlas=false;config.MergeMode=true;config.PixelSnapH=true;config.GlyphMinAdvanceX=16*uiScale;

@@ -1,46 +1,47 @@
-# ZB2 Menu
+# Estrutura do projeto e dados de uso
 
-Menu interno em C++/D3D11 com adaptadores C# para Unity Mono.
+## Projeto — D:/Projeto/ZB2 Menu
 
-## Estrutura
+- `apps/`: código dos aplicativos; `apps/shared/brand` é a única fonte dos ícones.
+- `scripts/`, `tests/`, `docs/`, `packaging/`: desenvolvimento, validação e documentação.
+- `build/`: arquivos intermediários, testes e diagnósticos de compilação. Não enviar.
+- `dist/admin/ZB2Admin.exe`: Admin atual para uso.
+- `dist/loader/ZB2Menu.exe`: cliente atual para uso.
+- `dist/entrega/`: ZIPs iniciais sem licenças pessoais.
+- `.local/private/`: material de emissão protegido por DPAPI, ignorado pelo Git.
+- `.local/backups/`: cópias de recuperação pessoais, ignoradas pelo Git.
 
-| Caminho | Finalidade |
-|---|---|
-| `main.cpp`, `gui.cpp`, `mono.cpp`, headers e `.inl` na raiz | Entrada, interface, integração nativa e módulos auxiliares |
-| `kiero-dx11-base.vcxproj` | Projeto Visual Studio da DLL nativa |
-| `managed/` | Adaptadores C#; fontes necessárias para gerar `Zb2.AimBridge.dll` |
-| `injector/` | Código, projeto e configuração do injetor |
-| `imgui/`, `kiero/` | Dependências incorporadas ao código-fonte |
-| `tests/` | Testes e modelos simulados, sem controlar a tela do jogo |
-| `scripts/` | Identificação do ambiente e compilação gerenciada |
-| `docs/` | Auditorias, comportamento e limitações das funções |
-| `memory/`, `dump/` | Evidências de engenharia reversa e campos auditados; não são caches de compilação |
-| `.agents/`, `.opencode/`, `AGENTS.md`, `opencode.json` | Instruções e configuração das ferramentas locais |
-| `.git/` | Histórico do repositório |
-| `build/` | Saídas geradas, ignoradas pelo Git |
+Não colocar ícones originais, executáveis de desenvolvimento ou documentação
+duplicada em Documentos. Não enviar o repositório inteiro ou `.local` a ninguém.
 
-## Saídas de compilação
+## Documentos/ZB2Menu — somente dados de uso
 
-`build/Release_x64/` contém a distribuição de desenvolvimento atual:
+- `Admin/`: estação, histórico, autorizações, preferências e serviço local necessário.
+- `loader/`: ativação, preferências, runtime do cliente e último log de carga.
+- `configs/`, `imgui.ini`, `logs/`: configurações e logs do menu existente.
+- `Pacotes/`: destino inicial dos ZIPs personalizados que o usuário decide salvar.
 
-- `kiero-dx11-base.dll`: módulo nativo.
-- `Zb2.AimBridge.dll` e `0Harmony.dll`: adaptadores e dependência de runtime; não remover.
-- `Harmony.LICENSE`: licença da dependência distribuída.
-- `injector.exe` e `config.ini`: execução e configuração do injetor.
-- `kiero-dx11-base.pdb` e `.map`: símbolos e mapa correspondentes à DLL, mantidos para diagnosticar crashes. Não são necessários para executar, mas são úteis no desenvolvimento.
+O serviço local extraído em `Admin/runtime/<hash>` faz parte do funcionamento,
+não é lixo por existir. Não apagar o serviço em uso. Logs e backups não são
+descartados automaticamente. Escritas atômicas usam `.tmp` junto ao destino,
+sem depender da pasta TEMP global.
 
-`build/intermediates/` é cache gerado pelo MSBuild. Pode ser removido quando não houver compilação em andamento e será recriado na próxima compilação. Sua presença é normal, não código residual.
+## Configurações do Admin
 
-Builds candidatos, DLLs `.old` e autosaves vazios de ferramentas não pertencem à distribuição atual nem à raiz. Backups de atualização devem ficar fora da árvore do projeto, identificados por data/versão. Logs e presets do usuário ficam em `Documents/kiero-dx11-base`, não entre os fontes.
+A aba permite reduzir movimento (persistido em Admin/preferences.txt), abrir
+dados/pacotes/aplicativo/logs e exportar diagnóstico mínimo: versão, plataforma,
+papel e contagens. O diagnóstico não inclui nomes, IDs, tokens ou chaves.
+Nenhum botão apaga licenças/histórico ou limpa Temp indiscriminadamente.
 
-## Compilação e verificações
+## Limpeza realizada
 
-Compile `kiero-dx11-base.vcxproj` em `Release|x64` e o projeto de `injector/` quando necessário. Gere os adaptadores com:
+Duplicatas produzidas por esta implementação só são excluídas após comparação
+SHA-256 com o destino correto. Distribuições versionadas antigas em `dist/admin-1.*`
+e `dist/loader-1.*` são outputs anteriores, preservados nesta rodada para recuperação. Fontes,
+commits e artefatos de diagnóstico não relacionados permanecem intactos.
 
-```powershell
-python scripts/build_managed_aim.py --managed "CAMINHO_DO_JOGO/ZumbiBlocks2_Data/Managed"
-```
+Referência: [separação de estado e conteúdo da aplicação, Microsoft](https://learn.microsoft.com/en-us/windows/apps/develop/windows-app-restore).
 
-O script verifica a versão do assembly do jogo e a integridade da dependência. Execute os testes aplicáveis em `tests/`; o runner nativo é `python tests/run_aim_validation.py`. Compilação e testes simulados não comprovam funcionamento em partida.
-
-Fontes permanecem na estrutura atual para preservar includes e projetos existentes. Uma migração para `src/` deve atualizar os projetos e testes em uma alteração própria, não ser misturada à limpeza de artefatos.
+Limpeza comprovada nesta rodada: 18.619.367 bytes em dez duplicatas idênticas
+retiradas de Documentos. Chave e backups pessoais foram transferidos individualmente
+para .local com comparação de hash, sem apagar o conteúdo recuperável.
