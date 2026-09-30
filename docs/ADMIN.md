@@ -59,8 +59,8 @@ A recuperação preserva o histórico e guarda uma cópia protegida da configura
 anterior. Não envie a chave `.dpapi` a clientes ou integrantes.
 
 No seu perfil WeFagundes, a chave de manutenção fica em
-`D:/ZB2-Retomada/loader-private/issuer-owner.dpapi`; o Admin já está configurado.
-Os dados ficam em `%LOCALAPPDATA%/ZB2Admin`. Não distribua essa pasta.
+`C:/Users/WeFagundes/Documents/ZB2Menu/Privado/issuer-owner.dpapi`; o Admin já está configurado.
+Os dados ficam em `Documentos/ZB2Menu/Admin`. Não distribua essa pasta.
 
 ## O que não vai no ZIP
 
@@ -88,3 +88,5 @@ com os limites documentados em [LOADER.md](LOADER.md) e [AUTO_INJECT.md](AUTO_IN
   recuperação, renovação, PC incorreto e preservação do histórico.
 - `tests/run_admin_validation.py --key CAMINHO_DPAPI`: assinatura e permissões.
 - `scripts/package_delivery.py`: produzir os ZIPs iniciais sem dados pessoais.
+
+Organização de pastas e ícones: [PASTAS.md](PASTAS.md).

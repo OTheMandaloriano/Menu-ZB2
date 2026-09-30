@@ -19,6 +19,8 @@ std::filesystem::path Pick(HWND window,bool save,const std::string& suggested,co
     wchar_t buffer[32768]{};
     if(!suggested.empty())MultiByteToWideChar(CP_UTF8,0,suggested.c_str(),-1,buffer,32768);
     OPENFILENAMEW dialog{};dialog.lStructSize=sizeof(dialog);dialog.hwndOwner=window;dialog.lpstrFilter=filter;dialog.lpstrFile=buffer;dialog.nMaxFile=32768;
+    const auto packages=Admin::DataRoot().parent_path()/L"Pacotes";
+    if(save){std::filesystem::create_directories(packages);dialog.lpstrInitialDir=packages.c_str();}
     dialog.Flags=OFN_NOCHANGEDIR|OFN_PATHMUSTEXIST|(save?OFN_OVERWRITEPROMPT:OFN_FILEMUSTEXIST);
     return (save?GetSaveFileNameW(&dialog):GetOpenFileNameW(&dialog))?std::filesystem::path(buffer):std::filesystem::path();
 }
@@ -48,7 +50,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show){
         std::wstring name=L"Local\\ZB2Admin."+std::wstring(identity.begin(),identity.end());Handle mutex;mutex.value=CreateMutexW(nullptr,FALSE,name.c_str());
         const bool duplicate=mutex.value&&GetLastError()==ERROR_ALREADY_EXISTS;
         if(duplicate){HWND existing=FindWindowW(L"ZB2AdminNative",nullptr);if(existing){ShowWindow(existing,SW_RESTORE);SetForegroundWindow(existing);return 0;}}
-        WNDCLASSW wc{};wc.lpfnWndProc=AdminWindowProc;wc.hInstance=instance;wc.lpszClassName=L"ZB2AdminNative";wc.hCursor=LoadCursor(nullptr,IDC_ARROW);if(!RegisterClassW(&wc))return 1;
+        WNDCLASSW wc{};wc.lpfnWndProc=AdminWindowProc;wc.hInstance=instance;wc.lpszClassName=L"ZB2AdminNative";wc.hCursor=LoadCursor(nullptr,IDC_ARROW);wc.hIcon=LoadIconW(instance,MAKEINTRESOURCEW(1));if(!RegisterClassW(&wc))return 1;
         HWND window=CreateWindowW(wc.lpszClassName,L"ZB2 Admin",WS_POPUP|WS_SYSMENU|WS_MINIMIZEBOX,CW_USEDEFAULT,CW_USEDEFAULT,Admin::Width,Admin::Height,nullptr,nullptr,instance,nullptr);
         if(!window||!graphics.Initialize(window))return 2;
         ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.ConfigFlags|=ImGuiConfigFlags_NavEnableKeyboard;

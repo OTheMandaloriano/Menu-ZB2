@@ -15,6 +15,7 @@
 *.exe binary
 *.pdb binary
 *.png binary
+*.ico binary
 *.zip binary
 *.ttf binary
 # Preserve the upstream OFL license text byte for byte, including its trailing space.

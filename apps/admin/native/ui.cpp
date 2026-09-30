@@ -151,7 +151,7 @@ void Draw(UiState& state){
     else if(!state.data.initialized){Ui::Text(24,200,792,40,state.data.busy?u8"Verificando estação...":u8"Não foi possível abrir a estação",text,heading,1);Ui::Wrapped(100,276,640,state.message.c_str());if(!state.data.busy&&Ui::Button(270,388,300,40,"Verificar novamente"))RequestAction(state,"snapshot");}
     else{ImGui::BeginDisabled(state.data.busy);switch(state.page){case Page::Licenses:LicensePage(state);break;case Page::Team:TeamPage(state);break;case Page::Station:StationPage(state);break;default:break;}ImGui::EndDisabled();}
     ImGui::PopStyleVar();ImGui::GetWindowDrawList()->AddLine(Ui::P(24,540),Ui::P(816,540),IM_COL32(49,49,55,255));
-    const std::string message=state.data.busy?"Processando...":state.message.empty()?"1.4  |  Extraia o ZIP antes de executar":state.message;
+    const std::string message=state.data.busy?"Processando...":state.message.empty()?"1.5  |  Extraia o ZIP antes de executar":state.message;
     ImGui::GetWindowDrawList()->PushClipRect(Ui::P(24,548),Ui::P(state.exportText.empty()?816.f:600.f,588),true);Ui::Text(24,548,576,28,message.c_str(),state.data.error?IM_COL32(231,153,151,255):muted,caption);ImGui::GetWindowDrawList()->PopClipRect();
     ImGui::SetCursorPos(Ui::P(24,548));ImGui::InvisibleButton("##notice",Ui::P(state.exportText.empty()?792.f:576.f,32));Ui::Hint(message.c_str());
     if(!state.exportText.empty()){

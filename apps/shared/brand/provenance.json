@@ -1,0 +1,17 @@
+{
+  "admin": {
+    "source": "exec-c6463198-45b3-4ecc-8361-fb90424c7eb1.png",
+    "sha256": "891b717d42814ee71fec16d286efab1a2b57ce3531027f8161ef87e04a21c339",
+    "method": "image_gen; PNG retained unchanged; ICO encoding and resolution variants only"
+  },
+  "client": {
+    "source": "exec-9b6ebaa6-b447-43b4-b09a-480f2419b5ad.png",
+    "sha256": "28cee7d19720af3e13f0ddd3fb83550ff114293b9845b9757dc4ea47a869fb1a",
+    "method": "image_gen; PNG retained unchanged; ICO encoding and resolution variants only"
+  },
+  "menu": {
+    "source": "exec-56b1240b-b3c8-40f5-a97d-bf52c58bce73.png",
+    "sha256": "2eccbd6092de37a58c7c7ba00fd69f469512873382e8f671538d2b4050de9c9b",
+    "method": "image_gen; PNG retained unchanged; ICO encoding and resolution variants only"
+  }
+}

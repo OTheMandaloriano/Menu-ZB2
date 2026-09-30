@@ -38,7 +38,7 @@ LRESULT CALLBACK WindowProc(HWND window,UINT message,WPARAM w,LPARAM l){
 }
 int RunLoaderWindow(HINSTANCE instance,int show){
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    WNDCLASSW wc={};wc.lpfnWndProc=WindowProc;wc.hInstance=instance;wc.lpszClassName=L"ZB2Loader";wc.hCursor=LoadCursor(nullptr,IDC_ARROW);
+    WNDCLASSW wc={};wc.lpfnWndProc=WindowProc;wc.hInstance=instance;wc.lpszClassName=L"ZB2Loader";wc.hCursor=LoadCursor(nullptr,IDC_ARROW);wc.hIcon=LoadIconW(instance,MAKEINTRESOURCEW(1));
     if(!RegisterClassW(&wc))return 1;
     HWND window=CreateWindowW(wc.lpszClassName,L"ZB2 Menu",WS_POPUP|WS_SYSMENU|WS_MINIMIZEBOX,CW_USEDEFAULT,CW_USEDEFAULT,LoaderWidth,LoaderHeight,nullptr,nullptr,instance,nullptr);
     if(!window || !graphics.Initialize(window)){if(window)DestroyWindow(window);UnregisterClassW(wc.lpszClassName,instance);return 2;}

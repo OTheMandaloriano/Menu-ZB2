@@ -15,7 +15,9 @@ from cryptography.hazmat.primitives.asymmetric import ec
 
 class LoaderTests(unittest.TestCase):
     def setUp(self):
-        self.folder = tempfile.TemporaryDirectory(prefix='zb2-loader-tests-')
+        location=Path(__file__).resolve().parents[1]/'build'/'loader-test-data'
+        location.mkdir(parents=True,exist_ok=True)
+        self.folder = tempfile.TemporaryDirectory(prefix='zb2-loader-tests-',dir=location)
         self.root = Path(self.folder.name)
         self.now = int(time.time())
         self.device = '1'*64

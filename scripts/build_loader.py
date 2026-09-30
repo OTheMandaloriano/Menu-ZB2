@@ -102,6 +102,9 @@ def main():
     (out/'manifest.txt').write_bytes(manifest)
     (out/'manifest.sig').write_bytes(sign(key, manifest))
     resources += ['102 RCDATA "public.bin"','103 RCDATA "manifest.txt"','104 RCDATA "manifest.sig"']
+    for name in ['client','menu']:
+        shutil.copyfile(ROOT/'apps/shared/brand'/(name+'.ico'),out/(name+'.ico'))
+    resources += ['1 ICON "client.ico"','2 ICON "menu.ico"']
     assets = ROOT/'apps/loader/assets'
     provenance = json.loads((assets/'provenance.json').read_text())
     for index, name in enumerate(['Lexend-SemiBold.ttf','Lexend-Bold.ttf','Lexend-Black.ttf','fa-solid-900.ttf']):

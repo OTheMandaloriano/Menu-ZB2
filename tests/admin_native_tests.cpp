@@ -21,6 +21,7 @@ int wmain(int argc,wchar_t** argv){
             std::cout<<Admin::EncodeRequest({"RESULT",{model.role,model.name,std::to_string(model.maxDays),model.output,model.filename,model.requestText,std::to_string(model.licenses.size())}});return 0;
         }
         int rendered=0;
+        Check(FindResourceW(nullptr,MAKEINTRESOURCEW(1),RT_GROUP_ICON)!=nullptr,"Admin PE icon missing");
         for(float scale:{1.f,1.5f,2.f}){
             ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={Admin::Width*scale,Admin::Height*scale};io.DeltaTime=1.f/60;ConfigureUiTheme(scale);io.Fonts->Build();Check(Ui::TabularWidth("11/11/2011 11:11")==Ui::TabularWidth("28/08/2088 08:08"),"date digits must be tabular");
             for(int page=0;page<6;++page){

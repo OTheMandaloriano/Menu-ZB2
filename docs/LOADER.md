@@ -32,13 +32,13 @@ python scripts/license_admin.py keygen --key D:/ZB2-Privado/issuer.dpapi --publi
 ```
 
 O comando recusa sobrescrever material existente. Na máquina de desenvolvimento
-desta entrega, a chave já foi criada em `D:/ZB2-Retomada/loader-private/issuer-owner.dpapi`.
+desta entrega, a chave já foi criada em `C:/Users/WeFagundes/Documents/ZB2Menu/Privado/issuer-owner.dpapi`.
 Não criar outra chave para renovar licenças dos clientes desta build.
 
 Emitir licença, com validade contada desde a emissão em UTC:
 
 ```powershell
-python scripts/license_admin.py issue --key D:/ZB2-Retomada/loader-private/issuer-owner.dpapi --device ID_DE_64_CARACTERES --days 30 --output cliente.zb2license
+python scripts/license_admin.py issue --key C:/Users/WeFagundes/Documents/ZB2Menu/Privado/issuer-owner.dpapi --device ID_DE_64_CARACTERES --days 30 --output cliente.zb2license
 ```
 
 Guardar a chave e o perfil Windows com backup protegido. Copiar apenas o arquivo
@@ -52,7 +52,7 @@ versionados; não é necessário baixar fontes durante o build. O script opciona
 `prepare_loader_assets.py` exige fontTools 4.60.1 e registra proveniência SHA-256.
 
 ```powershell
-python scripts/build_loader.py --runtime "D:/Projeto/ZB2 Menu/build/Release_x64" --runtime-commit 21759653045fed481d11e6ccd02122ad558250e7 --version 1.4-local --key D:/ZB2-Retomada/loader-private/issuer-owner.dpapi --public packaging/loader-public-key.json --tests
+python scripts/build_loader.py --runtime "D:/Projeto/ZB2 Menu/build/Release_x64" --runtime-commit 21759653045fed481d11e6ccd02122ad558250e7 --version 1.5-local --key C:/Users/WeFagundes/Documents/ZB2Menu/Privado/issuer-owner.dpapi --public packaging/loader-public-key.json --tests
 ```
 
 O helper é recompilado dos fontes atuais. Os três DLLs são copiados sem alteração
@@ -95,7 +95,7 @@ timeout pede reiniciar o jogo. A janela pode fechar sem matar o jogo ou a thread
 ## Testes
 
 ```powershell
-python tests/test_loader_functional.py --exe build/loader/loader-tests.exe --key D:/ZB2-Retomada/loader-private/issuer-owner.dpapi -v
+python tests/test_loader_functional.py --exe build/loader/loader-tests.exe --key C:/Users/WeFagundes/Documents/ZB2Menu/Privado/issuer-owner.dpapi -v
 Push-Location build/loader
 ./loader-tests.exe
 Pop-Location
@@ -129,3 +129,5 @@ de desenvolvimento continua necessária antes de declarar a versão pronta para 
 
 Referências técnicas: [BCryptVerifySignature](https://learn.microsoft.com/en-us/windows/win32/api/bcrypt/nf-bcrypt-bcryptverifysignature)
 e as licenças/proveniências em `apps/loader/assets`.
+
+Organização de pastas e ícones: [PASTAS.md](PASTAS.md).

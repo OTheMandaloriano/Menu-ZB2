@@ -26,7 +26,7 @@ void ReadBounded(HANDLE pipe,HANDLE process,void* buffer,DWORD length,ULONGLONG 
     }
 }
 }
-fs::path DataRoot(){PWSTR local=nullptr;Require(SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData,0,nullptr,&local)),"Perfil Windows indisponivel.");fs::path root=fs::path(local)/L"ZB2Admin";CoTaskMemFree(local);return root;}
+fs::path DataRoot(){PWSTR documents=nullptr;Require(SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Documents,0,nullptr,&documents)),"Pasta Documentos indisponivel.");fs::path root=fs::path(documents)/L"ZB2Menu"/L"Admin";CoTaskMemFree(documents);return root;}
 fs::path Backend::Executable(){
     const auto bytes=AppResources::Read(501),expected=AppResources::Read(502);
     Require(License::Sha256(bytes.data(),bytes.size())==expected,"Servico embutido danificado. Obtenha o pacote novamente.");
