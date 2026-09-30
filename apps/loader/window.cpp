@@ -1,6 +1,6 @@
 #include <Windows.h>
 #include <cstdio>
-#include "graphics.h"
+#include "../shared/graphics.h"
 #include <windowsx.h>
 #include <dwmapi.h>
 #include <commdlg.h>
@@ -15,7 +15,7 @@
 
 
 namespace {
-LoaderGraphics graphics;
+AppGraphics graphics;
 UINT resizeWidth=0,resizeHeight=0;
 float pendingDpi=1;bool dpiChanged=false;
 
@@ -43,7 +43,7 @@ int RunLoaderWindow(HINSTANCE instance,int show){
     HWND window=CreateWindowW(wc.lpszClassName,L"ZB2 Menu",WS_POPUP|WS_SYSMENU|WS_MINIMIZEBOX,CW_USEDEFAULT,CW_USEDEFAULT,LoaderWidth,LoaderHeight,nullptr,nullptr,instance,nullptr);
     if(!window || !graphics.Initialize(window)){if(window)DestroyWindow(window);UnregisterClassW(wc.lpszClassName,instance);return 2;}
     ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.ConfigFlags|=ImGuiConfigFlags_NavEnableKeyboard;
-    pendingDpi=GetDpiForWindow(window)/96.f;ConfigureLoaderTheme(pendingDpi);
+    pendingDpi=GetDpiForWindow(window)/96.f;ConfigureUiTheme(pendingDpi);
     RECT area={};SystemParametersInfoW(SPI_GETWORKAREA,0,&area,0);
     int width=int(LoaderWidth*pendingDpi),height=int(LoaderHeight*pendingDpi);
     SetWindowPos(window,nullptr,area.left+(area.right-area.left-width)/2,area.top+(area.bottom-area.top-height)/2,width,height,SWP_NOZORDER|SWP_NOACTIVATE);
@@ -57,7 +57,7 @@ int RunLoaderWindow(HINSTANCE instance,int show){
         MSG msg;while(PeekMessageW(&msg,nullptr,0,0,PM_REMOVE)){TranslateMessage(&msg);DispatchMessageW(&msg);if(msg.message==WM_QUIT)done=true;}
         if(done)break;if(IsIconic(window)){Sleep(30);continue;}
         if(resizeWidth && resizeHeight){if(!graphics.Resize(resizeWidth,resizeHeight))break;resizeWidth=resizeHeight=0;}
-        if(dpiChanged){ImGui_ImplDX11_InvalidateDeviceObjects();ConfigureLoaderTheme(pendingDpi);dpiChanged=false;}
+        if(dpiChanged){ImGui_ImplDX11_InvalidateDeviceObjects();ConfigureUiTheme(pendingDpi);dpiChanged=false;}
         state.snapshot=controller.Snapshot();
         ImGui_ImplDX11_NewFrame();ImGui_ImplWin32_NewFrame();ImGui::NewFrame();DrawLoader(state);ImGui::Render();
         if(state.activate){controller.Activate(state.license);state.activate=false;}

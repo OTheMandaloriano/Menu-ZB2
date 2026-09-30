@@ -3,9 +3,9 @@
 #include <wrl/client.h>
 struct ImDrawData;
 
-class LoaderGraphics {
+class AppGraphics {
 public:
-    ~LoaderGraphics(){Shutdown();}
+    ~AppGraphics(){Shutdown();}
     bool Initialize(HWND window);
     bool Resize(UINT width,UINT height);
     bool Present(ImDrawData* data);

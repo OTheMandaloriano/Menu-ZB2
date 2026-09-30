@@ -120,11 +120,12 @@ def main():
     resources.append('206 RCDATA "Lexend-Regular.ttf"')
     (out/'loader.rc').write_text('\n'.join(resources)+'\n', encoding='ascii')
     run([shutil.which('rc.exe',path=env['PATH']),'/nologo','/fo','loader.res','loader.rc'])
-    core = ['license','services','controller','ui','theme']
+    core = ['license','services','controller','ui']
     sources = [str(ROOT/'apps/loader'/f'{name}.cpp') for name in core]
+    sources += [str(ROOT/'apps/shared'/f'{name}.cpp') for name in ['theme','widgets','resources']]
     imgui = [str(ROOT/'imgui'/f'{name}.cpp') for name in ['imgui','imgui_draw','imgui_tables','imgui_widgets']]
     libraries = ['user32.lib','gdi32.lib','imm32.lib','bcrypt.lib','crypt32.lib','advapi32.lib','shell32.lib','ole32.lib','cabinet.lib','comdlg32.lib']
-    run([cl,*flags,*sources,*imgui,*[str(ROOT/'apps/loader'/f'{name}.cpp') for name in ['main','window','graphics']],
+    run([cl,*flags,*sources,*imgui,*[str(ROOT/'apps/loader'/f'{name}.cpp') for name in ['main','window']],str(ROOT/'apps/shared/graphics.cpp'),
          str(ROOT/'imgui/imgui_impl_win32.cpp'),str(ROOT/'imgui/imgui_impl_dx11.cpp'),'loader.res','/Fe:ZB2Menu.exe',
          '/link','/SUBSYSTEM:WINDOWS',*libraries,'dwmapi.lib','d3d11.lib','d3dcompiler.lib'])
     if args.tests:

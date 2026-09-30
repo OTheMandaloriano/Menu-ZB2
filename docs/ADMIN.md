@@ -8,6 +8,8 @@ São dois aplicativos diferentes:
 | **ZB2 Admin** | Proprietário e integrantes autorizados | Emitir licenças, escolher prazos e consultar o histórico local |
 
 O Admin é um executável Windows. A equipe não precisa de Python nem de terminal.
+As duas interfaces usam Dear ImGui, sem barra de título ou controles WinForms.
+Os avisos de dependências ficam em AVISOS.txt, fora das telas de uso.
 Sua chave principal não é incluída em nenhum dos executáveis distribuídos.
 A estação do proprietário foi configurada no usuário Windows WeFagundes.
 A cópia protegida para esse usuário fica em
@@ -21,7 +23,7 @@ A cópia protegida para esse usuário fica em
 4. Escolha o **Prazo de uso**: 7, 15, 30, 90, 180 ou 365 dias. Para outro prazo,
    digite a quantidade no campo numérico. O limite da sua estação aparece abaixo.
 5. Confira a data em **Válida até** e clique em **Gerar licença**.
-6. Clique em **Salvar arquivo** e envie o `.zb2license` ao cliente.
+6. Clique em **Salvar** e envie o `.zb2license` ao cliente.
 7. O cliente usa **Abrir arquivo** no loader e clica em **Ativar**.
 
 O prazo começa quando a licença é gerada. Gerar novamente cria outra licença;
@@ -33,9 +35,9 @@ ID do computador ou integrante e copiar/salvar uma emissão anterior.
 
 **No PC do integrante:**
 
-1. Entregue a ele somente o `ZB2Admin.exe`.
-2. Na primeira abertura, o aplicativo mostra **Esta estação**.
-3. Ele informa o nome e clica em **Criar solicitação para o proprietário**.
+1. Entregue a ele **EQUIPE.zip**, gerado em `dist/entrega`.
+2. Ele extrai o pacote e abre `ZB2Admin.exe`. Na primeira abertura, o aplicativo mostra **Minha estação**.
+3. Ele informa o nome e clica em **Criar solicitação**.
 4. Salva o arquivo `.zb2station` e envia para você. Esse arquivo contém apenas
    identificação e chave pública; a chave privada permanece no PC dele.
 
@@ -52,8 +54,8 @@ Durante a autorização, ele poderá emitir licenças de 7, 15 ou 30 dias, mas n
 
 **De volta ao PC do integrante:**
 
-1. Abra **Esta estação → Importar autorização**.
-2. Selecione o `.zb2issuer` recebido.
+1. Abra **Minha estação → Importar autorização**.
+2. Selecione o `.zb2issuer` recebido para a estação daquele integrante.
 3. Abra **Licenças** e emita dentro dos limites concedidos.
 
 Você pode reenviar a autorização pela lista **Equipe → Estações autorizadas →
@@ -61,6 +63,11 @@ Salvar autorização selecionada**. Renovar a autorização não invalida uma an
 que ainda esteja dentro do prazo. Não há revogação instantânea offline.
 
 ## Não confundir os arquivos
+
+**Cliente:** envie **CLIENTE.zip** e o `.zb2license` gerado para o computador dele.
+**Integrante emissor:** envie **EQUIPE.zip**; após receber a solicitação dele,
+devolva o `.zb2issuer`. Um integrante que apenas joga recebe o pacote de cliente.
+Não envie a pasta build, a chave principal ou a pasta de dados de uma estação.
 
 | Arquivo | Destino |
 |---|---|
@@ -71,8 +78,8 @@ que ainda esteja dentro do prazo. Não há revogação instantânea offline.
 
 ## Dados e limites desta fase offline
 
-- Os dados do Admin ficam em `%LOCALAPPDATA%/ZB2Admin`. Na estação proprietária,
-  **Esta estação → Abrir pasta de dados** abre essa pasta.
+- Os dados do Admin ficam em `%LOCALAPPDATA%/ZB2Admin`. A nova interface lê a
+  mesma pasta e preserva as estações, licenças e autorizações já existentes.
 - Cada integrante possui histórico local no próprio PC. Não existe lista central
   automática de todas as emissões da equipe, sincronização ou painel na nuvem.
 - A proteção DPAPI depende do usuário/perfil Windows. Copiar apenas os arquivos
@@ -86,10 +93,12 @@ que ainda esteja dentro do prazo. Não há revogação instantânea offline.
 
 ## Manutenção técnica
 
-`scripts/build_admin.py --tests` compila o Admin e seus testes com o compilador
-.NET Framework do Windows. `tests/run_admin_validation.py --key CAMINHO_DPAPI`
-verifica o emissor, os controles em um formulário oculto e a interoperabilidade
-com o verificador C++ compilado. Os testes não controlam a tela do usuário.
+`scripts/build_admin.py --tests` compila o frontend ImGui com MSVC e o serviço
+sem interface com o compilador .NET Framework. `tests/run_admin_validation.py
+--key CAMINHO_DPAPI` verifica o emissor e a interoperabilidade C++. O teste
+`tests/test_admin_bridge.py --key CAMINHO_DPAPI` percorre os pipes reais entre
+o código nativo e o serviço. `build/admin-native/admin-native-tests.exe` renderiza
+as telas em 100%, 150% e 200% e verifica navegação/ID completo, sem controlar a tela.
 
 Licenças antigas ZB2L1 permanecem aceitas. As novas ZB2L2 carregam uma assinatura
 do integrante e uma autorização assinada pelo proprietário. O loader confere

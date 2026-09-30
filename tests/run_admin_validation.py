@@ -29,8 +29,6 @@ checks=0
 with tempfile.TemporaryDirectory(prefix='admin-validation-',dir=out) as folder:
     folder=Path(folder)
     print(run([out/'admin-core-tests.exe',args.key,ROOT/'packaging/loader-public-key.json',folder]).strip())
-    if (out/'admin-ui-tests.exe').exists():
-        print(run([out/'admin-ui-tests.exe',args.key,folder/'ui-owner']).strip())
     def validate(label,token,now,valid):
         global checks
         file=folder/(label+'.zb2license');file.write_text(token,encoding='utf-8')

@@ -2,9 +2,11 @@
 
 ## Entrega ao cliente
 
-Entregar somente `dist/loader/ZB2Menu.exe`. A licença é enviada separadamente,
+Entregar `dist/entrega/CLIENTE.zip`, produzido por `scripts/package_delivery.py`.
+O pacote contém executável, instruções e avisos técnicos. A licença é enviada separadamente,
 como texto ou arquivo `.zb2license` cujo conteúdo pode ser colado na ativação.
-Não enviar a pasta build, o emissor ou a chave privada.
+Não enviar a pasta build, o Admin ou a chave privada ao cliente. Integrantes
+emissores recebem EQUIPE.zip e seguem o [guia da equipe](ADMIN.md).
 
 1. Abrir o loader e clicar em Copiar ID.
 2. O proprietário emite a licença para esse ID e define o número de dias.

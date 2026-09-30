@@ -5,7 +5,7 @@ valida licença e manifesto assinados e instala uma versão local antes de chama
 o injetor para um PID específico. A atualização é manual. A versão local requer
 validação em partida e em outro PC antes de distribuição comercial.
 
-Para o loader, distribua apenas `dist/loader/ZB2Menu.exe` e envie a licença por
+Para o cliente, distribua `dist/entrega/CLIENTE.zip` e envie a licença por
 um canal separado. Não envie emissor, chave privada, diretório build ou símbolos.
 O pacote técnico legado contém `injector.exe`, `config.ini`, `kiero-dx11-base.dll`,
 `Zb2.AimBridge.dll`, `0Harmony.dll` e `Harmony.LICENSE`; continua disponível para

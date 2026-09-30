@@ -1,0 +1,15 @@
+#pragma once
+#include "theme.h"
+#include <string>
+namespace Ui {
+ImVec2 P(float x,float y);
+void Text(float x,float y,float width,float height,const char* content,ImU32 color=UiTheme::text,ImFont* face=nullptr,int align=0);
+bool Button(float x,float y,float width,float height,const char* label,bool quiet=false,bool selected=false);
+bool Input(float x,float y,float width,float height,const char* id,const char* hint,char* buffer,int capacity,ImGuiInputTextFlags flags=0);
+void Hint(const char* text);
+void Panel(float x,float y,float width,float height);
+void Device(float x,float y,float width,const std::string& device);
+bool DeviceFits(const std::string& device,float width);
+void Wrapped(float x,float y,float width,const char* content,ImU32 color=UiTheme::muted);
+bool ReducedMotion();
+}
