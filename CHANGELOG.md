@@ -4,6 +4,9 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+## [1.16-preview.1] - 2026-10-01
+
+
 - Biblioteca com navegação persistente, Voltar, capa original e telas de recuperação do Admin.
 - Cliente e Admin 1.16; dez prévias sintéticas atualizadas.
 
@@ -11,7 +14,9 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 - Recuperação portátil autenticada da chave do proprietário por senha, sem importação de histórico.
 
 
-- Pendente: investigar startup_failure do primeiro workflow de prévias no GitHub; verificação local aprovada.
+- Guias de instalação, recuperação, resíduos e continuidade atualizados para a entrega 1.16.
+- Limites: histórico não importado, sem auto-update, Authenticode ou limpeza automática do runtime do cliente.
+- Pendente: investigar startup_failure do workflow de prévias no GitHub; verificação local aprovada.
 
 ## [1.15-preview.1] - 2026-10-01
 

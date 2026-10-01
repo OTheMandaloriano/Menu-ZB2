@@ -13,6 +13,10 @@ O painel possui rolagem; a imagem apresenta a área inicial da aba PLAYER.
 
 ## Cliente
 
+![Biblioteca](previews/loader-biblioteca.png)
+
+![Meu acesso](previews/loader-acesso.png)
+
 | Ativação | Estado de carregamento confirmado (simulado) |
 |---|---|
 | ![Ativação](previews/loader-ativacao.png) | ![Loader](previews/loader-carregado.png) |
@@ -26,6 +30,8 @@ O painel possui rolagem; a imagem apresenta a área inicial da aba PLAYER.
 ![Primeiro envio](previews/admin-envio.png)
 
 ![Configurações e limpeza](previews/admin-configuracoes.png)
+
+![Recuperação do proprietário](previews/admin-recuperacao.png)
 
 ## Atualizar as imagens
 
@@ -48,7 +54,7 @@ de teste fornecido manualmente foi recompilado; use os builds da árvore atual.
 
 ## Resultado inicial da automação (01/10/2026)
 
-A verificação local passou e as sete imagens foram revisadas. O workflow está ativo,
+A verificação local passou e as dez imagens foram revisadas. O workflow está ativo,
 mas a primeira execução manual no GitHub encerrou com startup_failure antes de criar
 jobs. A API não forneceu diagnóstico específico; não foi demonstrada aprovação do CI.
 Até resolver a inicialização, executar --check localmente continua obrigatório.

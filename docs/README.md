@@ -2,6 +2,9 @@
 
 ## Guias atuais
 
+- [Navegação do cliente](LOADER-NAVEGACAO.md)
+- [Formato técnico de recuperação](RECUPERACAO-TECNICA.md)
+
 - [Instalação e dependências](INSTALACAO.md)
 - [Troca de PC e recuperação](RECUPERACAO.md)
 

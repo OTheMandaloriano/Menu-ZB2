@@ -41,7 +41,7 @@ O painel não baixa nem repara essas dependências automaticamente nesta versão
 ## Primeiro uso do cliente
 
 1. Extraia o ZIP para uma pasta fixa, gravável pelo seu usuário. Não execute dentro do ZIP.
-2. Abra ZB2Menu.exe e clique em Copiar ID.
+2. Abra ZB2Menu.exe e entre em Meu acesso > Copiar ID.
 3. Envie o ID à equipe. Não precisa editar caminho ou nome de usuário no código.
 4. Receba o ZIP ativado, feche o programa e extraia os novos arquivos na pasta do aplicativo.
 5. Abra ZB2Menu.exe. O arquivo de licença incluído é importado automaticamente.

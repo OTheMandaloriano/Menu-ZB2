@@ -17,6 +17,7 @@ versão atual. Há uma limpeza limitada no Admin; não há um limpador geral do 
 | configs e imgui.ini | Configurações do usuário | Preservar |
 | logs e last-load.log | Diagnóstico | Não entram na limpeza do painel |
 | Pacotes | ZIPs salvos pelo operador | Exclusão apenas por decisão do operador |
+| BackupsPrivados/*.dbrecovery | Recuperação da chave do proprietário por senha | Preservar; nunca distribuir como pacote nem enviar ao GitHub |
 | ZIPs e pastas em Downloads/Desktop | Arquivos extraídos pelo usuário | Fora do escopo da limpeza do programa |
 
 Os caminhos da tabela são relativos a Documentos/ZB2Menu, salvo indicação diferente.

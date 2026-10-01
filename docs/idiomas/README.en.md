@@ -58,6 +58,5 @@ not need the game to issue licenses. Build tools are for developers only.
 
 > [!IMPORTANT]
 > Downloading the Admin on another PC does not restore owner access. Keys are
-> protected by Windows DPAPI CurrentUser. Portable password-protected backup is
-> not implemented. Preserve the original Windows profile and plan a tested transfer
+> protected by Windows DPAPI CurrentUser. Password-protected owner-key recovery is available; history is not included. Preserve the original Windows profile and plan a tested transfer
 > before wiping the original PC. See the [recovery guide](../RECUPERACAO.md).

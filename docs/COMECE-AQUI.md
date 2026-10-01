@@ -4,9 +4,12 @@ Este é o ponto de entrada para o proprietário, a equipe e o próximo agente.
 
 ## O que funciona hoje
 
+- Biblioteca com navegação persistente e botão Voltar.
+- Recuperação portátil da chave de proprietário por senha, sem histórico.
+
 - Distribuição manual por ZIP, com programas iniciais que não exigem ID ou solicitação.
 - Emissão de licença e autorização offline. Cada PC conserva os próprios dados.
-- Cliente 1.15-local; interface do Admin 1.14, recompilada para incorporar esse cliente.
+- Cliente 1.16-local; interface do Admin 1.16, recompilada para incorporar esse cliente.
 - No Admin: Configurações > Analisar resíduos > Limpar analisados.
 - Essa limpeza remove apenas serviços antigos do Admin que passaram nas verificações.
 
@@ -42,3 +45,5 @@ para uma nova atualização e não deve substituir automaticamente o projeto ofi
 Identidade pública e caminhos que funcionam em qualquer conta: [PORTABILIDADE.md](PORTABILIDADE.md).
 
 Instalação para novos usuários: [INSTALACAO.md](INSTALACAO.md). Antes de trocar de PC: [RECUPERACAO.md](RECUPERACAO.md).
+
+Nova navegação: [LOADER-NAVEGACAO.md](LOADER-NAVEGACAO.md). Backup de proprietário: [RECUPERACAO.md](RECUPERACAO.md).

@@ -91,7 +91,14 @@ validada em partida. Não publicar chaves, perfis, backups, logs ou símbolos no
 ## Recuperação e publicação
 
 Antes de orientar troca de PC, ler docs/RECUPERACAO.md. Não prometer que o GitHub ou
-um arquivo DPAPI isolado restaura o proprietário. Backup portátil por senha não está implementado.
+um arquivo DPAPI isolado restaura o proprietário. Backup portátil de acesso está implementado; não inclui histórico.
 Guias para novos usuários: docs/INSTALACAO.md. Separar requisitos de execução dos de build.
 Em README e publicação, aplicar as skills readme-profissional e versionamento-git
 quando estiverem disponíveis no ambiente, respeitando a convenção do repositório.
+
+## Recuperação portátil
+
+Recovery.cs exporta somente a chave do proprietário com senha; não exporta histórico.
+Não testar com a chave real nem apagar o perfil real. Use tests/run_recovery_validation.py
+e tests/test_recovery_bridge.py, com autoridade e pastas de teste. A recuperação recusa
+substituir estação existente. Arquivos .dbrecovery são privados e ignorados pelo Git.

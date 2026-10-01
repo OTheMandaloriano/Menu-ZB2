@@ -1,6 +1,6 @@
 # Continuidade para o próximo agente
 
-Snapshot de contexto: 30/09/2026. Antes de alterar qualquer coisa, reconfira o estado
+Snapshot de contexto: 01/10/2026. Antes de alterar qualquer coisa, reconfira o estado
 real do disco e do Git. Este arquivo não substitui testes nem uma inspeção atual.
 
 ## Entrada obrigatória
@@ -9,7 +9,7 @@ real do disco e do Git. Este arquivo não substitui testes nem uma inspeção at
 2. Trabalhar em D:/Projeto/ZB2 Menu, a fonte canônica do projeto.
 3. Conferir git status, diff e diff --cached. Há mudanças locais acumuladas e arquivos
    novos. Não usar reset/clean nem sobrescrever arquivos com uma cópia antiga.
-4. Este guia acompanha a entrega de continuidade do cliente 1.15 e Admin 1.14,
+4. Este guia acompanha a entrega de continuidade do cliente 1.16 e Admin 1.16,
    posterior ao commit 0787c00. Compare HEAD com origin/main antes de trabalhar;
    não use um hash antigo anotado aqui como prova do estado remoto atual.
    O proprietário autorizou a publicação desta entrega. Novas publicações precisam
@@ -17,8 +17,8 @@ real do disco e do Git. Este arquivo não substitui testes nem uma inspeção at
 
 ## Estado do produto
 
-- Cliente instalado: 1.15-local, com mensagens de monitoramento corrigidas e Detalhes.
-- Admin: interface 1.14, recompilada incorporando o cliente 1.15.
+- Cliente da entrega: 1.16-local, com biblioteca, navegação lateral, Voltar e Detalhes.
+- Admin: interface 1.16, recompilada incorporando o cliente 1.16.
 - Auto-inject existe. Não confundir com auto-update, que não existe ainda.
 - Runtime da entrega de identidade 1.15: commit 5fdee1018aea00b548abbba61fd580efc5e651fa.
   Isso identifica o runtime da entrega, não prova que a árvore atual gere os mesmos bytes.
@@ -104,7 +104,16 @@ build-metadata.json da entrega atual para identificar o runtime empacotado.
 - docs/PREVIAS.md documenta a galeria e o gerador. O --check local passou; a execução
   inicial do Actions teve startup_failure antes dos jobs, ainda sem causa confirmada.
 - docs/INSTALACAO.md separa requisitos de jogador, emissor e desenvolvedor.
-- docs/RECUPERACAO.md explica a limitação de DPAPI. Não existe backup portátil por
-  senha no painel; baixar GitHub em outro PC não recupera o proprietário.
+- docs/RECUPERACAO.md explica a limitação de DPAPI. O backup portátil de acesso está disponível na entrega 1.16; baixar GitHub sozinho não recupera o proprietário.
 - Os passos de publicação seguem as skills versionamento-git e readme-profissional
   quando disponíveis, sem copiar caminhos privados dessas skills para o produto.
+
+## Entrega de recuperação e biblioteca
+
+Cliente 1.16 e Admin 1.16: biblioteca, navegação persistente, Voltar explícito,
+capa original e recuperação de chave de proprietário por senha. Consulte
+LOADER-NAVEGACAO.md, RECUPERACAO.md e RECUPERACAO-TECNICA.md.
+Os registros anteriores deste documento não substituem esse estado atual.
+Importação de histórico, atualizador GitHub, limpeza automática do runtime do cliente,
+assinatura Authenticode e teste da DLL renomeada em partida continuam pendentes.
+Não há chave/senha de produção exportada automaticamente. O usuário cria o backup no painel.

@@ -1,56 +1,56 @@
-# Troca de computador e recuperação de acesso
+# Recuperar o proprietário em outro Windows
 
-## Resposta direta
+## O que está disponível
 
-Baixar o repositório ou o programa em outro PC não devolve acesso de proprietário.
-O GitHub guarda fontes, recursos e releases. Ele não guarda sua chave privada.
+O Admin 1.16 exporta um arquivo `.dbrecovery` protegido por senha. Ele permite
+restaurar a mesma chave de proprietário em um perfil vazio e protegê-la novamente
+com DPAPI no Windows de destino. GitHub não armazena nem recupera sua chave.
 
-Hoje, a chave da estação e o arquivo de manutenção do proprietário são protegidos
-por DPAPI com escopo CurrentUser. Não conte com a cópia do arquivo .dpapi ou de
-station.json como um backup portátil. Uma conta com o mesmo nome em outro Windows
-também não garante que os dados possam ser descriptografados.
+O backup contém a chave e o nome do proprietário. **Não inclui histórico de clientes,
+autorizações da equipe ou configurações.** Guarde esses dados em backup separado.
 
-O botão de recuperação existente exige a chave original que o usuário Windows
-consiga abrir. Ele não é um login GitHub, não recupera a chave pelo nome e não é
-um assistente de transferência entre computadores.
+## Antes de trocar de PC
 
-## Proprietário: antes de trocar ou formatar
+1. Abra o Admin no PC e usuário que já têm acesso de proprietário.
+2. Entre em Configurações > Recuperação do acesso.
+3. Defina uma senha longa e única, de 12 a 128 caracteres, e confirme-a.
+4. Salve o arquivo em um nome novo. O destino sugerido é Documentos/ZB2Menu/BackupsPrivados.
+5. Guarde uma cópia em mídia externa protegida. Guarde a senha em outro local seguro.
+6. Mantenha o PC de origem até testar a restauração. O programa não recupera senha perdida.
 
-1. Preserve o computador e o usuário Windows que ainda conseguem abrir a chave.
-2. Guarde backups privados da estação, histórico e material de manutenção em mídia
-   protegida. Esses backups são importantes, mas a cópia DPAPI isolada não comprova portabilidade.
-3. Solicite uma migração assistida ou o desenvolvimento de exportação/importação
-   criptografada por senha enquanto a chave original ainda puder ser aberta.
-4. Exija um teste de restauração no PC de destino, verificando a mesma chave pública
-   e a emissão de uma licença de teste, antes de apagar a origem.
-5. Nunca envie chaves, backups ou perfis por GitHub, chat de suporte ou ZIPs de cliente.
+O arquivo é privado: quem tiver arquivo e senha terá a chave de proprietário.
+Não envie à equipe, clientes, GitHub, VirusTotal ou suporte.
 
-**Limitação atual:** não existe no painel exportação portátil por senha nem um
-procedimento de migração entre PCs homologado. Não formate o PC original contando
-que baixar o Admin será suficiente.
+## No destino
 
-## Se o PC original já foi perdido
+1. Baixe o Admin do mesmo produto e extraia para uma pasta gravável.
+2. Ainda sem criar uma estação de integrante, abra Meu acesso > Restaurar backup de proprietário.
+3. Digite a senha e escolha o arquivo `.dbrecovery`.
+4. Aguarde a confirmação e confira o papel Proprietário.
+5. Teste uma emissão controlada antes de descartar a instalação anterior.
 
-É necessário avaliar os backups e as condições de recuperação do Windows. Não há
-garantia de recuperar a chave. A chave pública do programa não permite reconstruir
-a privada. Se ela for irrecuperável, será necessário planejar uma nova autoridade,
-novos programas e reemissão dos acessos; isso não é uma troca automática de nome.
+O programa recusa senha errada, conteúdo adulterado, chave de outro produto e
+sobrescrita de uma estação já configurada. Não apague um perfil existente para
+contornar o aviso; preserve-o e peça orientação de migração.
 
-## Integrante da equipe em outro PC
+## Histórico e equipe
 
-Crie uma nova estação no PC novo, envie uma nova solicitação ao proprietário e
-importe a autorização emitida para ela. Preserve o histórico antigo em backup;
-ele não se sincroniza automaticamente e não concede permissão de emissão.
+Esta primeira função recupera acesso de emissão, não migra o histórico. As licenças
+existentes continuam assinadas pela mesma autoridade. Para consultar emissões e
+estações antigas, preserve os dados originais em backup. Não há importador completo
+de histórico nesta entrega. Integrantes continuam criando uma nova solicitação
+quando mudam de PC. Clientes precisam de licença vinculada ao ID correto.
 
-## Cliente em outro PC
+## O que foi testado
 
-O ID pode mudar. Abra o cliente no novo PC, copie o ID e solicite à equipe o acesso
-correspondente. Copiar a licença antiga pode resultar em erro de dispositivo.
+- Autoridade fictícia, senha errada, arquivo modificado/truncado, limite de tamanho e perfis existentes.
+- Verificação independente do arquivo cifrado e autenticado em Python.
+- Exclusão somente do perfil fictício de origem e recuperação posterior.
+- Restauração sob outra conta Windows neste mesmo computador, onde a DPAPI original não abria.
 
-## Atualização no mesmo PC
+Não foram apagados dados reais. O teste entre contas não substitui homologação em
+dois computadores físicos. O formato não passou por auditoria criptográfica externa.
+Detalhes: [RECUPERACAO-TECNICA.md](RECUPERACAO-TECNICA.md).
 
-Substituir o executável com o programa fechado mantém o perfil em Documentos.
-Isso é diferente de trocar de PC, conta Windows ou reinstalar o sistema.
-
-Referência de proteção de dados:
-https://learn.microsoft.com/en-us/dotnet/api/system.security.cryptography.dataprotectionscope
+Se você já perdeu o PC original e não exportou esse backup, a limitação anterior
+continua: baixar o GitHub ou copiar um `.dpapi` isolado não reconstrói a chave.

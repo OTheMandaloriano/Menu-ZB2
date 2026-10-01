@@ -10,7 +10,7 @@
 
 1. No Admin, abra **Como enviar → CLIENTE → Salvar programa inicial**.
 2. Salve `01-CLIENTE-INICIAL.zip` e envie esse ZIP ao cliente. **Não precisa de ID.**
-3. O cliente extrai o ZIP, abre `ZB2Menu.exe` e clica em **Copiar ID**.
+3. O cliente extrai o ZIP, abre `ZB2Menu.exe` e entra em **Meu acesso > Copiar ID**.
 4. Ele manda o ID para você por mensagem. O programa abre sem licença; o acesso
    ao menu só é liberado depois da ativação.
 5. No seu Admin, abra **Clientes**, preencha nome, ID completo e dias de uso.
@@ -77,3 +77,10 @@ Não apague a pasta Documentos/ZB2Menu inteira. Consulte ARQUITETURA.md.
 ## Vai trocar de computador?
 
 Baixar o Admin não recupera a chave de proprietário. Leia [RECUPERACAO.md](RECUPERACAO.md) antes de formatar. Dependências e primeiro uso estão em [INSTALACAO.md](INSTALACAO.md).
+
+## Exportar recuperação antes de trocar de PC
+
+Configurações > Recuperação do acesso > defina e confirme a senha > Salvar recuperação protegida.
+Guarde arquivo e senha separados. No novo perfil vazio: Meu acesso > Restaurar backup de proprietário.
+O backup recupera a chave de emissão; o histórico precisa ser preservado separadamente.
+Leia RECUPERACAO.md antes de apagar qualquer instalação anterior.

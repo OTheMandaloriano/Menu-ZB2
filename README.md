@@ -45,6 +45,11 @@ carregamento nas prévias é simulado; não representa homologação em partida.
 |---|---|
 | ![Admin](docs/previews/admin-clientes.png) | ![Loader](docs/previews/loader-carregado.png) |
 
+![Biblioteca do cliente](docs/previews/loader-biblioteca.png)
+
+A biblioteca tem navegação lateral e retorno entre telas. A capa é uma ilustração
+original, não uma captura do jogo. [Guia de navegação](docs/LOADER-NAVEGACAO.md).
+
 [Ver todas as telas e como atualizar as imagens](docs/PREVIAS.md).
 
 ## Downloads
@@ -69,8 +74,7 @@ automática pelo GitHub nesta versão.
 
 > [!IMPORTANT]
 > Baixar o Admin em outro PC não recupera o acesso de proprietário. A chave atual é
-> protegida pelo usuário Windows. O painel ainda não exporta um backup portátil por
-> senha. Leia [troca de computador e recuperação](docs/RECUPERACAO.md) antes de formatar.
+> protegida pelo usuário Windows. Exporte antes o backup protegido por senha no Admin. Ele não inclui o histórico. Leia [troca de computador e recuperação](docs/RECUPERACAO.md) antes de formatar.
 
 ## Usar e distribuir
 
@@ -89,12 +93,12 @@ Chaves, perfis e histórico não fazem parte dos pacotes.
 
 | Área | Situação |
 |---|---|
-| Cliente | 1.15-local; ativação e carregamento implementados |
-| Admin | Interface 1.14, com o cliente 1.15 incorporado |
+| Cliente | 1.16-local; ativação e carregamento implementados |
+| Admin | Interface 1.16, com o cliente 1.16 incorporado |
 | Atualizações | Envio manual de ZIPs; atualizador GitHub ainda é uma proposta |
 | Limpeza | Serviços antigos do Admin, após análise; runtime antigo do cliente não é removido automaticamente |
 | Validação | Testes automatizados e observações locais documentados; não equivalem a homologação completa de todas as funções em partida |
-| Recuperação do proprietário | Não há backup portátil por senha; baixar o GitHub não restaura a chave |
+| Recuperação do proprietário | Backup de acesso por senha disponível; histórico não incluído |
 | Segurança | Sem Authenticode; detecções da amostra anterior estão documentadas, sem falso positivo confirmado |
 
 Consulte [continuidade](docs/CONTINUIDADE.md), [estados do loader](docs/ESTADOS-LOADER.md)
