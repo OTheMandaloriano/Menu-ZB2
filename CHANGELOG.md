@@ -4,6 +4,9 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Verificação de prévias também disponível por execução manual no GitHub Actions.
+
+
 - Galeria de sete prévias de interface com dados sintéticos, manifesto de origem e verificação de atualização em CI.
 - Guias de instalação, dependências e recuperação com a limitação atual de DPAPI entre computadores.
 - Distribuição preparada como pré-release por GitHub Releases; sem atualização automática.
