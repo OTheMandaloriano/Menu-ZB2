@@ -117,3 +117,23 @@ Os registros anteriores deste documento não substituem esse estado atual.
 Importação de histórico, atualizador GitHub, limpeza automática do runtime do cliente,
 assinatura Authenticode e teste da DLL renomeada em partida continuam pendentes.
 Não há chave/senha de produção exportada automaticamente. O usuário cria o backup no painel.
+
+
+## Publicação conferida da 1.16 (01/10/2026)
+
+- Pré-release [v1.16-preview.1](https://github.com/OTheMandaloriano/Menu-ZB2/releases/tag/v1.16-preview.1),
+  criada no commit 785f89d959cb3caa80ee4cc7003c71f3592fe5fc. Hashes dos quatro assets
+  remotos conferidos contra os arquivos locais. Os commits posteriores de documentação
+  não alteram os executáveis dessa tag.
+- Cliente 1.16-local e Admin 1.16 instalados. Acesso de proprietário conferido e
+  hashes dos registros privados preservados; nenhum backup real foi exportado.
+- 36 renderizações do cliente, 42 do Admin, 29 verificações de prontidão e 27 de pacotes.
+  Recuperação: 17 cenários de integridade, 3 de perda da origem e 4 entre contas Windows.
+- Fontes e dez prévias passaram na conferência local. Actions voltou a falhar antes
+  dos jobs: execução 36822922440, startup_failure, path BuildFailed e nenhum check-run.
+  Não foi fornecida causa específica pela API. Não considerar CI aprovado.
+- 84 renders temporários desta validação removidos (271.876.344 bytes). PNGs publicados,
+  logs, testes e backup da versão anterior preservados. Essa limpeza não abrange
+  todas as cópias de trabalho antigas nem a pasta de dados do usuário.
+- Evidência local: build/recovery-dashboard-validation.json. Binários anteriores:
+  .local/backups/before-recovery-1.16. Não distribuir essa pasta.

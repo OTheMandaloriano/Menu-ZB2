@@ -60,3 +60,8 @@ jobs. A API não forneceu diagnóstico específico; não foi demonstrada aprova�
 Até resolver a inicialização, executar --check localmente continua obrigatório.
 
 Execução: https://github.com/OTheMandaloriano/Menu-ZB2/actions/runs/36809876120
+
+
+Na entrega 1.16, a geração e --check local passaram novamente. A execução
+[36822922440](https://github.com/OTheMandaloriano/Menu-ZB2/actions/runs/36822922440)
+encerrou com startup_failure antes dos jobs, sem check-runs ou causa detalhada.

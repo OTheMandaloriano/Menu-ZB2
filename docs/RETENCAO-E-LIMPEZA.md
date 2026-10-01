@@ -54,3 +54,11 @@ coleta automática dessas sobras na versão atual.
 - Testar falta de espaço, interrupção, arquivo bloqueado, falha de assinatura e recuperação.
 
 Esta política é requisito de desenvolvimento, não descrição de uma função pronta.
+
+
+## Limpeza da validação 1.16
+
+Removidos 84 renders PPM regeneráveis da cópia de validação, totalizando
+271.876.344 bytes. O inventário e hashes foram registrados antes da exclusão.
+As dez prévias PNG, os fontes, testes, logs e o backup dos executáveis anteriores
+foram preservados. Isso não equivale a limpar todas as pastas do computador.

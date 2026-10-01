@@ -6,6 +6,8 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [1.16-preview.1] - 2026-10-01
 
+- Pré-release publicada; quatro assets remotos conferidos por SHA-256, perfil privado preservado e renders temporários removidos.
+
 
 - Biblioteca com navegação persistente, Voltar, capa original e telas de recuperação do Admin.
 - Cliente e Admin 1.16; dez prévias sintéticas atualizadas.
