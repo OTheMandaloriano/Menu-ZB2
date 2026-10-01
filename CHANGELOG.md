@@ -4,6 +4,9 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Recuperação portátil autenticada da chave do proprietário por senha, sem importação de histórico.
+
+
 - Pendente: investigar startup_failure do primeiro workflow de prévias no GitHub; verificação local aprovada.
 
 ## [1.15-preview.1] - 2026-10-01

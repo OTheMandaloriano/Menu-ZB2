@@ -21,7 +21,7 @@ run([csc,'/nologo','/target:exe','/platform:x64','/optimize+','/warnaserror+',
      '/out:'+str(output/'ZB2AdminBackend.exe'),'/r:System.Core.dll','/r:System.Security.dll','/r:System.Web.Extensions.dll',
      '/r:System.IO.Compression.dll','/r:System.IO.Compression.FileSystem.dll',
      '/resource:'+str(ROOT/'packaging/loader-public-key.json')+',Admin.Public',
-     '/resource:'+str(client)+',Admin.Client',ROOT/'apps/admin/Core.cs',ROOT/'apps/admin/Packages.cs',ROOT/'apps/admin/Backend.cs'])
+     '/resource:'+str(client)+',Admin.Client',ROOT/'apps/admin/Core.cs',ROOT/'apps/admin/Recovery.cs',ROOT/'apps/admin/Packages.cs',ROOT/'apps/admin/Backend.cs'])
 (output/'backend.sha256').write_text(hashlib.sha256((output/'ZB2AdminBackend.exe').read_bytes()).hexdigest(),encoding='ascii')
 resources=['501 RCDATA "ZB2AdminBackend.exe"','502 RCDATA "backend.sha256"']
 shutil.copyfile(ROOT/'apps/shared/brand/admin.ico',output/'admin.ico')

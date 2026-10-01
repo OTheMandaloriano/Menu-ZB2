@@ -9,7 +9,8 @@ using System.Web.Script.Serialization;
 
 namespace Zb2Admin
 {
-    // Headless local service. Pipes carry public UI data only, never station keys.
+    // Inherited local pipes carry requests, including recovery passwords; never log
+    // packets or put credentials on the process command line. Keys stay in this service.
     internal static class Backend
     {
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false, true);
@@ -47,6 +48,12 @@ namespace Zb2Admin
                 case "team_starter":
                     Crypto.Require(args.Length==2,"Escolha onde salvar o programa inicial da equipe.");
                     Packages.TeamStarter(args[0],args[1]);notice="Programa inicial salvo. O integrante abre Meu acesso, cria a solicitação e envia para você.";break;
+                case "export_recovery":
+                    Crypto.Require(args.Length==2,"Informe destino e senha da recuperação.");
+                    Recovery.Export(store,args[0],args[1]);notice="Recuperação salva. Guarde arquivo e senha separados. Este backup não inclui o histórico.";break;
+                case "restore_recovery":
+                    Crypto.Require(args.Length==2,"Informe arquivo e senha da recuperação.");
+                    Recovery.Restore(store,args[0],args[1]);notice="Acesso de proprietário restaurado neste Windows. Histórico anterior não foi importado.";break;
                 case "snapshot":
                     Crypto.Require(args.Length<=1,"Consulta incorreta.");query=args.Length==1?args[0]:"";break;
                 case "issue":

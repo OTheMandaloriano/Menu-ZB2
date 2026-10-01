@@ -32,3 +32,6 @@ loader-private/
 *.zb2station
 *.zb2issuer
 .local/
+
+# Portable owner recovery files are private, like issuer keys
+*.dbrecovery

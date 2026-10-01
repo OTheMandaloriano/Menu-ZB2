@@ -172,6 +172,21 @@ namespace Zb2Admin
             Current = station;
         }
 
+        internal void RestorePortableOwner(byte[] raw,string name)
+        {
+            string path=Path.Combine(Root,"station.json");
+            Crypto.Require(!File.Exists(path)&&String.IsNullOrEmpty(Current.ProtectedKey),"O perfil de destino já está configurado.");
+            byte[] protectedKey=ProtectedData.Protect(raw,null,DataProtectionScope.CurrentUser);
+            try
+            {
+                Station station=new Station {Role="owner",Name=Crypto.CheckName(name),Id=Guid.NewGuid().ToString("N"),KeyFormat="PKCS8_PRIVATEKEY",ProtectedKey=Convert.ToBase64String(protectedKey)};
+                Directory.CreateDirectory(Root);string temporary=path+"."+Guid.NewGuid().ToString("N")+".tmp";
+                try{using(FileStream file=new FileStream(temporary,FileMode.CreateNew,FileAccess.Write,FileShare.None)){byte[] encoded=new UTF8Encoding(false).GetBytes(json.Serialize(station));file.Write(encoded,0,encoded.Length);file.Flush(true);}File.Move(temporary,path);Current=station;}
+                finally{if(File.Exists(temporary))File.Delete(temporary);}
+            }
+            finally{Array.Clear(protectedKey,0,protectedKey.Length);}
+        }
+
         public CngKey OpenKey()
         {
             Crypto.Require(!String.IsNullOrEmpty(Current.ProtectedKey), "Esta estação ainda não foi configurada.");

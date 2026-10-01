@@ -13,6 +13,8 @@ struct Handle {
     HANDLE value=nullptr;~Handle(){if(value&&value!=INVALID_HANDLE_VALUE)CloseHandle(value);}
     Handle()=default;Handle(const Handle&)=delete;Handle&operator=(const Handle&)=delete;
 };
+struct WipeRequest {Request& request;~WipeRequest(){for(auto& value:request.args)SecureZeroMemory(value.data(),value.size());}};
+struct WipeText {std::string& text;~WipeText(){SecureZeroMemory(text.data(),text.size());}};
 void Require(bool condition,const char* message){if(!condition)throw std::runtime_error(message);}
 void SafePath(const fs::path& path){fs::path current;for(const auto& part:fs::absolute(path)){current/=part;DWORD a=GetFileAttributesW(current.c_str());if(a!=INVALID_FILE_ATTRIBUTES&&(a&FILE_ATTRIBUTE_REPARSE_POINT))throw std::runtime_error("Pasta redirecionada nao suportada para o servico.");}}
 std::string FileBytes(const fs::path& path){std::ifstream file(path,std::ios::binary|std::ios::ate);Require(bool(file),"Nao foi possivel ler o servico local.");auto n=file.tellg();Require(n>0&&n<32*1024*1024,"Servico local incorreto.");std::string result(static_cast<size_t>(n),'\0');file.seekg(0);file.read(result.data(),n);Require(bool(file),"Servico local incompleto.");return result;}
@@ -38,11 +40,11 @@ fs::path Backend::Executable(){
     if(!MoveFileExW(temporary.c_str(),executable.c_str(),MOVEFILE_WRITE_THROUGH)){DeleteFileW(temporary.c_str());throw std::runtime_error("Nao foi possivel concluir a instalacao do servico.");}return executable;
 }
 Snapshot Backend::Call(const Request& request){
-    auto executable=Executable();wchar_t self[32768]{};GetModuleFileNameW(nullptr,self,32768);Request actual=request;
+    auto executable=Executable();wchar_t self[32768]{};GetModuleFileNameW(nullptr,self,32768);Request actual=request;WipeRequest wipeRequest{actual};
     if(actual.command=="team_starter"&&actual.args.size()==1)actual.args.push_back(fs::path(self).u8string());
     if(actual.command=="team_package"&&actual.args.size()==2)actual.args.push_back(fs::path(self).u8string());
     if(actual.command=="authorize_package"&&actual.args.size()==4)actual.args.push_back(fs::path(self).u8string());
-    std::string input=EncodeRequest(actual);
+    std::string input=EncodeRequest(actual);WipeText wipeText{input};
     SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES),nullptr,TRUE};Handle readInput,writeInput,readOutput,writeOutput,errors;
     Require(CreatePipe(&readInput.value,&writeInput.value,&security,131080)&&CreatePipe(&readOutput.value,&writeOutput.value,&security,0),"Nao foi possivel abrir o canal local.");
     Require(SetHandleInformation(writeInput.value,HANDLE_FLAG_INHERIT,0)&&SetHandleInformation(readOutput.value,HANDLE_FLAG_INHERIT,0),"Falha ao proteger o canal local.");
@@ -65,6 +67,7 @@ Snapshot Backend::Call(const Request& request){
         DWORD length=static_cast<DWORD>(input.size()),written=0;
         Require(WriteFile(writeInput.value,&length,sizeof(length),&written,nullptr)&&written==sizeof(length),"Falha ao enviar o pedido.");
         Require(WriteFile(writeInput.value,input.data(),length,&written,nullptr)&&written==length,"Falha ao enviar os dados.");
+        SecureZeroMemory(input.data(),input.size());input.clear();
         CloseHandle(writeInput.value);writeInput.value=nullptr;
         auto deadline=GetTickCount64()+30000;DWORD size=0;ReadBounded(readOutput.value,child.value,&size,sizeof(size),deadline);
         Require(size>0&&size<=4*1024*1024,"Resposta fora do limite.");std::string reply(size,'\0');ReadBounded(readOutput.value,child.value,reply.data(),size,deadline);
