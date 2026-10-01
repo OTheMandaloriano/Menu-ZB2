@@ -73,3 +73,7 @@ Se houver arquivos elegíveis, Limpar analisados remove apenas serviços antigos
 O serviço atual, dados pessoais, licenças, backups, logs e runtime do jogo são preservados.
 Arquivos que mudaram ou ficaram em uso depois da análise também são preservados.
 Não apague a pasta Documentos/ZB2Menu inteira. Consulte ARQUITETURA.md.
+
+## Vai trocar de computador?
+
+Baixar o Admin não recupera a chave de proprietário. Leia [RECUPERACAO.md](RECUPERACAO.md) antes de formatar. Dependências e primeiro uso estão em [INSTALACAO.md](INSTALACAO.md).

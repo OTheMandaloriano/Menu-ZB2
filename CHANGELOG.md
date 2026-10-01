@@ -4,7 +4,9 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
-- Galeria de sete prévias com dados sintéticos, manifesto de origem e verificação de atualização em CI.
+- Galeria de sete prévias de interface com dados sintéticos, manifesto de origem e verificação de atualização em CI.
+- Guias de instalação, dependências e recuperação com a limitação atual de DPAPI entre computadores.
+- Distribuição preparada como pré-release por GitHub Releases; sem atualização automática.
 
 
 - Organiza 37 fontes nativos em `src/menu`, preservando o conteúdo e os nomes dos binários.

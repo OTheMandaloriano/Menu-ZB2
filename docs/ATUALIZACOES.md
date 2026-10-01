@@ -1,4 +1,4 @@
-# Rotina de atualização — agentes e desenvolvedores
+# Rotina de atualização: agentes e desenvolvedores
 
 1. Trabalhar a partir de `D:/Projeto/ZB2 Menu`. Ler AGENTS.md e verificar alterações
    staged/unstaged antes de editar. Não usar uma cópia antiga como fonte da verdade.
@@ -38,3 +38,12 @@ Somente os executáveis de produto entram nos ZIPs iniciais. Dados privados, his
 dependências de desenvolvimento, fontes, logs e arquivos de compilação ficam de fora.
 
 Para o passo a passo de quem recebe uma atualização, consulte [ATUALIZAR-USUARIOS.md](ATUALIZAR-USUARIOS.md). Ao concluir uma entrega, atualize [CONTINUIDADE.md](CONTINUIDADE.md) e registre os limites da limpeza em [RETENCAO-E-LIMPEZA.md](RETENCAO-E-LIMPEZA.md).
+
+## Prévias e publicação de entrega
+
+Após alterações na interface, recompilar os testes e executar scripts/export_previews.py.
+Revisar as imagens com dados fictícios, executar --check e versionar PNGs e manifesto.
+Ler docs/PREVIAS.md. Não usar capturas com nomes, IDs, licenças ou notificações pessoais.
+Distribuir executáveis Windows em GitHub Releases; GitHub Packages não é necessário
+para ZIPs desse produto. Marcar como pré-release enquanto a nova DLL não tiver sido
+validada em partida. Não publicar chaves, perfis, backups, logs ou símbolos nos ZIPs.

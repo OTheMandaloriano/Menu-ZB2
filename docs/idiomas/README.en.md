@@ -1,3 +1,10 @@
+<div align="center">
+  <picture><source media="(prefers-color-scheme: dark)" srcset="../../apps/shared/brand/deadblock-menu.svg" /><img src="../../apps/shared/brand/deadblock-menu-light.svg" alt="DEADBLOCK" width="340" /></picture>
+  <p><a href="../../README.md"><img src="https://api.iconify.design/flag/br-4x3.svg?width=26" alt="Português" title="Português" /></a>
+  &nbsp;
+  <a href="README.en.md"><img src="https://api.iconify.design/flag/us-4x3.svg?width=26" alt="English" title="English" /></a></p>
+</div>
+
 # DEADBLOCK
 
 Native menu, Windows loader and license administration panel for Zumbi Blocks 2.
@@ -31,3 +38,26 @@ python tests/run_aim_validation.py
 Build order: menu, loader, Admin, delivery ZIPs. See [development](../DESENVOLVIMENTO.md),
 [architecture](../ARQUITETURA.md), [documentation index](../README.md) and
 [licensing](../../NOTICE.md). Never distribute the repository, private profiles or build tree.
+
+## Preview and downloads
+
+![Admin preview](../previews/admin-clientes.png)
+
+Previews use the production UI with synthetic data, not live gameplay captures.
+[Gallery](../PREVIAS.md) · [Releases](https://github.com/OTheMandaloriano/Menu-ZB2/releases)
+
+Releases are private and this first package is a prerelease. Initial client/team
+ZIPs do not include personal licenses or owner keys. GitHub Packages is not used.
+
+## Installation and recovery
+
+End users need Windows x64 and a DirectX 11-compatible graphics driver. Players
+also need a compatible game and a license. Admin operators need .NET Framework
+(4.8 or a later supported 4.x version is recommended) and authorization; they do
+not need the game to issue licenses. Build tools are for developers only.
+
+> [!IMPORTANT]
+> Downloading the Admin on another PC does not restore owner access. Keys are
+> protected by Windows DPAPI CurrentUser. Portable password-protected backup is
+> not implemented. Preserve the original Windows profile and plan a tested transfer
+> before wiping the original PC. See the [recovery guide](../RECUPERACAO.md).

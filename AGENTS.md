@@ -1,11 +1,11 @@
-# ZB2 Menu — Zumbi Blocks 2 (Unity 6 Mono x64, DLL interna D3D11)
+# ZB2 Menu: Zumbi Blocks 2 (Unity 6 Mono x64, DLL interna D3D11)
 
 Use o modelo e as instruções da sessão atual; este arquivo não define um modelo fixo.
 Regra: 1 skill dominante por mensagem. Não misturar ESP + offset + perf.
 
 ## Skills (todas em `.opencode/skills/`, escopo deste projeto)
 
-| skill | gatilho — carregar QUANDO |
+| skill | gatilho: carregar QUANDO |
 |---|---|
 | `zb2-mono-safety` | mexer em `mono.cpp`/`main.cpp`, invoke, entity list, hook, crash |
 | `zb2-esp-patterns` | desenhar/mudar ESP em `gui.cpp` |
@@ -13,7 +13,7 @@ Regra: 1 skill dominante por mensagem. Não misturar ESP + offset + perf.
 | `zb2-horda-perf` | ESP lento/travando com horda |
 | `zb2-ce-mcp` | ler/mudar valor vivo no jogo via CE MCP |
 | `zb2-dnspy-mcp` | dado estático do `Assembly-CSharp.dll` via MCP local (classe, campo, IL, enum, callers) |
-| `zb2-dnspy-auto` | LEGADO (dumpasm sumiu do Temp) — usar `zb2-dnspy-mcp`; só se o MCP cair |
+| `zb2-dnspy-auto` | LEGADO (dumpasm sumiu do Temp): usar `zb2-dnspy-mcp`; só se o MCP cair |
 | `zb2-pesquisar-antes` | dúvida de padrão ANTES de codar (1 rodada websearch, sem loop) |
 | `graphics-api-hooking` | fundo: hook Present slot 8, RTV, WndProc, W2S guard |
 | `game-engine-resources` | fundo: Unity Mono, metadata ≠ offset |
@@ -78,3 +78,20 @@ Organização dos fontes: menu nativo em `src/menu/`; detalhes em [docs/DESENVOL
 - Não distribuir atalhos --data do ambiente de desenvolvimento, relatórios brutos ou backups pessoais.
 - Não usar uma cópia antiga de D:/ZB2-Retomada como base de atualização do projeto oficial.
 - Conferir Unicode, permissões e diretórios redirecionados antes de afirmar suporte a qualquer perfil.
+
+## Prévias e publicação de entrega
+
+Após alterações na interface, recompilar os testes e executar scripts/export_previews.py.
+Revisar as imagens com dados fictícios, executar --check e versionar PNGs e manifesto.
+Ler docs/PREVIAS.md. Não usar capturas com nomes, IDs, licenças ou notificações pessoais.
+Distribuir executáveis Windows em GitHub Releases; GitHub Packages não é necessário
+para ZIPs desse produto. Marcar como pré-release enquanto a nova DLL não tiver sido
+validada em partida. Não publicar chaves, perfis, backups, logs ou símbolos nos ZIPs.
+
+## Recuperação e publicação
+
+Antes de orientar troca de PC, ler docs/RECUPERACAO.md. Não prometer que o GitHub ou
+um arquivo DPAPI isolado restaura o proprietário. Backup portátil por senha não está implementado.
+Guias para novos usuários: docs/INSTALACAO.md. Separar requisitos de execução dos de build.
+Em README e publicação, aplicar as skills readme-profissional e versionamento-git
+quando estiverem disponíveis no ambiente, respeitando a convenção do repositório.

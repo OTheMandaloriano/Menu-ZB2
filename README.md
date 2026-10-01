@@ -3,11 +3,24 @@
     <source media="(prefers-color-scheme: dark)" srcset="apps/shared/brand/deadblock-menu.svg" />
     <img src="apps/shared/brand/deadblock-menu-light.svg" alt="DEADBLOCK" width="340" />
   </picture>
-  <p>Menu nativo, loader e painel de licenças para Zumbi Blocks 2.</p>
+  <p>Uma interface para jogar. Um painel para gerenciar o acesso.</p>
+  <p>Menu nativo para Zumbi Blocks 2, com loader Windows e gerenciamento de clientes e equipe.</p>
   <p><a href="docs/COMECE-AQUI.md">Comece aqui</a> · <a href="docs/DESENVOLVIMENTO.md">Desenvolvimento</a> · <a href="docs/README.md">Documentação</a> · <a href="docs/idiomas/README.en.md">English</a></p>
+  <p><a href="README.md"><img src="https://api.iconify.design/flag/br-4x3.svg?width=26" alt="Português" title="Português" /></a>
+  &nbsp;
+  <a href="docs/idiomas/README.en.md"><img src="https://api.iconify.design/flag/us-4x3.svg?width=26" alt="English" title="English" /></a></p>
 </div>
 
-## O projeto
+
+[![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?style=for-the-badge&logo=cplusplus&logoColor=white)](docs/DESENVOLVIMENTO.md)
+[![Windows](https://img.shields.io/badge/Windows-x64-0078D4?style=for-the-badge)](docs/INSTALACAO.md)
+[![DirectX](https://img.shields.io/badge/DirectX-11-107C10?style=for-the-badge)](docs/ARQUITETURA.md)
+
+[![Canal](https://img.shields.io/badge/canal-pr%C3%A9--release-2563EB?style=flat-square)](https://github.com/OTheMandaloriano/Menu-ZB2/releases)
+[![Licenciamento](https://img.shields.io/badge/licenciamento-ver_NOTICE-EAB308?style=flat-square)](NOTICE.md)
+[![Guias](https://img.shields.io/badge/guias-instala%C3%A7%C3%A3o_e_atualiza%C3%A7%C3%A3o-10B981?style=flat-square)](docs/COMECE-AQUI.md)
+
+<h2><img src="https://api.iconify.design/solar/info-circle-bold.svg?color=%232563EB&width=24" alt="" align="top" /> O projeto</h2>
 
 DEADBLOCK reúne três componentes: uma DLL nativa integrada ao jogo, um cliente
 Windows que valida o acesso e carrega o menu, e um Admin para emitir licenças e
@@ -20,6 +33,44 @@ testes, os recursos visuais e a documentação.
 | Cliente | `apps/loader/` | Ativação offline, verificação do pacote e carregamento |
 | Admin | `apps/admin/` | Clientes, equipe, pacotes e limpeza limitada de cache |
 | Interface comum | `apps/shared/` | Marca, fontes, controles e renderização |
+
+## Prévias
+
+Interfaces renderizadas pelo código do produto com dados fictícios. O estado de
+carregamento nas prévias é simulado; não representa homologação em partida.
+
+![Menu DEADBLOCK](docs/previews/menu.png)
+
+| Painel Admin | Cliente Windows |
+|---|---|
+| ![Admin](docs/previews/admin-clientes.png) | ![Loader](docs/previews/loader-carregado.png) |
+
+[Ver todas as telas e como atualizar as imagens](docs/PREVIAS.md).
+
+## Downloads
+
+A entrega de validação está em [Releases](https://github.com/OTheMandaloriano/Menu-ZB2/releases).
+Use `01-CLIENTE-INICIAL.zip` para o primeiro envio ao jogador e `01-EQUIPE-INICIAL.zip`
+para o integrante que emitirá licenças. Ambos começam sem ativação pessoal.
+
+O repositório é privado: releases só ficam acessíveis a contas autorizadas. Envie
+os ZIPs gerados pelo Admin a usuários sem acesso ao repositório. Não há atualização
+automática pelo GitHub nesta versão.
+
+## Instalar pela primeira vez
+
+| Quem vai usar | Precisa de |
+|---|---|
+| Jogador | Windows x64 compatível, driver DirectX 11, jogo compatível e licença emitida para seu PC |
+| Equipe emissora | Windows x64, driver DirectX 11, .NET Framework e autorização do proprietário; não precisa instalar o jogo para emitir |
+| Desenvolvedor | Ferramentas C++/C#, Python e dependências descritas no guia de desenvolvimento |
+
+[Passo a passo de instalação e dependências](docs/INSTALACAO.md).
+
+> [!IMPORTANT]
+> Baixar o Admin em outro PC não recupera o acesso de proprietário. A chave atual é
+> protegida pelo usuário Windows. O painel ainda não exporta um backup portátil por
+> senha. Leia [troca de computador e recuperação](docs/RECUPERACAO.md) antes de formatar.
 
 ## Usar e distribuir
 
@@ -34,7 +85,7 @@ o proprietário gera e envia o pacote ativado ou autorizado.
 **Não envie o repositório ou a pasta `build`.** Os programas e ZIPs ficam em `dist`.
 Chaves, perfis e histórico não fazem parte dos pacotes.
 
-## Estado atual
+<h2><img src="https://api.iconify.design/solar/danger-triangle-bold.svg?color=%23F97316&width=24" alt="" align="top" /> Estado atual e limitações</h2>
 
 | Área | Situação |
 |---|---|
@@ -43,6 +94,7 @@ Chaves, perfis e histórico não fazem parte dos pacotes.
 | Atualizações | Envio manual de ZIPs; atualizador GitHub ainda é uma proposta |
 | Limpeza | Serviços antigos do Admin, após análise; runtime antigo do cliente não é removido automaticamente |
 | Validação | Testes automatizados e observações locais documentados; não equivalem a homologação completa de todas as funções em partida |
+| Recuperação do proprietário | Não há backup portátil por senha; baixar o GitHub não restaura a chave |
 | Segurança | Sem Authenticode; detecções da amostra anterior estão documentadas, sem falso positivo confirmado |
 
 Consulte [continuidade](docs/CONTINUIDADE.md), [estados do loader](docs/ESTADOS-LOADER.md)

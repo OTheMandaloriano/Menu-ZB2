@@ -2,6 +2,11 @@
 
 ## Guias atuais
 
+- [Instalação e dependências](INSTALACAO.md)
+- [Troca de PC e recuperação](RECUPERACAO.md)
+
+- [Prévias e rotina de atualização](PREVIAS.md)
+
 - [Comece Aqui](COMECE-AQUI.md)
 - [Admin](ADMIN.md)
 - [Atualizar Usuarios](ATUALIZAR-USUARIOS.md)

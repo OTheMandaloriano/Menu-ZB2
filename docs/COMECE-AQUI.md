@@ -40,3 +40,5 @@ cópias de trabalho e auditorias de sessões anteriores. Ela não é a fonte can
 para uma nova atualização e não deve substituir automaticamente o projeto oficial.
 
 Identidade pública e caminhos que funcionam em qualquer conta: [PORTABILIDADE.md](PORTABILIDADE.md).
+
+Instalação para novos usuários: [INSTALACAO.md](INSTALACAO.md). Antes de trocar de PC: [RECUPERACAO.md](RECUPERACAO.md).
