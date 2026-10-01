@@ -4,6 +4,9 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Galeria de sete prévias com dados sintéticos, manifesto de origem e verificação de atualização em CI.
+
+
 - Organiza 37 fontes nativos em `src/menu`, preservando o conteúdo e os nomes dos binários.
 - Atualiza o projeto Visual Studio e os testes; inclui uma verificação de caminhos do repositório.
 - Reescreve o README com a distribuição funcional, guias por público e limitações atuais.
