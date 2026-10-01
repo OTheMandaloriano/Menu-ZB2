@@ -1,5 +1,6 @@
 #include "../apps/loader/ui.h"
 #include "../apps/shared/theme.h"
+#include "../apps/shared/cover.h"
 #include "software_renderer.h"
 #include <Windows.h>
 #include <fstream>
@@ -51,41 +52,47 @@ int wmain(int argc,wchar_t** argv){
             std::cout<<"DPAPI and rollback checks passed";return 0;
         }
         LoaderServices::VerifyBundle();
+        LoaderNavigation navigation;navigation.Go(LoaderPage::Access);navigation.Go(LoaderPage::Credits);navigation.Go(LoaderPage::Diagnostics);navigation.Back();Require(navigation.page==LoaderPage::Credits,"nested back to credits");navigation.Back();Require(navigation.page==LoaderPage::Access,"nested back to access");navigation.Go(LoaderPage::Library);Require(navigation.history.empty(),"home clears navigation history");
         Require(FindResourceW(nullptr,MAKEINTRESOURCEW(1),RT_GROUP_ICON)!=nullptr,"Client PE icon missing");
         Require(FindResourceW(nullptr,MAKEINTRESOURCEW(2),RT_GROUP_ICON)!=nullptr,"Menu PE icon missing");
         for(float scale:{1.f,1.5f,2.f}){
             ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={LoaderWidth*scale,LoaderHeight*scale};io.DeltaTime=1.f/60;
-            ConfigureUiTheme(scale);io.Fonts->Build();
-            for(int page=0;page<10;++page){
-                LoaderUiState state;state.snapshot.gameVerified=true;state.snapshot.version="1.15-local";state.snapshot.device=std::string(64,'a');state.snapshot.expiry="29/10/2026 14:00 UTC";
+            ConfigureUiTheme(scale);if(!io.Fonts->IsBuilt())io.Fonts->Build();Require(Cover::Available(),"cover embedded and decoded");
+            for(int page=0;page<12;++page){
+                LoaderUiState state;state.snapshot.gameVerified=true;state.snapshot.version="1.16-local";state.snapshot.device=std::string(64,'a');state.snapshot.expiry="29/10/2026 14:00 UTC";
                 state.snapshot.phase=static_cast<LoaderPhase>(page<7?page:2);state.snapshot.licensed=page>=2;state.snapshot.pid=page>=3?1234:0;
                 const char* messages[]={u8"Verificando licença e pacote...",u8"Ative seu acesso neste computador.","Abra o Zumbi Blocks 2 para continuar.","Aguardando a cena da partida.",u8"Carregando o menu. Aguarde a confirmação...","Menu carregado. Pressione INSERT no jogo.",u8"Falha ao carregar. Confira as permissões e tente novamente."};
                 state.snapshot.message=messages[page<7?page:2];
-                state.about=page>=7;state.help=page==8;
-                state.credits=page==9;
-                for(int frame=0;frame<2;++frame){ImGui::NewFrame();DrawLoader(state);ImGui::Render();}
+                state.navigation.page=page<7?LoaderPage::Game:page==7?LoaderPage::Access:page==8?LoaderPage::Help:page==9?LoaderPage::Credits:page==10?LoaderPage::Library:LoaderPage::Diagnostics;
+                for(int frame=0;frame<12;++frame){ImGui::NewFrame();DrawLoader(state);ImGui::Render();}
                 Require(RenderPpm("loader-"+std::to_string(page)+"-"+std::to_string(static_cast<int>(scale*100))+".ppm",1),"render");
             }
             LoaderUiState state;state.snapshot.gameVerified=true;state.snapshot.phase=LoaderPhase::Ready;state.snapshot.licensed=true;state.snapshot.pid=77;state.snapshot.version="1.0";
             auto frame=[&](float x,float y,bool down){io.MousePos={x*scale,y*scale};io.MouseDown[0]=down;ImGui::NewFrame();DrawLoader(state);ImGui::Render();};
-            frame(200,212,false);frame(200,212,true);frame(200,212,false);Require(state.load,"manual injection click");
-            state.load=false;state.snapshot.gameVerified=false;state.snapshot.phase=LoaderPhase::Error;
-            frame(200,212,true);frame(200,212,false);Require(!state.load,"unknown game state must block injection");
-            frame(370,250,true);frame(370,250,false);Require(state.diagnostics,"error details action");
-            state.diagnostics=false;state.snapshot.phase=LoaderPhase::Ready;state.snapshot.gameVerified=true;
-            frame(380,164,true);frame(380,164,false);Require(state.autoChanged&&!state.autoValue,"auto toggle off");
+            frame(636,410,false);frame(636,410,true);frame(636,410,false);Require(state.navigation.page==LoaderPage::Game,"library opens product");
+            frame(550,354,true);frame(550,354,false);Require(state.load,"manual loading action");state.load=false;
+            state.snapshot.gameVerified=false;state.snapshot.phase=LoaderPhase::Error;
+            frame(550,354,true);frame(550,354,false);Require(!state.load,"unknown game state blocks load");
+            frame(685,470,true);frame(685,470,false);Require(state.navigation.page==LoaderPage::Diagnostics,"diagnostic navigation");
+            frame(220,98,true);frame(220,98,false);Require(state.navigation.page==LoaderPage::Game,"diagnostic back");
+            state.snapshot.phase=LoaderPhase::Ready;state.snapshot.gameVerified=true;
+            frame(690,296,true);frame(690,296,false);Require(state.autoChanged&&!state.autoValue,"auto toggle off");
             state.snapshot.phase=LoaderPhase::Activation;state.snapshot.licensed=false;
-            frame(200,164,true);frame(200,164,false);Require(!state.activate,"empty license must not submit");
-            strcpy_s(state.license,"ZB2L1.test");frame(200,164,true);frame(200,164,false);Require(state.activate,"activation click");
-            std::string longToken="ZB2L1."+std::string(410,'a');strcpy_s(state.license,longToken.c_str());frame(150,112,true);frame(150,112,false);
-            io.AddKeyEvent(ImGuiKey_End,true);frame(150,112,false);io.AddKeyEvent(ImGuiKey_End,false);frame(150,112,false);
+            frame(550,348,true);frame(550,348,false);Require(!state.activate,"empty license must not submit");
+            strcpy_s(state.license,"ZB2L1.test");frame(550,348,true);frame(550,348,false);Require(state.activate,"activation click");
+            std::string longToken="ZB2L1."+std::string(410,'a');strcpy_s(state.license,longToken.c_str());frame(530,290,true);frame(530,290,false);
+            io.AddKeyEvent(ImGuiKey_End,true);frame(530,290,false);io.AddKeyEvent(ImGuiKey_End,false);frame(530,290,false);
             Require(RenderPpm("license-input-active-"+std::to_string(static_cast<int>(scale*100))+".ppm",1),"active long input render");
             Require(std::string(state.license)==longToken,"scroll changed license bytes");
-            frame(100,208,true);frame(100,208,false);Require(state.importLicense,"file import click");
-            frame(408,28,true);frame(408,28,false);Require(state.close,"close click");
+            frame(500,396,true);frame(500,396,false);Require(state.importLicense,"file import click");
+            frame(75,158,true);frame(75,158,false);Require(state.navigation.page==LoaderPage::Access,"access always reachable");
+            frame(500,408,true);frame(500,408,false);Require(state.navigation.page==LoaderPage::Credits,"credits opens");
+            frame(220,98,true);frame(220,98,false);Require(state.navigation.page==LoaderPage::Access,"credits back to access");
+            frame(75,110,true);frame(75,110,false);Require(state.navigation.page==LoaderPage::Library,"library always reachable");
+            frame(726,32,true);frame(726,32,false);Require(state.close,"close click");
             ImGui::DestroyContext();
         }
-        std::cout<<"30 state renders, 3 active long inputs and interaction checks passed; signed package verified.\n";
+        std::cout<<"36 state renders, 3 active long inputs and interaction checks passed; signed package verified.\n";
         return 0;
     }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}
 }

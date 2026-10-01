@@ -18,11 +18,11 @@
 namespace {
 AppGraphics graphics;UINT resizeWidth=0,resizeHeight=0;bool dpiChanged=false;float nextScale=1;
 struct Handle{HANDLE value=nullptr;~Handle(){if(value)CloseHandle(value);}};
-std::filesystem::path Pick(HWND window,bool save,const std::string& suggested,const wchar_t* filter){
+std::filesystem::path Pick(HWND window,bool save,const std::string& suggested,const wchar_t* filter,bool privateBackup=false){
     wchar_t buffer[32768]{};
     if(!suggested.empty())MultiByteToWideChar(CP_UTF8,0,suggested.c_str(),-1,buffer,32768);
     OPENFILENAMEW dialog{};dialog.lStructSize=sizeof(dialog);dialog.hwndOwner=window;dialog.lpstrFilter=filter;dialog.lpstrFile=buffer;dialog.nMaxFile=32768;
-    const auto packages=Admin::DataRoot().parent_path()/L"Pacotes";
+    const auto packages=Admin::DataRoot().parent_path()/(privateBackup?L"BackupsPrivados":L"Pacotes");
     if(save){std::filesystem::create_directories(packages);dialog.lpstrInitialDir=packages.c_str();}
     dialog.Flags=OFN_NOCHANGEDIR|OFN_PATHMUSTEXIST|(save?OFN_OVERWRITEPROMPT:OFN_FILEMUSTEXIST);
     return (save?GetSaveFileNameW(&dialog):GetOpenFileNameW(&dialog))?std::filesystem::path(buffer):std::filesystem::path();
@@ -87,6 +87,12 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE,PWSTR,int show){
                     auto path=Pick(window,true,packageName,L"Pacote pronto ZIP\0*.zip\0\0");
                     if(!path.empty()){if(path.extension()!=L".zip")path+=L".zip";state.action.args.push_back(path.u8string());if(controller)controller->Submit(state.action);}
                 }else if(controller)controller->Submit(state.action);
+            }
+            if(state.exportRecovery||state.restoreRecovery){
+                const bool exporting=state.exportRecovery;state.exportRecovery=state.restoreRecovery=false;
+                auto path=Pick(window,exporting,exporting?"DEADBLOCK-recuperacao.dbrecovery":"",L"Recuperacao protegida\0*.dbrecovery\0\0",true);
+                if(!path.empty()&&controller){if(exporting&&path.extension()!=L".dbrecovery")path+=L".dbrecovery";state.requestPage=state.page;state.pendingFeedback=true;controller->Submit({exporting?"export_recovery":"restore_recovery",{path.u8string(),state.recoveryPassword}});}
+                SecureZeroMemory(state.recoveryPassword,sizeof(state.recoveryPassword));SecureZeroMemory(state.recoveryConfirm,sizeof(state.recoveryConfirm));state.recoveryAcknowledged=false;
             }
             if(state.copy){ImGui::SetClipboardText(state.copyText.c_str());state.copy=false;}
             if(state.saveSettings){state.saveSettings=false;try{Admin::SaveSettings(root,{state.reducedMotion});state.message="Preferência salva.";}catch(const std::exception& error){state.message=error.what();}}

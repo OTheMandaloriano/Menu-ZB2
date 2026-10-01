@@ -4,6 +4,10 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Biblioteca com navegação persistente, Voltar, capa original e telas de recuperação do Admin.
+- Cliente e Admin 1.16; dez prévias sintéticas atualizadas.
+
+
 - Recuperação portátil autenticada da chave do proprietário por senha, sem importação de histórico.
 
 

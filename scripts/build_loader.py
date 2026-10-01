@@ -129,6 +129,8 @@ def main():
     if hashlib.sha256(medium.read_bytes()).hexdigest()!=provenance[medium.name]['sha256']:parser.error('Medium font hash mismatch')
     shutil.copyfile(medium,out/medium.name)
     resources.append('207 RCDATA "Lexend-Medium.ttf"')
+    shutil.copyfile(assets/'art/zumbi-survival.png',out/'zumbi-survival.png')
+    resources.append('208 RCDATA "zumbi-survival.png"')
     (out/'loader.rc').write_text('\n'.join(resources)+'\n', encoding='ascii')
     run([shutil.which('rc.exe',path=env['PATH']),'/nologo','/fo','loader.res','loader.rc'])
     ft_flags,ft_library,ft_license=prepare(env)
@@ -136,9 +138,9 @@ def main():
     core = ['license','services','controller','ui','readiness']
     sources = [str(ROOT/'apps/loader'/f'{name}.cpp') for name in core]
     sources += [str(ROOT/'imgui/misc/freetype/imgui_freetype.cpp')]
-    sources += [str(ROOT/'apps/shared'/f'{name}.cpp') for name in ['theme','widgets','resources']]
+    sources += [str(ROOT/'apps/shared'/f'{name}.cpp') for name in ['theme','widgets','resources','cover']]
     imgui = [str(ROOT/'imgui'/f'{name}.cpp') for name in ['imgui','imgui_draw','imgui_tables','imgui_widgets']]
-    libraries = [ft_library,'user32.lib','gdi32.lib','imm32.lib','bcrypt.lib','crypt32.lib','advapi32.lib','shell32.lib','ole32.lib','cabinet.lib','comdlg32.lib']
+    libraries = [ft_library,'user32.lib','gdi32.lib','imm32.lib','bcrypt.lib','crypt32.lib','advapi32.lib','shell32.lib','ole32.lib','cabinet.lib','comdlg32.lib','windowscodecs.lib']
     run([cl,*flags,*sources,*imgui,*[str(ROOT/'apps/loader'/f'{name}.cpp') for name in ['main','window']],str(ROOT/'apps/shared/graphics.cpp'),
          str(ROOT/'imgui/imgui_impl_win32.cpp'),str(ROOT/'imgui/imgui_impl_dx11.cpp'),'loader.res','/Fe:ZB2Menu.exe',
          '/link','/SUBSYSTEM:WINDOWS',*libraries,'dwmapi.lib','d3d11.lib','d3dcompiler.lib'])

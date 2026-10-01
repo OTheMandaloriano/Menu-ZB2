@@ -2,6 +2,7 @@
 #include "../shared/resources.h"
 #include "../loader/assets/IconsFontAwesome6.h"
 #include <array>
+#include "cover.h"
 #include <algorithm>
 #include "../../imgui/misc/freetype/imgui_freetype.h"
 namespace UiTheme {
@@ -51,6 +52,7 @@ void ConfigureUiTheme(float dpi){
     };
     regular=add(0,14);merge();button=regular;heading=add(1,18);caption=add(5,12);icons=regular;
     ImGui::GetIO().FontDefault=regular;
+    Cover::Prepare();
     style.HoverDelayShort=.15f;style.HoverStationaryDelay=0.f;
     style.Colors[ImGuiCol_TableHeaderBg]=ImVec4(1,1,1,.025f);
     style.Colors[ImGuiCol_TableRowBg]=ImVec4(0,0,0,0);

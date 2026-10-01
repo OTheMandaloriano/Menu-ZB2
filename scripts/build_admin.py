@@ -40,9 +40,9 @@ cl=shutil.which('cl.exe',path=env['PATH']);flags=['/nologo','/std:c++17','/EHsc'
 flags += ft_flags
 core=[ROOT/'apps/admin/native'/f'{name}.cpp' for name in ['model','backend','controller','ui','settings']]
 core.append(ROOT/'imgui/misc/freetype/imgui_freetype.cpp')
-shared=[ROOT/'apps/shared'/f'{name}.cpp' for name in ['theme','widgets','resources']]
+shared=[ROOT/'apps/shared'/f'{name}.cpp' for name in ['theme','widgets','resources','cover']]
 imgui=[ROOT/'imgui'/f'{name}.cpp' for name in ['imgui','imgui_draw','imgui_tables','imgui_widgets']]
-libraries=[ft_library,'user32.lib','gdi32.lib','imm32.lib','bcrypt.lib','advapi32.lib','shell32.lib','ole32.lib','comdlg32.lib']
+libraries=[ft_library,'user32.lib','gdi32.lib','imm32.lib','bcrypt.lib','advapi32.lib','shell32.lib','ole32.lib','comdlg32.lib','windowscodecs.lib']
 run([cl,*flags,*core,*shared,*imgui,ROOT/'apps/loader/license.cpp',ROOT/'apps/shared/graphics.cpp',ROOT/'apps/admin/native/main.cpp',
      ROOT/'imgui/imgui_impl_win32.cpp',ROOT/'imgui/imgui_impl_dx11.cpp','admin.res','/Fe:ZB2Admin.exe','/link','/SUBSYSTEM:WINDOWS',*libraries,'dwmapi.lib','d3d11.lib','d3dcompiler.lib'],env)
 if '--tests' in sys.argv:

@@ -3,7 +3,7 @@
 #include "settings.h"
 namespace Admin {
 constexpr int Width=840,Height=600;
-enum class Page {Licenses,Team,Station,Help,Settings};
+enum class Page {Licenses,Team,Station,Help,Settings,Recovery};
 enum class Picker {None,Request,Authorization,Owner};
 struct UiState {
     Snapshot data;Page page=Page::Licenses;
@@ -12,6 +12,8 @@ struct UiState {
     bool started=false,credits=false;unsigned revision=0;float fade=1;
     bool reducedMotion=false,saveSettings=false,exportDiagnostics=false;
     int openFolder=0;
+    bool exportRecovery=false,restoreRecovery=false,recoveryAcknowledged=false;
+    char recoveryPassword[256]{},recoveryConfirm[256]{};
     bool inspectCache=false,cleanCache=false,cacheReviewed=false;CachePlan cachePlan;std::string cacheSummary;
     int visibleLicenseCount=0;
     std::string dataPath,applicationPath;

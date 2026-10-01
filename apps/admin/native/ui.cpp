@@ -3,6 +3,7 @@
 #include "../../loader/assets/IconsFontAwesome6.h"
 #include "../../loader/license.h"
 #include <algorithm>
+#include <Windows.h>
 #include <charconv>
 #include <cctype>
 namespace Admin {
@@ -25,7 +26,7 @@ bool Matches(const LicenseRow& row,const char* filter){
 int Number(const char* input){int value=0;auto n=strlen(input);auto result=std::from_chars(input,input+n,value);return result.ec==std::errc()&&result.ptr==input+n?value:0;}
 void RequestAction(UiState& state,const char* command,std::vector<std::string> args={},bool save=false){state.requestPage=state.page;state.pendingFeedback=true;state.exportText.clear();state.exportName.clear();state.action={command,std::move(args)};state.send=true;state.saveAfterReply=save;state.message.clear();}
 void Label(float x,float y,const char* value){Ui::Text(x,y,330,20,value,muted,regular);}
-void Switch(UiState& state,Page page){if(state.page!=page){state.page=page;state.message.clear();state.exportText.clear();state.exportName.clear();state.credits=false;state.fade=Ui::ReducedMotion()?1.f:0.f;}}
+void Switch(UiState& state,Page page){if(state.page!=page){state.page=page;SecureZeroMemory(state.recoveryPassword,sizeof(state.recoveryPassword));SecureZeroMemory(state.recoveryConfirm,sizeof(state.recoveryConfirm));state.recoveryAcknowledged=false;state.message.clear();state.exportText.clear();state.exportName.clear();state.credits=false;state.fade=Ui::ReducedMotion()?1.f:0.f;}}
 void Copy(UiState& state,const std::string& value){state.copy=true;state.copyText=value;state.message="Copiado.";}
 bool ValidDevice(const char* input){return strlen(input)==64&&std::all_of(input,input+64,[](unsigned char c){return std::isxdigit(c)!=0;});}
 void LicensePage(UiState& state){
@@ -119,6 +120,7 @@ void StationPage(UiState& state){
     Ui::Panel(24,136,372,384);
     const bool owner=state.data.role=="owner"&&state.data.maxDays>0;
     Ui::Panel(412,136,404,owner?208.f:384.f);
+    if(!state.data.hasKey&&Ui::Button(428,468,372,36,"Restaurar backup de proprietário",false,false,ICON_FA_SHIELD_HALVED))Switch(state,Page::Recovery);
     if(owner){Ui::Panel(412,360,404,160);Ui::Text(428,376,372,24,"Histórico local",text,regular);auto summary=std::to_string(state.data.total)+" licenças · "+std::to_string(state.data.grants.size())+" estações autorizadas";Ui::Text(428,416,372,24,summary.c_str(),text,regular);Ui::Wrapped(428,460,372,"Os registros ficam neste PC. Envie o ZIP gerado para cada cliente ou integrante.");}
     Ui::Text(40,148,340,28,u8"Minha estação",text,regular);Label(40,180,"ID completo deste computador");Ui::Device(40,208,340,state.data.device);
     if(Ui::Button(40,256,200,36,"Copiar ID completo",false,false,ICON_FA_COPY))Copy(state,state.data.device);
@@ -151,6 +153,7 @@ void StationPage(UiState& state){
 }
 void SettingsPage(UiState& state){
     Ui::Text(24,136,792,32,u8"Configurações",text,heading);
+    if(Ui::Button(592,132,224,36,"Recuperação do acesso",false,false,ICON_FA_SHIELD_HALVED))Switch(state,Page::Recovery);
     Ui::Panel(24,176,368,352);Ui::Panel(408,176,408,352);
     Ui::Text(40,192,328,24,"Aparência",text,regular);
     if(Ui::Toggle(40,220,328,"Reduzir movimento",state.reducedMotion)){state.saveSettings=true;Ui::SetReducedMotion(state.reducedMotion);}
@@ -173,11 +176,30 @@ void SettingsPage(UiState& state){
     Ui::Wrapped(424,488,376,state.cacheSummary.empty()?"Analise primeiro. Nada é apagado automaticamente.":state.cacheSummary.c_str());
 
 }
+void RecoveryPage(UiState& state){
+    const bool owner=state.data.role=="owner"&&state.data.maxDays>0;
+    Ui::Text(24,136,580,32,"Recuperação do proprietário",text,heading);
+    if(Ui::Button(688,136,128,32,"Voltar",false,false,ICON_FA_ARROW_LEFT))Switch(state,Page::Settings);
+    Ui::Panel(24,188,360,336);Ui::Panel(404,188,412,336);
+    Ui::Text(40,204,328,24,owner?"Antes de trocar de PC":"Já possui um backup?",text,regular);
+    Ui::Wrapped(40,252,328,owner?"Crie um arquivo protegido por senha. No PC novo, abra Meu acesso e restaure esse arquivo. Não apague o PC antigo antes de testar a recuperação.":"Selecione o arquivo .dbrecovery e informe a senha definida ao criá-lo. O programa valida a chave e protege o acesso para este usuário Windows.");
+    Ui::Wrapped(40,376,328,"Este backup recupera o acesso de proprietário. Não inclui histórico de clientes, autorizações ou configurações. Guarde esses dados separadamente.");
+    Ui::Text(420,204,380,24,owner?"Criar backup protegido":"Restaurar acesso",text,regular);
+    Ui::Text(420,248,380,20,"Senha (12 a 128 caracteres)",muted,caption);
+    Ui::Input(420,272,380,40,"##recovery-password","Digite a senha",state.recoveryPassword,sizeof(state.recoveryPassword),ImGuiInputTextFlags_Password,ICON_FA_LOCK);
+    if(owner){Ui::Text(420,324,380,20,"Repita a senha",muted,caption);Ui::Input(420,348,380,40,"##recovery-confirm","Confirme a senha",state.recoveryConfirm,sizeof(state.recoveryConfirm),ImGuiInputTextFlags_Password,ICON_FA_LOCK);}
+    else Ui::Wrapped(420,336,380,state.data.hasKey?"Este perfil já tem uma estação. A recuperação não substitui uma chave existente.":"Você precisa do arquivo e da senha. Não existe recuperação pelo GitHub ou pelo nome de usuário.");
+    ImGui::SetCursorPos(Ui::P(420,412));ImGui::Checkbox("Guardei a senha em local seguro",&state.recoveryAcknowledged);
+    const bool password=strlen(state.recoveryPassword)>=12&&strlen(state.recoveryPassword)<256;
+    ImGui::BeginDisabled(state.data.busy||!password||!state.recoveryAcknowledged||(owner?strcmp(state.recoveryPassword,state.recoveryConfirm)!=0:state.data.hasKey));
+    if(Ui::Button(420,464,380,40,owner?"Salvar recuperação protegida":"Escolher backup e restaurar",false,true,owner?ICON_FA_DOWNLOAD:ICON_FA_FOLDER_OPEN)){state.exportRecovery=owner;state.restoreRecovery=!owner;}
+    ImGui::EndDisabled();
+}
 void HelpPage(UiState& state){
     Ui::Text(24,136,792,32,"Primeiro envie o programa. Depois ative o acesso.",text,heading);
     Ui::Panel(24,184,380,344);Ui::Panel(424,184,392,344);
     Ui::Text(40,196,348,24,"CLIENTE | quem vai jogar",text,regular);
-    Ui::Wrapped(40,236,348,u8"1. Salve o programa inicial no botão abaixo.\n2. Envie esse ZIP ao cliente. Não precisa de ID.\n3. Ele extrai, abre ZB2Menu.exe e clica em Copiar ID. Depois envia o ID para você.");
+    Ui::Wrapped(40,236,348,u8"1. Salve o programa inicial no botão abaixo.\n2. Envie esse ZIP ao cliente. Não precisa de ID.\n3. Ele extrai e abre ZB2Menu.exe. Em Meu acesso, clica em Copiar ID e envia para você.");
     ImGui::BeginDisabled(state.data.busy);
     if(Ui::Button(40,320,348,36,"Salvar programa inicial",false,true,ICON_FA_DOWNLOAD))RequestAction(state,"client_starter");
     ImGui::EndDisabled();
@@ -218,7 +240,7 @@ void Draw(UiState& state){
             Ui::Text(180,184,480,40,"ZB2 Pro Menu",text,heading,1);
             Ui::Text(180,232,480,24,"DirectX 11 Hook & Modding Engine",muted,regular,1);
             Ui::Text(180,280,480,24,"OTheMandaloriano & Equipe",text,regular,1);
-            Ui::Text(180,316,480,24,u8"v1.14-local · Alpha Build",muted,caption,1);
+            Ui::Text(180,316,480,24,u8"v1.16-local · Alpha Build",muted,caption,1);
             Ui::Text(180,360,480,24,state.data.maxDays>0?u8"Emissão Autorizada":u8"Aguardando autorização",state.data.maxDays>0?IM_COL32(110,231,183,255):muted,regular,1);
             if(Ui::Button(292,432,256,36,u8"Voltar à Ajuda",false,false,ICON_FA_ARROW_LEFT)){state.credits=false;state.message.clear();state.exportText.clear();}
 
@@ -226,10 +248,11 @@ void Draw(UiState& state){
         else{HelpPage(state);if(Ui::Button(704,136,112,32,"Créditos",true)){state.credits=true;state.message.clear();state.exportText.clear();}}
     }
     else if(state.page==Page::Settings)SettingsPage(state);
+    else if(state.page==Page::Recovery)RecoveryPage(state);
     else if(!state.data.initialized){Ui::Text(24,200,792,40,state.data.busy?u8"Verificando estação...":u8"Não foi possível abrir a estação",text,heading,1);Ui::Wrapped(100,276,640,state.message.c_str());if(!state.data.busy&&Ui::Button(270,388,300,40,"Verificar novamente"))RequestAction(state,"snapshot");}
     else{ImGui::BeginDisabled(state.data.busy);switch(state.page){case Page::Licenses:LicensePage(state);break;case Page::Team:TeamPage(state);break;case Page::Station:StationPage(state);break;default:break;}ImGui::EndDisabled();}
     ImGui::PopStyleVar();ImGui::GetWindowDrawList()->AddLine(Ui::P(24,540),Ui::P(816,540),IM_COL32(49,49,55,255));
-    const std::string message=state.data.busy&&state.requestPage==state.page?"Processando...":state.message.empty()?"ZB2 Admin 1.14":state.message;
+    const std::string message=state.data.busy&&state.requestPage==state.page?"Processando...":state.message.empty()?"ZB2 Admin 1.16":state.message;
     ImGui::GetWindowDrawList()->PushClipRect(Ui::P(24,548),Ui::P(816,588),true);Ui::Text(24,548,792,28,message.c_str(),state.data.error?IM_COL32(231,153,151,255):muted,caption);ImGui::GetWindowDrawList()->PopClipRect();
     ImGui::SetCursorPos(Ui::P(24,548));ImGui::InvisibleButton("##notice",Ui::P(792,32));Ui::Hint(message.c_str());
     ImGui::End();

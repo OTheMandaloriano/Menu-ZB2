@@ -6,7 +6,7 @@ def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 def source_manifest():
     paths=[]
     for directory in ['src/menu','apps/admin','apps/loader','apps/shared','imgui']:
-        paths += [p for p in (ROOT/directory).rglob('*') if p.is_file() and p.suffix in {'.cpp','.h','.inl','.cs','.ttf','.ico'}]
+        paths += [p for p in (ROOT/directory).rglob('*') if p.is_file() and p.suffix in {'.cpp','.h','.inl','.cs','.ttf','.ico','.png'}]
     paths += [ROOT/'tests'/n for n in ['menu_preview.cpp','software_renderer.h','admin_native_tests.cpp','loader_functional_tests.cpp']]
     return {p.relative_to(ROOT).as_posix():hashlib.sha256(p.read_bytes().replace(b'\r\n',b'\n') if p.suffix in {'.cpp','.h','.inl','.cs'} else p.read_bytes()).hexdigest() for p in sorted(set(paths))}
 def main():
@@ -38,10 +38,10 @@ def main():
         for command in [[str(work/'menu-preview.exe'),str(work)],[str(args.admin_test.resolve())],[str(args.loader_test.resolve())]]:
             result=subprocess.run(command,cwd=work,capture_output=True,text=True,errors='replace')
             if result.returncode:raise SystemExit(result.stdout+result.stderr)
-        images={'menu.png':'menu.ppm','admin-clientes.png':'admin-native-0-100.ppm','admin-equipe.png':'admin-native-1-100.ppm','admin-envio.png':'admin-native-3-100.ppm','admin-configuracoes.png':'admin-native-6-100.ppm','loader-ativacao.png':'loader-1-100.ppm','loader-carregado.png':'loader-5-100.ppm'}
+        images={'menu.png':'menu.ppm','admin-clientes.png':'admin-native-0-100.ppm','admin-equipe.png':'admin-native-1-100.ppm','admin-envio.png':'admin-native-3-100.ppm','admin-configuracoes.png':'admin-native-6-100.ppm','loader-ativacao.png':'loader-1-100.ppm','loader-carregado.png':'loader-5-100.ppm','loader-biblioteca.png':'loader-10-100.ppm','loader-acesso.png':'loader-7-100.ppm','admin-recuperacao.png':'admin-native-12-100.ppm'}
         for name,render in images.items():
             with Image.open(work/render) as image:image.save(output/name,optimize=True)
         data={'schema':1,'kind':'Production UI render with synthetic fixtures; not a live gameplay capture','personal_data':False,'sources':source_manifest(),'images':{n:digest(output/n) for n in images},'renderer_binaries':{'admin':digest(args.admin_test),'loader':digest(args.loader_test)}}
         manifest.write_text(json.dumps(data,indent=2)+'\n',encoding='utf-8')
-    print('7 previews generated. Synthetic data only; temporary renders removed.')
+    print('10 previews generated. Synthetic data only; temporary renders removed.')
 if __name__=='__main__':main()

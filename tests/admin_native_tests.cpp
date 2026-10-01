@@ -54,7 +54,7 @@ int wmain(int argc,wchar_t** argv){
         Check(FindResourceW(nullptr,MAKEINTRESOURCEW(1),RT_GROUP_ICON)!=nullptr,"Admin PE icon missing");
         for(float scale:{1.f,1.5f,2.f}){
             ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={Admin::Width*scale,Admin::Height*scale};io.DeltaTime=1.f/60;ConfigureUiTheme(scale);io.Fonts->Build();Check(Ui::TabularWidth("11/11/2011 11:11")==Ui::TabularWidth("28/08/2088 08:08"),"date digits must be tabular");Check(UiTheme::regular->FindGlyph('1')->AdvanceX<UiTheme::regular->FindGlyph('0')->AdvanceX,"body digits must preserve natural font metrics");Check(UiTheme::heading->FontSize==18*scale&&UiTheme::regular->FontSize==14*scale&&UiTheme::caption->FontSize==12*scale,"strict font scale");Check(Ui::TabularWidth("30/09/2027 01:12")<=150*scale,"full expiry must fit a single column");
-            for(int page=0;page<12;++page){
+            for(int page=0;page<14;++page){
                 Admin::UiState state;state.data.initialized=true;state.data.busy=false;state.data.hasKey=true;state.data.revision=1;state.data.total=1;state.data.maxDays=30;state.data.role="owner";state.data.name="OperadorTeste";state.data.user="OperadorTeste";state.data.stationId=std::string(32,'a');state.data.device=std::string(64,'8');
                 state.page=static_cast<Admin::Page>(page<4?page:2);state.started=true;
                 if(page==6)state.page=Admin::Page::Settings;
@@ -68,6 +68,8 @@ int wmain(int argc,wchar_t** argv){
                 state.data.grants.push_back({"abcd","Integrante teste","29/09/2027 12:00","30","grant"});
                 if(page==9){state.page=Admin::Page::Licenses;for(int i=0;i<18;++i){auto row=state.data.licenses[0];row.id=std::to_string(i);row.customer="Cliente "+std::to_string(i);state.data.licenses.push_back(row);}state.data.total=19;}
                 if(page==10){state.page=Admin::Page::Team;state.data.grants.clear();}
+                if(page==12){state.page=Admin::Page::Recovery;}
+                if(page==13){state.page=Admin::Page::Recovery;state.data.hasKey=false;state.data.role="pending";state.data.maxDays=0;}
                 if(page==11){state.page=Admin::Page::Licenses;strcpy_s(state.search,"sem resultado");}
                 for(int frame=0;frame<12;++frame){ImGui::NewFrame();Admin::Draw(state);ImGui::Render();}
                 Check(Ui::DeviceFits(state.data.device,304),"full device ID exceeds client card");
@@ -98,6 +100,11 @@ int wmain(int argc,wchar_t** argv){
             frame(580,96,true);frame(580,96,false);Check(state.page==Admin::Page::Settings,"settings tab failed");
             frame(330,236,true);frame(330,236,false);Check(state.saveSettings&&state.reducedMotion,"motion setting failed");
             frame(200,476,true);frame(200,476,false);Check(state.exportDiagnostics,"diagnostic action failed");
+            frame(700,150,true);frame(700,150,false);Check(state.page==Admin::Page::Recovery,"recovery settings entry");
+            frame(600,480,true);frame(600,480,false);Check(!state.exportRecovery,"empty password must not export");
+            strcpy_s(state.recoveryPassword,"Synthetic recovery password");strcpy_s(state.recoveryConfirm,"Synthetic recovery password");state.recoveryAcknowledged=true;
+            frame(600,480,true);frame(600,480,false);Check(state.exportRecovery,"owner recovery export request");
+            frame(740,150,true);frame(740,150,false);Check(state.page==Admin::Page::Settings&&state.recoveryPassword[0]==0&&state.recoveryConfirm[0]==0,"back clears secret inputs");
             state.page=Admin::Page::Station;frame(190,272,false);frame(190,272,true);frame(190,272,false);Check(state.copy&&state.copyText==state.data.device,"copy must preserve all 64 ID characters");
             frame(800,32,true);frame(800,32,false);Check(state.close,"custom close control failed");
             ImGui::DestroyContext();
