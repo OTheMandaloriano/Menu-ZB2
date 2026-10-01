@@ -3,7 +3,9 @@
 ## Situação atual
 
 O repositório OTheMandaloriano/Menu-ZB2 é privado. Nenhum atualizador online foi
-ativado nesta entrega, nenhum repositório novo foi criado e nenhuma release foi publicada.
+ativado nesta entrega e nenhum repositório novo foi criado. A pré-release manual
+[v1.15-preview.1](https://github.com/OTheMandaloriano/Menu-ZB2/releases/tag/v1.15-preview.1)
+está publicada no repositório privado. Isso não instala atualizações automaticamente.
 
 ## Direção recomendada
 

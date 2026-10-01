@@ -96,3 +96,15 @@ Leia PORTABILIDADE.md e rode check_runtime_names.py e check_portable_identity.py
 Compilação e testes passaram; a nova DLL ainda precisa de validação em uma nova partida.
 Referências a commits do runtime em relatórios anteriores são históricas. Use o
 build-metadata.json da entrega atual para identificar o runtime empacotado.
+
+## Publicação e instalação (01/10/2026)
+
+- Pré-release manual v1.15-preview.1 publicada com os dois programas iniciais,
+  SHA256SUMS.txt e release-manifest.json; não contém perfis, licenças ou chaves.
+- docs/PREVIAS.md documenta a galeria e o gerador. O --check local passou; a execução
+  inicial do Actions teve startup_failure antes dos jobs, ainda sem causa confirmada.
+- docs/INSTALACAO.md separa requisitos de jogador, emissor e desenvolvedor.
+- docs/RECUPERACAO.md explica a limitação de DPAPI. Não existe backup portátil por
+  senha no painel; baixar GitHub em outro PC não recupera o proprietário.
+- Os passos de publicação seguem as skills versionamento-git e readme-profissional
+  quando disponíveis, sem copiar caminhos privados dessas skills para o produto.

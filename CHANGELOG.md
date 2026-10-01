@@ -4,6 +4,14 @@ Formato baseado em Keep a Changelog. O projeto ainda não tem release estável n
 
 ## [Não lançado]
 
+- Pendente: investigar startup_failure do primeiro workflow de prévias no GitHub; verificação local aprovada.
+
+## [1.15-preview.1] - 2026-10-01
+
+- Pré-release privada publicada com cliente 1.15-local, Admin 1.14, dois ZIPs iniciais e hashes verificados.
+- Recuperação portátil de proprietário e validação da nova DLL em partida permanecem pendentes.
+
+
 - Verificação de prévias também disponível por execução manual no GitHub Actions.
 
 

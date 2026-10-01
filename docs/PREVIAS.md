@@ -45,3 +45,12 @@ O manifesto guarda hashes dos fontes, imagens e executáveis de teste usados. A
 verificação de CI rejeita prévias antigas quando os fontes cobertos mudarem.
 Ela não substitui a conferência visual nem verifica automaticamente se um binário
 de teste fornecido manualmente foi recompilado; use os builds da árvore atual.
+
+## Resultado inicial da automação (01/10/2026)
+
+A verificação local passou e as sete imagens foram revisadas. O workflow está ativo,
+mas a primeira execução manual no GitHub encerrou com startup_failure antes de criar
+jobs. A API não forneceu diagnóstico específico; não foi demonstrada aprovação do CI.
+Até resolver a inicialização, executar --check localmente continua obrigatório.
+
+Execução: https://github.com/OTheMandaloriano/Menu-ZB2/actions/runs/36809876120
